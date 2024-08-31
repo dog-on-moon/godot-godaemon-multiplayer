@@ -18,3 +18,9 @@ func _ready() -> void:
 	while not await MultiplayerManager.setup_client(address, port):
 		print('Reconnecting...')
 	print('Client setup.')
+	
+	MultiplayerManager.disconnected_from_server.connect(_server_disconnected)
+
+func _server_disconnected():
+	print('Server disconnected')
+	get_tree().quit()

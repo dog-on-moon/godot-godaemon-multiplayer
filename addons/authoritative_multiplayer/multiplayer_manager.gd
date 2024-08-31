@@ -4,6 +4,7 @@ extends Node
 
 #region Node Overrides
 func _enter_tree() -> void:
+	scene_interest_updated.connect(_perform_interest_update_hooks)
 	_internal_server_enter_tree()
 
 func _process(delta: float) -> void:
@@ -11,9 +12,14 @@ func _process(delta: float) -> void:
 
 func _exit_tree() -> void:
 	_internal_server_exit_tree()
+
 #endregion
 
 #region Connection
+
+## Emitted when the client disconnects from the server.
+signal disconnected_from_server
+
 enum Domain {
 	NONE,
 	CLIENT,
@@ -29,6 +35,7 @@ func setup_client(address: String, port: int, timeout := 5.0) -> bool:
 		return false
 	
 	# Setup MultiplayerAPI and peer.
+	assert(_current_multiplayer_is_connectionless())
 	get_tree().set_multiplayer(ClientMultiplayerAPI.new())
 	var peer = ENetMultiplayerPeer.new()
 	var error := peer.create_client(address, port)
@@ -50,6 +57,8 @@ func setup_client(address: String, port: int, timeout := 5.0) -> bool:
 		ClientSetupConnectResult.CONNECTED:
 			if not multiplayer.server_disconnected.is_connected(close_connection):
 				multiplayer.server_disconnected.connect(close_connection)
+			if not multiplayer.peer_disconnected.is_connected(_on_client_peer_disconnect):
+				multiplayer.peer_disconnected.connect(_on_client_peer_disconnect)
 			domain = Domain.CLIENT
 			return true
 		_:
@@ -105,7 +114,8 @@ func setup_server(port: int, timeout := 5.0) -> bool:
 		push_warning("MultiplayerManager.setup_server had already established domain")
 		return false
 	
-	# Setup MultiplayerAPi and peer.
+	# Setup MultiplayerAPI and peer.
+	assert(_current_multiplayer_is_connectionless())
 	get_tree().set_multiplayer(ServerMultiplayerAPI.new())
 	var peer = ENetMultiplayerPeer.new()
 	var error := peer.create_server(port)
@@ -122,8 +132,8 @@ func setup_server(port: int, timeout := 5.0) -> bool:
 			push_warning("Multiplayer.setup_server timed out")
 			return false
 	multiplayer.multiplayer_peer = peer
-	if not multiplayer.peer_connected.is_connected(client_interest_state_sync_full):
-		multiplayer.peer_connected.connect(client_interest_state_sync_full)
+	if not multiplayer.peer_connected.is_connected(_client_interest_state_sync_full):
+		multiplayer.peer_connected.connect(_client_interest_state_sync_full)
 	if not multiplayer.peer_disconnected.is_connected(clear_peer_interest):
 		multiplayer.peer_disconnected.connect(clear_peer_interest)
 	domain = Domain.SERVER
@@ -131,18 +141,39 @@ func setup_server(port: int, timeout := 5.0) -> bool:
 
 ## Closes the muiltiplayer API.
 func close_connection() -> bool:
-	if domain != Domain.NONE:
+	if domain == Domain.NONE:
 		push_warning("MultiplayerManager.close_connection had no domain")
 		return false
 	multiplayer.multiplayer_peer.close()
 	if multiplayer.server_disconnected.is_connected(close_connection):
 		multiplayer.server_disconnected.disconnect(close_connection)
-	if multiplayer.peer_connected.is_connected(client_interest_state_sync_full):
-		multiplayer.peer_connected.disconnect(client_interest_state_sync_full)
+	if multiplayer.peer_disconnected.is_connected(_on_client_peer_disconnect):
+		multiplayer.peer_disconnected.disconnect(_on_client_peer_disconnect)
+	if multiplayer.peer_connected.is_connected(_client_interest_state_sync_full):
+		multiplayer.peer_connected.disconnect(_client_interest_state_sync_full)
 	if multiplayer.peer_disconnected.is_connected(clear_peer_interest):
 		multiplayer.peer_disconnected.disconnect(clear_peer_interest)
+	if domain == Domain.CLIENT:
+		disconnected_from_server.emit()
 	domain = Domain.NONE
 	return true
+
+func _current_multiplayer_is_connectionless() -> bool:
+	# The MultiplayerManager will setup its own MultiplayerAPI when setting up client/server.
+	# So, you will have to setup these signals after client/server has connected.
+	return not multiplayer.connected_to_server.get_connections() \
+			and not multiplayer.connection_failed.get_connections() \
+			and not multiplayer.peer_connected.get_connections() \
+			and not multiplayer.peer_disconnected.get_connections() \
+			and not multiplayer.server_disconnected.get_connections() \
+			and not multiplayer.peer_authenticating.get_connections() \
+			and not multiplayer.peer_authentication_failed.get_connections() \
+			and not multiplayer.peer_packet.get_connections()
+
+func _on_client_peer_disconnect(peer: int):
+	if is_client() and peer == 1:
+		close_connection()
+
 #endregion
 
 #region Internal Server
@@ -210,6 +241,12 @@ signal peer_interest_added(peer: int, scene_name: String)
 ## Emitted when a peer's interest has been removed from a scene.
 signal peer_interest_removed(peer: int, scene_name: String)
 
+## Emitted when a scene's interest is updated.
+signal scene_interest_updated(scene_name: String)
+
+## Emitted when interest updates.
+signal interest_updated()
+
 ## A dictionary capturing scene name to arrays of peers with interest.
 ## Only defined on the server.
 var interest := {}
@@ -222,8 +259,6 @@ func add_scene(packed_scene: PackedScene, scene_name := "") -> String:
 	if scene_name:
 		scene.name = scene_name
 	add_child(scene)
-	if scene_name:
-		scene.name = scene_name
 	interest[scene.name] = {}
 	return scene.name
 
@@ -239,6 +274,7 @@ func remove_scene(scene_name: String) -> bool:
 	for p in interest[scene_name]:
 		remove_interest(p, scene_name)
 	interest.erase(scene_name)
+	_clear_scene_interest_hooks(scene_name)
 	
 	# Clear scene.
 	remove_child(scene)
@@ -257,8 +293,10 @@ func add_interest(peer: int, scene_name: String) -> bool:
 		return false
 	interest[scene_name][peer] = null
 	peer_interest_added.emit(peer, scene.name)
-	client_interest_state_sync_add(peer, scene.name)
-	client_add_interest.rpc_id(peer, scene.scene_file_path, scene.name)
+	scene_interest_updated.emit(scene.name)
+	interest_updated.emit()
+	_client_interest_state_sync_add(peer, scene.name)
+	_rpc_client_add_interest.rpc_id(peer, scene.scene_file_path, scene.name)
 	return true
 
 ## Removes interest on a peer to be able to view a scene.
@@ -273,8 +311,11 @@ func remove_interest(peer: int, scene_name: String) -> bool:
 		return false
 	interest[scene_name].erase(peer)
 	peer_interest_removed.emit(peer, scene.name)
-	client_interest_state_sync_remove(peer, scene.name)
-	client_remove_interest.rpc_id(peer, scene.name)
+	scene_interest_updated.emit(scene.name)
+	interest_updated.emit()
+	_client_interest_state_sync_remove(peer, scene.name)
+	if peer in multiplayer.get_peers():
+		_rpc_client_remove_interest.rpc_id(peer, scene.name)
 	return true
 
 ## Clears all interest from a peer.
@@ -286,55 +327,95 @@ func clear_peer_interest(peer: int):
 
 ## Called on the client when a zone is added for interest.
 @rpc("authority", "call_remote", "reliable")
-func client_add_interest(scene_path: String, scene_name: String):
+func _rpc_client_add_interest(scene_path: String, scene_name: String):
 	var scene: Node = load(scene_path).instantiate()
 	scene.name = scene_name
 	add_child(scene)
-	scene.name = scene_name
 
 ## Called on the client when a zone is removed for interest.
 @rpc("authority", "call_remote", "reliable")
-func client_remove_interest(scene_name: String):
+func _rpc_client_remove_interest(scene_name: String):
 	var scene := get_scene(scene_name)
 	if not scene:
 		return false
+	_clear_scene_interest_hooks(scene_name)
 	remove_child(scene)
 	scene.queue_free()
 
 #region Client Interest State Sync
 
-## Called to one client to sync their interest.
-func client_interest_state_sync_full(peer: int):
-	rpc_client_interest_state_sync_full.rpc_id(peer, interest)
+# Called to one client to sync their interest.
+func _client_interest_state_sync_full(peer: int):
+	_rpc_client_interest_state_sync_full.rpc_id(peer, interest)
 
-## Called to all clients to sync their interest state.
-func client_interest_state_sync_add(peer: int, scene_name: String):
-	rpc_client_interest_state_sync_add.rpc(peer, scene_name)
+# Called to all clients to sync their interest state.
+func _client_interest_state_sync_add(peer: int, scene_name: String):
+	_rpc_client_interest_state_sync_add.rpc(peer, scene_name)
 
-func client_interest_state_sync_remove(peer: int, scene_name: String):
-	rpc_client_interest_state_sync_remove.rpc(peer, scene_name)
+# Called to all clients to sync their interest state.
+func _client_interest_state_sync_remove(peer: int, scene_name: String):
+	_rpc_client_interest_state_sync_remove.rpc(peer, scene_name)
 
-## Called to clients to sync their interest.
 @rpc("authority", "call_remote", "reliable")
-func rpc_client_interest_state_sync_full(_interest: Dictionary):
+func _rpc_client_interest_state_sync_full(_interest: Dictionary):
 	interest = _interest
 	#for scene_name in interest:
 		#for peer in interest[scene_name]:
 			#peer_interest_added.emit(peer, scene_name)
 
 @rpc("authority", "call_remote", "reliable")
-func rpc_client_interest_state_sync_add(peer: int, scene_name: String):
+func _rpc_client_interest_state_sync_add(peer: int, scene_name: String):
 	interest.get_or_add(scene_name, {})[peer] = null
 	peer_interest_added.emit(peer, scene_name)
+	scene_interest_updated.emit(scene_name)
+	interest_updated.emit()
 
 @rpc("authority", "call_remote", "reliable")
-func rpc_client_interest_state_sync_remove(peer: int, scene_name: String):
+func _rpc_client_interest_state_sync_remove(peer: int, scene_name: String):
 	interest.get_or_add(scene_name, {}).erase(peer)
 	if not interest[scene_name]:
 		interest.erase(scene_name)
 	peer_interest_removed.emit(peer, scene_name)
+	scene_interest_updated.emit(scene_name)
+	interest_updated.emit()
 
 #endregion
+
+#endregion
+
+#region Callback Hooks
+
+var _scene_interest_update_hooks := {}
+
+## Performs the callback whenever interest updates for the callback owner's scene.
+func hook_interest_update(callback: Callable):
+	assert(callback.get_object() is Node)
+	var scene_name := get_scene_name(callback.get_object())
+	assert(scene_name)
+	_scene_interest_update_hooks.get_or_add(scene_name, []).append(callback)
+
+func _perform_interest_update_hooks(scene_name: String):
+	# Ignore if this scene name is undefined.
+	if scene_name not in _scene_interest_update_hooks:
+		return
+	
+	# Perform the callbacks in this array.
+	var callbacks: Array = _scene_interest_update_hooks[scene_name]
+	for callable: Callable in callbacks.duplicate():
+		# Erase this callable if its dirty.
+		if not callable.is_valid() or callable.is_null() or not is_instance_valid(callable.get_object()):
+			callbacks.erase(callable)
+			continue
+		
+		# Otherwise, call it.
+		callable.call()
+	
+	# Clear this entry if the update hooks are gone.
+	if not callbacks:
+		_scene_interest_update_hooks.erase(scene_name)
+
+func _clear_scene_interest_hooks(scene_name: String):
+	_scene_interest_update_hooks.erase(scene_name)
 
 #endregion
 
@@ -372,7 +453,7 @@ func get_node_interest(node: Node) -> PackedInt32Array:
 		## Collect the peers in this specific zone.
 		var peer_interest: Array = interest.get(scene_name, {}).keys()
 		a.resize(peer_interest.size())
-		for idx in peer_interest:
+		for idx in peer_interest.size():
 			a[idx] = peer_interest[idx]
 		return a
 	return a

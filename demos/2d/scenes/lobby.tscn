@@ -36,3 +36,15 @@ layout_mode = 1
 offset_right = 131.0
 offset_bottom = 23.0
 text = "Domain"
+
+[node name="PeerLabel" type="Label" parent="."]
+layout_mode = 1
+offset_left = 21.0
+offset_top = 46.0
+offset_right = 69.0
+offset_bottom = 173.0
+text = "Peers:
+1
+2
+3
+4"
