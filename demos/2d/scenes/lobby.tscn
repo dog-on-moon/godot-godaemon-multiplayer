@@ -1,0 +1,38 @@
+[gd_scene load_steps=2 format=3 uid="uid://cbs652621pucn"]
+
+[ext_resource type="Script" path="res://demos/2d/scenes/lobby.gd" id="1_r8a4m"]
+
+[node name="Lobby" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_r8a4m")
+
+[node name="ColorRect" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.118581, 0.118581, 0.118581, 1)
+
+[node name="Label" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -20.0
+offset_right = 20.0
+offset_bottom = 23.0
+grow_horizontal = 2
+text = "My Gamer Lobby"
+
+[node name="DomainLabel" type="Label" parent="."]
+layout_mode = 1
+offset_right = 131.0
+offset_bottom = 23.0
+text = "Domain"

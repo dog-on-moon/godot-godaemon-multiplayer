@@ -122,6 +122,10 @@ func setup_server(port: int, timeout := 5.0) -> bool:
 			push_warning("Multiplayer.setup_server timed out")
 			return false
 	multiplayer.multiplayer_peer = peer
+	if not multiplayer.peer_connected.is_connected(client_interest_state_sync_full):
+		multiplayer.peer_connected.connect(client_interest_state_sync_full)
+	if not multiplayer.peer_disconnected.is_connected(clear_peer_interest):
+		multiplayer.peer_disconnected.connect(clear_peer_interest)
 	domain = Domain.SERVER
 	return true
 
@@ -133,6 +137,10 @@ func close_connection() -> bool:
 	multiplayer.multiplayer_peer.close()
 	if multiplayer.server_disconnected.is_connected(close_connection):
 		multiplayer.server_disconnected.disconnect(close_connection)
+	if multiplayer.peer_connected.is_connected(client_interest_state_sync_full):
+		multiplayer.peer_connected.disconnect(client_interest_state_sync_full)
+	if multiplayer.peer_disconnected.is_connected(clear_peer_interest):
+		multiplayer.peer_disconnected.disconnect(clear_peer_interest)
 	domain = Domain.NONE
 	return true
 #endregion
@@ -196,9 +204,141 @@ func destroy_internal_server() -> bool:
 
 #region Scene Interest
 
+## Emitted when a peer's interest has been added to a scene.
+signal peer_interest_added(peer: int, scene_name: String)
+
+## Emitted when a peer's interest has been removed from a scene.
+signal peer_interest_removed(peer: int, scene_name: String)
+
+## A dictionary capturing scene name to arrays of peers with interest.
+## Only defined on the server.
+var interest := {}
+
+## Registers a scene for potential interest. Must be called on the server.
+## Returns the name of the created scene.
+func add_scene(packed_scene: PackedScene, scene_name := "") -> String:
+	assert(is_server())
+	var scene := packed_scene.instantiate()
+	if scene_name:
+		scene.name = scene_name
+	add_child(scene)
+	if scene_name:
+		scene.name = scene_name
+	interest[scene.name] = {}
+	return scene.name
+
+## Removes a scene for potential interest.
+## Returns true on successful removal.
+func remove_scene(scene_name: String) -> bool:
+	assert(is_server())
+	var scene := get_scene(scene_name)
+	if not scene:
+		return false
+	
+	# Clear all peer interest.
+	for p in interest[scene_name]:
+		remove_interest(p, scene_name)
+	interest.erase(scene_name)
+	
+	# Clear scene.
+	remove_child(scene)
+	scene.queue_free()
+	return true
+
+## Gives interest on a peer to be able to view a scene.
+func add_interest(peer: int, scene_name: String) -> bool:
+	assert(is_server())
+	var scene := get_scene(scene_name)
+	if not scene:
+		return false
+	if scene_name not in interest:
+		return false
+	if peer in interest[scene_name]:
+		return false
+	interest[scene_name][peer] = null
+	peer_interest_added.emit(peer, scene.name)
+	client_interest_state_sync_add(peer, scene.name)
+	client_add_interest.rpc_id(peer, scene.scene_file_path, scene.name)
+	return true
+
+## Removes interest on a peer to be able to view a scene.
+func remove_interest(peer: int, scene_name: String) -> bool:
+	assert(is_server())
+	var scene := get_scene(scene_name)
+	if not scene:
+		return false
+	if scene_name not in interest:
+		return false
+	if peer not in interest[scene_name]:
+		return false
+	interest[scene_name].erase(peer)
+	peer_interest_removed.emit(peer, scene.name)
+	client_interest_state_sync_remove(peer, scene.name)
+	client_remove_interest.rpc_id(peer, scene.name)
+	return true
+
+## Clears all interest from a peer.
+func clear_peer_interest(peer: int):
+	assert(is_server())
+	for scene_name in interest:
+		if has_interest(peer, scene_name):
+			remove_interest(peer, scene_name)
+
+## Called on the client when a zone is added for interest.
+@rpc("authority", "call_remote", "reliable")
+func client_add_interest(scene_path: String, scene_name: String):
+	var scene: Node = load(scene_path).instantiate()
+	scene.name = scene_name
+	add_child(scene)
+	scene.name = scene_name
+
+## Called on the client when a zone is removed for interest.
+@rpc("authority", "call_remote", "reliable")
+func client_remove_interest(scene_name: String):
+	var scene := get_scene(scene_name)
+	if not scene:
+		return false
+	remove_child(scene)
+	scene.queue_free()
+
+#region Client Interest State Sync
+
+## Called to one client to sync their interest.
+func client_interest_state_sync_full(peer: int):
+	rpc_client_interest_state_sync_full.rpc_id(peer, interest)
+
+## Called to all clients to sync their interest state.
+func client_interest_state_sync_add(peer: int, scene_name: String):
+	rpc_client_interest_state_sync_add.rpc(peer, scene_name)
+
+func client_interest_state_sync_remove(peer: int, scene_name: String):
+	rpc_client_interest_state_sync_remove.rpc(peer, scene_name)
+
+## Called to clients to sync their interest.
+@rpc("authority", "call_remote", "reliable")
+func rpc_client_interest_state_sync_full(_interest: Dictionary):
+	interest = _interest
+	#for scene_name in interest:
+		#for peer in interest[scene_name]:
+			#peer_interest_added.emit(peer, scene_name)
+
+@rpc("authority", "call_remote", "reliable")
+func rpc_client_interest_state_sync_add(peer: int, scene_name: String):
+	interest.get_or_add(scene_name, {})[peer] = null
+	peer_interest_added.emit(peer, scene_name)
+
+@rpc("authority", "call_remote", "reliable")
+func rpc_client_interest_state_sync_remove(peer: int, scene_name: String):
+	interest.get_or_add(scene_name, {}).erase(peer)
+	if not interest[scene_name]:
+		interest.erase(scene_name)
+	peer_interest_removed.emit(peer, scene_name)
+
 #endregion
 
-#region State Getters
+#endregion
+
+#region Getters
 ## Returns true if we are a currently connected client.
 func is_client() -> bool:
 	return domain == Domain.CLIENT
@@ -206,4 +346,40 @@ func is_client() -> bool:
 ## Returns true if we are a currently connected server.
 func is_server() -> bool:
 	return domain == Domain.SERVER
+
+## Returns a scene by name.
+func get_scene(scene_name: String) -> Node:
+	for child in get_children():
+		if child.name == scene_name:
+			return child
+	return null
+
+## Returns the scene name that a Node is in.
+func get_scene_name(node: Node) -> String:
+	var prev := node
+	while node != self and node != get_tree().root:
+		prev = node
+		node = node.get_parent()
+	if node == self and prev != self:
+		return prev.name
+	return ""
+
+## Determines if a peer has interest.
+func has_interest(peer: int, scene_name: String) -> bool:
+	assert(scene_name in interest)
+	return peer in interest[scene_name]
+
+## Determines if a peer has interest with a given node.
+## Useful for securing server-sided RPCs.
+func peer_has_interest(peer: int, node: Node) -> bool:
+	var scene_name := get_scene_name(node)
+	return has_interest(peer, scene_name)
+
+## Determines if the calling peer has interest in the current zone.
+## Useful for securing server-sided RPCs.
+func remote_sender_has_interest(node: Node) -> bool:
+	var peer := multiplayer.get_remote_sender_id()
+	if peer == 1:
+		return true
+	return peer_has_interest(peer, node)
 #endregion

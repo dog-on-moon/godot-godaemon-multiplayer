@@ -1,0 +1,25 @@
+[gd_scene load_steps=2 format=3 uid="uid://srh25m8gpo21"]
+
+[sub_resource type="GDScript" id="GDScript_hewll"]
+script/source = "extends Node
+
+const CLIENT = preload(\"res://demos/2d/network/client.tscn\")
+const SERVER = preload(\"res://demos/2d/network/server.tscn\")
+
+@export var using_internal_server := false
+
+func _ready() -> void:
+	if OS.has_feature(\"client\"):
+		var c := CLIENT.instantiate()
+		c.create_internal_server = using_internal_server
+		add_child(c)
+	elif OS.has_feature(\"server\") and not using_internal_server:
+		var s := SERVER.instantiate()
+		add_child(s)
+	else:
+		get_tree().quit()
+"
+
+[node name="DevStart" type="Node"]
+script = SubResource("GDScript_hewll")
+using_internal_server = true

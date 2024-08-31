@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://c0lc64cqkdqo0"]
+
+[ext_resource type="Script" path="res://demos/2d/network/server.gd" id="1_ionqu"]
+
+[node name="Server" type="Node2D"]
+script = ExtResource("1_ionqu")
+port = 12345

@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="authoritative-server-plugin"
-run/main_scene="res://demos/2d/client.tscn"
+run/main_scene="res://demos/2d/dev_start.tscn"
 config/features=PackedStringArray("4.3", "Forward Plus")
 config/icon="res://icon.svg"
 

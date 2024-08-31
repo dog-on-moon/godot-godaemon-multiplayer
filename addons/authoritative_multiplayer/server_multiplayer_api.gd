@@ -17,10 +17,10 @@ func _rpc(peer: int, object: Object, method: StringName, args: Array) -> Error:
 	return base_multiplayer.rpc(peer, object, method, args)
 
 func _object_configuration_add(object, config: Variant) -> Error:
-	return ERR_UNAVAILABLE
+	return base_multiplayer.object_configuration_add(object, config)
 
 func _object_configuration_remove(object, config: Variant) -> Error:
-	return ERR_UNAVAILABLE
+	return base_multiplayer.object_configuration_remove(object, config)
 
 func _set_multiplayer_peer(p_peer: MultiplayerPeer):
 	base_multiplayer.multiplayer_peer = p_peer

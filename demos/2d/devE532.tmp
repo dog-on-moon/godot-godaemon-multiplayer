@@ -1,0 +1,21 @@
+[gd_scene load_steps=2 format=3 uid="uid://srh25m8gpo21"]
+
+[sub_resource type="GDScript" id="GDScript_hewll"]
+script/source = "extends Node
+
+const CLIENT = preload(\"res://demos/2d/network/client.tscn\")
+const SERVER = preload(\"res://demos/2d/network/server.tscn\")
+
+func _ready() -> void:
+	for whatever in OS.get_cmdline_user_args():
+		if whatever == \"client\":
+			add_child(CLIENT.instantiate())
+			return
+		elif whatever == \"server\":
+			add_child(SERVER.instantiate())
+			return
+	get_tree().quit()
+"
+
+[node name="DevStart" type="Node"]
+script = SubResource("GDScript_hewll")
