@@ -364,6 +364,19 @@ func get_scene_name(node: Node) -> String:
 		return prev.name
 	return ""
 
+## Return an array of peers who have interest with a given node.
+func get_node_interest(node: Node) -> PackedInt32Array:
+	var a := PackedInt32Array()
+	var scene_name := get_scene_name(node)
+	if scene_name:
+		## Collect the peers in this specific zone.
+		var peer_interest: Array = interest.get(scene_name, {}).keys()
+		a.resize(peer_interest.size())
+		for idx in peer_interest:
+			a[idx] = peer_interest[idx]
+		return a
+	return a
+
 ## Determines if a peer has interest.
 func has_interest(peer: int, scene_name: String) -> bool:
 	assert(scene_name in interest)

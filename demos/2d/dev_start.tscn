@@ -22,4 +22,3 @@ func _ready() -> void:
 
 [node name="DevStart" type="Node"]
 script = SubResource("GDScript_hewll")
-using_internal_server = true
