@@ -485,6 +485,24 @@ func _clear_scene_interest_hooks(scene_name: String):
 
 #endregion
 
+#region Node Replication
+
+## TODO
+
+#endregion
+
+#region Node Synchronization
+
+## TODO
+
+#endregion
+
+#region Peer Metadata
+
+## TODO
+
+#endregion
+
 #region Getters
 ## Returns true if we are a currently connected client.
 func is_client() -> bool:

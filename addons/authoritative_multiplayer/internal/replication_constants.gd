@@ -1,6 +1,5 @@
 ## Constants for replication. Yay
 
-const META_REPLICATE_SCENE := &"_mp_rs"
 const META_SYNC_PROPERTIES := &"_mp_p"
 const META_SYNC_PROPERTIES_SEND := &"_mp_s"
 const META_SYNC_PROPERTIES_RECV := &"_mp_r"

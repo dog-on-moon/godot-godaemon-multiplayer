@@ -1,13 +1,8 @@
-[gd_scene load_steps=4 format=3 uid="uid://dcbujli04jyj2"]
+[gd_scene load_steps=3 format=3 uid="uid://dcbujli04jyj2"]
 
 [ext_resource type="Script" path="res://addons/authoritative_multiplayer/editor/replication_editor.gd" id="1_om8ea"]
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_dqqmy"]
-
-[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_io24f"]
-properties/0/path = NodePath("MultiplayerSynchronizer:root_path")
-properties/0/spawn = true
-properties/0/replication_mode = 1
 
 [node name="ReplicationEditor" type="VBoxContainer"]
 anchors_preset = 15
@@ -67,13 +62,6 @@ grow_horizontal = 0
 grow_vertical = 2
 alignment = 2
 
-[node name="ReplicateSceneCheckbox" type="CheckBox" parent="Header/Right"]
-unique_name_in_owner = true
-layout_mode = 2
-tooltip_text = "On the server, when this scene is added to a scene loaded via MultiplayerManager, all of its properties will replicate to new and existing clients.
-If this is false, this scene must be added via MultiplayerManager manually, or nodes with replicated properties must naturally exist within an added scene."
-text = "Replicate Scene"
-
 [node name="ReloadButton" type="Button" parent="Header/Right"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -113,6 +101,3 @@ size_flags_vertical = 3
 columns = 4
 column_titles_visible = true
 hide_root = true
-
-[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="."]
-replication_config = SubResource("SceneReplicationConfig_io24f")

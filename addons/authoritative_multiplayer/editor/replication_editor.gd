@@ -16,7 +16,6 @@ var PROPERTY_TYPE_FILTER := PackedInt32Array([
 
 @onready var add_property_button: Button = %AddPropertyButton
 @onready var node_label: Button = %NodeLabel
-@onready var replicate_scene_checkbox: CheckBox = %ReplicateSceneCheckbox
 @onready var reload_button: Button = %ReloadButton
 @onready var unselected_label: Label = %UnselectedLabel
 @onready var tree: Tree = %PropertyTree
@@ -32,14 +31,6 @@ func _ready() -> void:
 	_on_edited_object_changed()
 	
 	add_property_button.pressed.connect(_add_property_pressed)
-	
-	if get_tree().edited_scene_root:
-		replicate_scene_checkbox.button_pressed = get_tree().edited_scene_root.has_meta(ReplicationConstants.META_REPLICATE_SCENE)
-	replicate_scene_checkbox.toggled.connect(_toggle_scene_replication)
-	plugin.scene_changed.connect(
-		func (n):
-			replicate_scene_checkbox.button_pressed = get_tree().edited_scene_root.has_meta(ReplicationConstants.META_REPLICATE_SCENE)
-	)
 	
 	reload_button.pressed.connect(plugin._reload_editor)
 	tree.button_clicked.connect(_tree_button_clicked)
@@ -139,16 +130,6 @@ func _remove_property(object: Node, property_path: NodePath):
 	
 	EditorInterface.mark_scene_as_unsaved()
 	_update_tree()
-
-func _toggle_scene_replication(mode: bool):
-	var n := get_tree().edited_scene_root
-	const key := ReplicationConstants.META_REPLICATE_SCENE
-	var new_value := null if not mode else 0
-	var new_value_exists: bool = new_value == 0
-	var value_exists: bool = n.has_meta(key)
-	if value_exists != new_value_exists:
-		n.set_meta(key, new_value)
-		EditorInterface.mark_scene_as_unsaved()
 
 func _update_tree():
 	# Set base tree.
