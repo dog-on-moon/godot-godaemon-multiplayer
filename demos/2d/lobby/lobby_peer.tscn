@@ -7,9 +7,4 @@ script = ExtResource("1_600ju")
 metadata/_mp_p = [NodePath(":peer"), NodePath(":username")]
 metadata/_mp_s = [4, 6]
 metadata/_mp_r = [5, 5]
-metadata/_mp_rs = 0
-
-[node name="Node" type="Node" parent="."]
-metadata/_mp_p = [NodePath(":process_mode")]
-metadata/_mp_s = [4]
-metadata/_mp_r = [1]
+metadata/_mp_i = [false, false]

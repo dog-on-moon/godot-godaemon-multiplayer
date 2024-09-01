@@ -3,6 +3,7 @@
 const META_SYNC_PROPERTIES := &"_mp_p"
 const META_SYNC_PROPERTIES_SEND := &"_mp_s"
 const META_SYNC_PROPERTIES_RECV := &"_mp_r"
+const META_SYNC_PROPERTIES_INTERP := &"_mp_i"
 
 enum PeerFilter {
 	CLIENTS = 1,
