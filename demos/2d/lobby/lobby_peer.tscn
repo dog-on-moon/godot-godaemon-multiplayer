@@ -1,0 +1,15 @@
+[gd_scene load_steps=2 format=3 uid="uid://c1k6s05mwgtxq"]
+
+[ext_resource type="Script" path="res://demos/2d/lobby/lobby_peer.gd" id="1_600ju"]
+
+[node name="LobbyPeer" type="Node"]
+script = ExtResource("1_600ju")
+metadata/_mp_p = [NodePath(":peer"), NodePath(":username")]
+metadata/_mp_s = [4, 6]
+metadata/_mp_r = [5, 5]
+metadata/_mp_rs = 0
+
+[node name="Node" type="Node" parent="."]
+metadata/_mp_p = [NodePath(":process_mode")]
+metadata/_mp_s = [4]
+metadata/_mp_r = [1]

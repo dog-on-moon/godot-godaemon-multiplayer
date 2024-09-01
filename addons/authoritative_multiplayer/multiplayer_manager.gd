@@ -2,8 +2,13 @@ extends Node
 ## An autoload for establishing client/server for authoritative multiplayer.
 ## This Node contains the complete networking API for developers.
 
+## Local peer id.
+var peer_id := 0
+
 #region Node Overrides
 func _enter_tree() -> void:
+	peer_interest_added.connect(_perform_add_peer_hooks)
+	peer_interest_removed.connect(_perform_remove_peer_hooks)
 	scene_interest_updated.connect(_perform_interest_update_hooks)
 	_internal_server_enter_tree()
 
@@ -29,7 +34,7 @@ enum Domain {
 var domain := Domain.NONE
 
 ## Sets up the client multiplayer API.
-func setup_client(address: String, port: int, timeout := 5.0) -> bool:
+func setup_client(address: String, port: int, timeout := 5.0, channel_count: int = 0, in_bandwidth: int = 0, out_bandwidth: int = 0, local_port: int = 0) -> bool:
 	if domain != Domain.NONE:
 		push_warning("MultiplayerManager.setup_client had already established domain")
 		return false
@@ -38,7 +43,7 @@ func setup_client(address: String, port: int, timeout := 5.0) -> bool:
 	assert(_current_multiplayer_is_connectionless())
 	get_tree().set_multiplayer(ClientMultiplayerAPI.new())
 	var peer = ENetMultiplayerPeer.new()
-	var error := peer.create_client(address, port)
+	var error := peer.create_client(address, port, channel_count, in_bandwidth, out_bandwidth, local_port)
 	if error != OK:
 		push_warning("MultiplayerManager.setup_client had error: %s" % error_string(error))
 		return false
@@ -60,6 +65,7 @@ func setup_client(address: String, port: int, timeout := 5.0) -> bool:
 			if not multiplayer.peer_disconnected.is_connected(_on_client_peer_disconnect):
 				multiplayer.peer_disconnected.connect(_on_client_peer_disconnect)
 			domain = Domain.CLIENT
+			peer_id = peer.get_unique_id()
 			return true
 		_:
 			peer.close()
@@ -109,7 +115,7 @@ func _client_setup_end_wait(result: ClientSetupConnectResult):
 #endregion
 
 ## Sets up the server multiplayer API.
-func setup_server(port: int, timeout := 5.0) -> bool:
+func setup_server(port: int, timeout := 5.0, max_clients: int = 32, max_channels: int = 0, in_bandwidth: int = 0, out_bandwidth: int = 0) -> bool:
 	if domain != Domain.NONE:
 		push_warning("MultiplayerManager.setup_server had already established domain")
 		return false
@@ -118,7 +124,7 @@ func setup_server(port: int, timeout := 5.0) -> bool:
 	assert(_current_multiplayer_is_connectionless())
 	get_tree().set_multiplayer(ServerMultiplayerAPI.new())
 	var peer = ENetMultiplayerPeer.new()
-	var error := peer.create_server(port)
+	var error := peer.create_server(port, max_clients, max_channels, in_bandwidth, out_bandwidth)
 	if error != OK:
 		push_warning("MultiplayerManager.setup_server had error: %s" % error_string(error))
 		return false
@@ -137,12 +143,13 @@ func setup_server(port: int, timeout := 5.0) -> bool:
 	if not multiplayer.peer_disconnected.is_connected(clear_peer_interest):
 		multiplayer.peer_disconnected.connect(clear_peer_interest)
 	domain = Domain.SERVER
+	peer_id = 1
 	return true
 
 ## Closes the muiltiplayer API.
 func close_connection() -> bool:
 	if domain == Domain.NONE:
-		push_warning("MultiplayerManager.close_connection had no domain")
+		push_warning("MultiplayerManager.close_connection had no active domain")
 		return false
 	multiplayer.multiplayer_peer.close()
 	if multiplayer.server_disconnected.is_connected(close_connection):
@@ -156,6 +163,7 @@ func close_connection() -> bool:
 	if domain == Domain.CLIENT:
 		disconnected_from_server.emit()
 	domain = Domain.NONE
+	peer_id = 0
 	return true
 
 func _current_multiplayer_is_connectionless() -> bool:
@@ -292,11 +300,11 @@ func add_interest(peer: int, scene_name: String) -> bool:
 	if peer in interest[scene_name]:
 		return false
 	interest[scene_name][peer] = null
+	_rpc_client_add_interest.rpc_id(peer, scene.scene_file_path, scene.name)
+	_client_interest_state_sync_add(peer, scene.name)
 	peer_interest_added.emit(peer, scene.name)
 	scene_interest_updated.emit(scene.name)
 	interest_updated.emit()
-	_client_interest_state_sync_add(peer, scene.name)
-	_rpc_client_add_interest.rpc_id(peer, scene.scene_file_path, scene.name)
 	return true
 
 ## Removes interest on a peer to be able to view a scene.
@@ -310,12 +318,12 @@ func remove_interest(peer: int, scene_name: String) -> bool:
 	if peer not in interest[scene_name]:
 		return false
 	interest[scene_name].erase(peer)
+	if peer in multiplayer.get_peers():
+		_rpc_client_remove_interest.rpc_id(peer, scene.name)
+	_client_interest_state_sync_remove(peer, scene.name)
 	peer_interest_removed.emit(peer, scene.name)
 	scene_interest_updated.emit(scene.name)
 	interest_updated.emit()
-	_client_interest_state_sync_remove(peer, scene.name)
-	if peer in multiplayer.get_peers():
-		_rpc_client_remove_interest.rpc_id(peer, scene.name)
 	return true
 
 ## Clears all interest from a peer.
@@ -386,6 +394,8 @@ func _rpc_client_interest_state_sync_remove(peer: int, scene_name: String):
 #region Callback Hooks
 
 var _scene_interest_update_hooks := {}
+var _add_peer_hooks := {}
+var _remove_peer_hooks := {}
 
 ## Performs the callback whenever interest updates for the callback owner's scene.
 func hook_interest_update(callback: Callable):
@@ -393,6 +403,20 @@ func hook_interest_update(callback: Callable):
 	var scene_name := get_scene_name(callback.get_object())
 	assert(scene_name)
 	_scene_interest_update_hooks.get_or_add(scene_name, []).append(callback)
+
+## Performs the callback (with a peer id) whenever a peer is added to the zone.
+func hook_add_peer(callback: Callable):
+	assert(callback.get_object() is Node)
+	var scene_name := get_scene_name(callback.get_object())
+	assert(scene_name)
+	_add_peer_hooks.get_or_add(scene_name, []).append(callback)
+
+## Performs the callback (with a peer id) whenever a peer is removed from the zone.
+func hook_remove_peer(callback: Callable):
+	assert(callback.get_object() is Node)
+	var scene_name := get_scene_name(callback.get_object())
+	assert(scene_name)
+	_remove_peer_hooks.get_or_add(scene_name, []).append(callback)
 
 func _perform_interest_update_hooks(scene_name: String):
 	# Ignore if this scene name is undefined.
@@ -414,8 +438,50 @@ func _perform_interest_update_hooks(scene_name: String):
 	if not callbacks:
 		_scene_interest_update_hooks.erase(scene_name)
 
+func _perform_add_peer_hooks(peer: int, scene_name: String):
+	# Ignore if this scene name is undefined.
+	if scene_name not in _add_peer_hooks:
+		return
+	
+	# Perform the callbacks in this array.
+	var callbacks: Array = _add_peer_hooks[scene_name]
+	for callable: Callable in callbacks.duplicate():
+		# Erase this callable if its dirty.
+		if not callable.is_valid() or callable.is_null() or not is_instance_valid(callable.get_object()):
+			callbacks.erase(callable)
+			continue
+		
+		# Otherwise, call it.
+		callable.call(peer)
+	
+	# Clear this entry if the update hooks are gone.
+	if not callbacks:
+		_add_peer_hooks.erase(scene_name)
+
+func _perform_remove_peer_hooks(peer: int, scene_name: String):
+	# Ignore if this scene name is undefined.
+	if scene_name not in _remove_peer_hooks:
+		return
+	
+	# Perform the callbacks in this array.
+	var callbacks: Array = _remove_peer_hooks[scene_name]
+	for callable: Callable in callbacks.duplicate():
+		# Erase this callable if its dirty.
+		if not callable.is_valid() or callable.is_null() or not is_instance_valid(callable.get_object()):
+			callbacks.erase(callable)
+			continue
+		
+		# Otherwise, call it.
+		callable.call(peer)
+	
+	# Clear this entry if the update hooks are gone.
+	if not callbacks:
+		_remove_peer_hooks.erase(scene_name)
+
 func _clear_scene_interest_hooks(scene_name: String):
 	_scene_interest_update_hooks.erase(scene_name)
+	_add_peer_hooks.erase(scene_name)
+	_remove_peer_hooks.erase(scene_name)
 
 #endregion
 

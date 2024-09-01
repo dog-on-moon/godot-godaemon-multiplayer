@@ -1,6 +1,6 @@
 extends Node2D
 
-const LOBBY = preload("res://demos/2d/scenes/lobby.tscn")
+const LOBBY = preload("res://demos/2d/lobby/lobby.tscn")
 
 @export var port := 25565
 

@@ -1,6 +1,11 @@
-[gd_scene load_steps=2 format=3 uid="uid://cbs652621pucn"]
+[gd_scene load_steps=3 format=3 uid="uid://cbs652621pucn"]
 
-[ext_resource type="Script" path="res://demos/2d/scenes/lobby.gd" id="1_r8a4m"]
+[ext_resource type="Script" path="res://demos/2d/lobby/lobby.gd" id="1_r8a4m"]
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_sjhkh"]
+properties/0/path = NodePath("PeerLabel:bbcode_enabled")
+properties/0/spawn = true
+properties/0/replication_mode = 0
 
 [node name="Lobby" type="Control"]
 layout_mode = 3
@@ -37,14 +42,18 @@ offset_right = 131.0
 offset_bottom = 23.0
 text = "Domain"
 
-[node name="PeerLabel" type="Label" parent="."]
+[node name="PeerLabel" type="RichTextLabel" parent="."]
 layout_mode = 1
 offset_left = 21.0
 offset_top = 46.0
-offset_right = 69.0
-offset_bottom = 173.0
+offset_right = 317.0
+offset_bottom = 263.0
+bbcode_enabled = true
 text = "Peers:
 1
-2
+[color=red]2[/color]
 3
 4"
+
+[node name="MultiplayerSynchronizer" type="MultiplayerSynchronizer" parent="."]
+replication_config = SubResource("SceneReplicationConfig_sjhkh")
