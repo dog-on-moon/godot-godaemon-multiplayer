@@ -1,5 +1,5 @@
 extends MultiplayerAPIExtension
-class_name EasyMultiplayerAPI
+class_name GodaemonMultiplayer
 ## An extension of SceneMultiplayer, re-implementing its base overrides.
 
 #region SceneMultiplayer Overrides

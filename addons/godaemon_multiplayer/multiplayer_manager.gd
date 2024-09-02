@@ -42,7 +42,7 @@ func setup_client(address: String, port: int, timeout := 5.0, channel_count: int
 	
 	# Setup MultiplayerAPI and peer.
 	assert(_current_multiplayer_is_connectionless())
-	get_tree().set_multiplayer(EasyMultiplayerAPI.new(), get_path())
+	get_tree().set_multiplayer(GodaemonMultiplayer.new(), get_path())
 	var peer = ENetMultiplayerPeer.new()
 	var error := peer.create_client(address, port, channel_count, in_bandwidth, out_bandwidth, local_port)
 	if error != OK:
@@ -123,7 +123,7 @@ func setup_server(port: int, timeout := 5.0, max_clients: int = 32, max_channels
 	
 	# Setup MultiplayerAPI and peer.
 	assert(_current_multiplayer_is_connectionless())
-	get_tree().set_multiplayer(EasyMultiplayerAPI.new(), get_path())
+	get_tree().set_multiplayer(GodaemonMultiplayer.new(), get_path())
 	var peer = ENetMultiplayerPeer.new()
 	var error := peer.create_server(port, max_clients, max_channels, in_bandwidth, out_bandwidth)
 	if error != OK:

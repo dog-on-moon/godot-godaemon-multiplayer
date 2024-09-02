@@ -3,7 +3,7 @@ extends Node
 class_name MultiplayerNode
 ## Contains shared information for ClientNodes and ServerNodes.
 
-const Consts = preload("res://addons/easymp/internal/constants.gd")
+const Consts = preload("res://addons/godaemon_multiplayer/internal/constants.gd")
 
 #region Signals
 

@@ -175,8 +175,8 @@ func start_connection() -> bool:
 		connection_failed.emit(connection_state)
 		return false
 	
-	# Setup EasyMultiplayerAPI and peer.
-	var api := EasyMultiplayerAPI.new()
+	# Setup GodaemonMultiplayer and peer.
+	var api := GodaemonMultiplayer.new()
 	api.scene_multiplayer.allow_object_decoding = allow_object_decoding
 	api.scene_multiplayer.auth_timeout = authentication_timeout
 	get_tree().set_multiplayer(api, get_path())
@@ -239,7 +239,7 @@ signal _connect_await_end
 var _client_setup_timer: SceneTreeTimer
 
 func _start_connect_await():
-	var api: EasyMultiplayerAPI = multiplayer
+	var api: GodaemonMultiplayer = multiplayer
 	api.connected_to_server.connect(_connect_await_result_connected)
 	api.server_disconnected.connect(_connect_await_result_disconnected)
 	api.connection_failed.connect(_connect_await_result_failed)
@@ -274,7 +274,7 @@ func _connect_await_result_authentication_failed(id: int):
 		_connect_await_result(ConnectionState.AUTH_TIMEOUT)
 
 func _connect_await_result(state: ConnectionState):
-	var api: EasyMultiplayerAPI = multiplayer
+	var api: GodaemonMultiplayer = multiplayer
 	if api.connected_to_server.is_connected(_connect_await_result_connected):
 		api.connected_to_server.disconnect(_connect_await_result_connected)
 	if api.server_disconnected.is_connected(_connect_await_result_disconnected):
@@ -301,7 +301,7 @@ func end_connection() -> bool:
 		push_warning("ClientNode.end_connection was not connected")
 		return false
 	connection_state = ConnectionState.DISCONNECTED
-	var api: EasyMultiplayerAPI = multiplayer
+	var api: GodaemonMultiplayer = multiplayer
 	api.multiplayer_peer.close()
 	if api.server_disconnected.is_connected(end_connection):
 		api.server_disconnected.disconnect(end_connection)
@@ -340,16 +340,16 @@ func send_auth(data: PackedByteArray):
 	if connection_state != ConnectionState.AUTHENTICATING:
 		push_warning("ClientNode.send_auth can only be done during authentication (ClientNode.start_auth_func and ClientNode.receive_auth_func)")
 		return
-	var api: EasyMultiplayerAPI = multiplayer
+	var api: GodaemonMultiplayer = multiplayer
 	api.scene_multiplayer.send_auth(1, data)
 
 ## Completes authentication on the client end.
 ## The server will have to complete authentication as well.
 func complete_auth():
-	var api: EasyMultiplayerAPI = multiplayer
+	var api: GodaemonMultiplayer = multiplayer
 	api.scene_multiplayer.complete_auth(1)
 
-## The internal auth callback for the EasyMultiplayerAPI.
+## The internal auth callback for the GodaemonMultiplayer.
 func _auth_callback(id: int, data: PackedByteArray):
 	if id == 1:
 		receive_auth_func.call(data)

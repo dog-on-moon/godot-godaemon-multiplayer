@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3 uid="uid://m6cme8bo7xxs"]
 
 [ext_resource type="Script" path="res://demos/test/internal_server.gd" id="1_l4c3t"]
-[ext_resource type="Script" path="res://addons/easymp/nodes/server_node.gd" id="2_qlymc"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/nodes/server_node.gd" id="2_qlymc"]
 
 [node name="InternalServer" type="Node"]
 script = ExtResource("1_l4c3t")

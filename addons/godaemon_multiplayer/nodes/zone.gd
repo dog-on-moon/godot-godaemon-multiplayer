@@ -1,14 +1,14 @@
 @tool
 extends SubViewport
 class_name Zone
-## A Zone is the root node of all distributed scenes in the EasyMP API.
+## A Zone is the root node of all distributed scenes in the godaemon_multiplayer API.
 ## After a ServerNode adds a scene, it lives within a Zone.
 ## The contents can then be automatically replicated to clients
 ## by assigning peer visibility.
 
 #region Signals
 
-const StaticSignal = preload("res://addons/easymp/util/static_signal.gd")
+const StaticSignal = preload("res://addons/godaemon_multiplayer/util/static_signal.gd")
 
 ## Emit this signal from anywhere to update the Zone's rendering options
 ## to match the game window.
