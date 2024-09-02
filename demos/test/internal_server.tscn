@@ -8,6 +8,5 @@ script = ExtResource("1_l4c3t")
 
 [node name="ServerNode" type="Node" parent="."]
 script = ExtResource("2_qlymc")
-disable_rendering = null
-propagated_inputs = null
-stretch_shrink = null
+service_scripts = null
+service_scenes = null

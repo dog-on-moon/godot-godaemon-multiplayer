@@ -1,27 +1,8 @@
 @tool
-extends Node
+extends MultiplayerNode
 class_name ClientNode
 ## The client node for a multiplayer session.
 ## Establishes a connection with a ServerNode.
-
-#region Signals
-
-## Emitted when connection has successfully established with a ServerNode.
-signal connection_success
-
-## Emitted when connection failed with a ServerNode.
-signal connection_failed(state: ConnectionState)
-
-## Emitted when we disconnect from the server.
-signal server_disconnected
-
-## Emitted when another peer has connected to the server.
-signal peer_connected(peer: int)
-
-## Emitted when a peer has disconnected from the server.
-signal peer_disconnected(peer: int)
-
-#endregion
 
 #region Exports
 
@@ -36,7 +17,18 @@ signal peer_disconnected(peer: int)
 ## How long the ClientNode should attempt to connect to the server before timing out.
 @export_range(0.0, 15.0, 0.1, "or_greater") var timeout := 5.0
 
-@export_group("ENet Configuration")
+@export_group("Client Configuration")
+#region
+
+## An array of Scripts that are instantiated to the ClientNode
+## once a connection has been established.
+@export var service_scripts: Array[GDScript] = []
+
+## An array of PackedScenes that are instantiated to the ClientNode
+## once a connection has been established.
+@export var service_scenes: Array[PackedScene] = []
+
+@export_subgroup("ENet")
 #region
 ## Can be specified to allocate additional ENet channels for RPCs.
 ## Note that many channels are reserved in advance for zones.
@@ -65,14 +57,14 @@ signal peer_disconnected(peer: int)
 @export var local_port := 0
 #endregion
 
-@export_group("Authentication")
+@export_subgroup("Authentication")
 #region
 ## If set to a value greater than 0.0, the maximum amount of time peers can stay
 ## in the authenticating state, after which the authentication will automatically fail.
 @export_range(0.0, 15.0, 0.1, "or_greater") var authentication_timeout := 3.0
 #endregion
 
-@export_group("Security")
+@export_subgroup("Security")
 #region
 ## When true, objects will be encoded and decoded during RPCs.
 ## [b]WARNING:[/b] Deserialized objects can contain code which gets executed.
@@ -111,6 +103,8 @@ signal peer_disconnected(peer: int)
 		return dtls_unsafe_client
 #endregion
 
+#endregion
+
 @export_group("Internal Server")
 #region
 
@@ -139,63 +133,36 @@ const KW_INTERNAL_SERVER_PORT := "_INTERNAL_SERVER_PORT"
 @export_group("Rendering")
 #region
 
-## Disables rendering of zones (by turning the ZoneRoot's visibility off).
+## Disables rendering of zones (by turning the ZoneService's visibility off).
 @export var disable_rendering := false:
 	set(x):
 		disable_rendering = x
-		if zone_root:
-			zone_root.visible = not x
+		if zone_service:
+			zone_service.visible = not x
 
 ## Determines the type of input events that are propagated to the zones.
 ## It's best to leave this on, unless you're implementing debug tools.
-@export var propagated_inputs := ZoneRoot.PropagatedInputs.ALL:
+@export var propagated_inputs := ZoneService.PropagatedInputs.ALL:
 	set(x):
 		propagated_inputs = x
-		if zone_root:
-			zone_root.propagated_inputs = x
+		if zone_service:
+			zone_service.propagated_inputs = x
 
-## The default stretch shrink for the ZoneRoot (see SubViewportContainer).
+## The default stretch shrink for the ZoneService (see SubViewportContainer).
 @export_range(0, 1, 1, "or_greater") var stretch_shrink := 1:
 	set(x):
 		stretch_shrink = x
-		if zone_root:
-			zone_root.stretch_shrink = x
+		if zone_service:
+			zone_service.stretch_shrink = x
 
 #endregion
-
-#endregion
-
-#region Properties
-
-## The possible connection states of the ClientNode.
-enum ConnectionState {
-	DISCONNECTED,    ## No connection to a ServerNode.
-	WAITING,         ## We are waiting to begin authentication.
-	AUTHENTICATING,  ## Currently authenticating with a ServerNode.
-	TIMEOUT,         ## We timed out before reaching authentication.
-	AUTH_TIMEOUT,    ## We failed to authenticate.
-	CONNECTED,       ## Connected to a ServerNode.
-}
-
-## The current connection state of the ClientNode.
-var connection_state := ConnectionState.DISCONNECTED
-
-## Returns the name of a connection state.
-static func get_connection_state_name(state: ConnectionState) -> String:
-	for n in ConnectionState:
-		if ConnectionState[n] == state:
-			return n
-	push_error("ClientNode.get_connection_state_name does not know %s" % state)
-	return ""
-
-var zone_root: ZoneRoot
 
 #endregion
 
 #region Connection
 
 ## Attempts a connection to the server.
-func attempt_connect() -> bool:
+func start_connection() -> bool:
 	# Ensure we are not currently connecting.
 	if connection_state in [ConnectionState.WAITING, ConnectionState.AUTHENTICATING, ConnectionState.CONNECTED]:
 		push_warning("ClientNode.attempt_connect was still connecting")
@@ -250,8 +217,8 @@ func attempt_connect() -> bool:
 	# Based on connect result, return true/false.
 	match connection_state:
 		ConnectionState.CONNECTED:
-			if not multiplayer.server_disconnected.is_connected(close_connection):
-				multiplayer.server_disconnected.connect(close_connection)
+			if not multiplayer.server_disconnected.is_connected(end_connection):
+				multiplayer.server_disconnected.connect(end_connection)
 			if not multiplayer.peer_disconnected.is_connected(_on_client_peer_disconnect):
 				multiplayer.peer_disconnected.connect(_on_client_peer_disconnect)
 			if not multiplayer.peer_connected.is_connected(peer_connected.emit):
@@ -265,33 +232,6 @@ func attempt_connect() -> bool:
 			connection_failed.emit(connection_state)
 			_end_internal_server()
 			return false
-
-#region Multi-Connecting
-
-var _currently_multi_connecting := false
-
-## Attempts multiple reconnects to the server.
-## Set attempts to -1 for unlimited attempts.
-## Can be cancelled with ClientNode.cancel_multiple_connects.
-func attempt_multiple_connects(attempts := -1) -> bool:
-	_currently_multi_connecting = true
-	while attempts != 0:
-		if await attempt_connect():
-			_currently_multi_connecting = false
-			return true
-		if not _currently_multi_connecting:
-			return false
-		attempts -= 1
-	_currently_multi_connecting = false
-	return false
-
-## Cancels multi-connecting once the current connection attempt is complete.
-func cancel_multiple_connects():
-	if not _currently_multi_connecting:
-		push_warning("ClientNode.cancel_multiple_connects was not actively multi-connecting")
-	_currently_multi_connecting = false
-
-#endregion
 
 #region Client Async Connect
 
@@ -356,15 +296,15 @@ func _connect_await_result(state: ConnectionState):
 #endregion
 
 ## Ends an active connection with the ServerNode.
-func close_connection() -> bool:
+func end_connection() -> bool:
 	if connection_state != ConnectionState.CONNECTED:
-		push_warning("ClientNode.close_connection was not connected")
+		push_warning("ClientNode.end_connection was not connected")
 		return false
 	connection_state = ConnectionState.DISCONNECTED
 	var api: EasyMultiplayerAPI = multiplayer
 	api.multiplayer_peer.close()
-	if api.server_disconnected.is_connected(close_connection):
-		api.server_disconnected.disconnect(close_connection)
+	if api.server_disconnected.is_connected(end_connection):
+		api.server_disconnected.disconnect(end_connection)
 	if api.peer_disconnected.is_connected(_on_client_peer_disconnect):
 		api.peer_disconnected.disconnect(_on_client_peer_disconnect)
 	if api.peer_connected.is_connected(peer_connected.emit):
@@ -378,7 +318,7 @@ func close_connection() -> bool:
 func _on_client_peer_disconnect(peer: int):
 	# Forces a disconnection whenever the server peer disconencts
 	if connection_state == ConnectionState.CONNECTED and peer == 1:
-		close_connection()
+		end_connection()
 
 #endregion
 
@@ -447,16 +387,22 @@ func _end_internal_server():
 
 #endregion
 
-#region Setup
+#region Services
 
-@onready var __setup = _setup.call()
-func _setup():
-	if not Engine.is_editor_hint():
-		zone_root = ZoneRoot.new()
-		zone_root.visible = not disable_rendering
-		zone_root.propagated_inputs = propagated_inputs
-		zone_root.stretch_shrink = stretch_shrink
-		add_child(zone_root)
+## Gets all service scripts.
+func get_service_scripts() -> Array[GDScript]:
+	return service_scripts
+
+## Gets all service scenes.
+func get_service_scenes() -> Array[PackedScene]:
+	return service_scenes
+
+#endregion
+
+#region Getters
+
+func is_client() -> bool:
+	return true
 
 #endregion
 

@@ -1,7 +1,7 @@
 @tool
 extends VBoxContainer
 
-const ReplicationConstants = preload("res://addons/authoritative_multiplayer/internal/replication_constants.gd")
+const ReplicationConstants = preload("res://addons/easymp/internal/replication_constants.gd")
 
 var PROPERTY_TYPE_FILTER := PackedInt32Array([
 	TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING, TYPE_VECTOR2, TYPE_VECTOR2I,

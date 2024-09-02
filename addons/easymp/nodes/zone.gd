@@ -50,24 +50,8 @@ var use_window_render_settings := true
 
 #region Properties
 
-@onready var zone_root: ZoneRoot = get_parent()
-
-#endregion
-
-#region Getters
-
-## Returns true if the Zone is being ran on the client.
-func is_client() -> bool:
-	return zone_root.client_node != null or is_local_dev()
-
-## Returns true if the Zone is being ran on the server.
-func is_server() -> bool:
-	return zone_root.server_node != null
-
-## Returns true if the Zone is being ran as a local scene.
-## This is useful for testing and developing areas.
-func is_local_dev() -> bool:
-	return self == get_tree().current_scene
+@onready var mp := MultiplayerNode.fetch(self)
+@onready var zone_service: ZoneService = mp.get_service(ZoneService)
 
 #endregion
 
