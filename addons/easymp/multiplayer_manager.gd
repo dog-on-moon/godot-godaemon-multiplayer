@@ -1,4 +1,5 @@
 extends Node
+class_name MultiplayerManager
 ## An autoload for establishing client/server for authoritative multiplayer.
 ## This Node contains the complete networking API for developers.
 
@@ -41,7 +42,7 @@ func setup_client(address: String, port: int, timeout := 5.0, channel_count: int
 	
 	# Setup MultiplayerAPI and peer.
 	assert(_current_multiplayer_is_connectionless())
-	get_tree().set_multiplayer(ClientMultiplayerAPI.new())
+	get_tree().set_multiplayer(EasyMultiplayerAPI.new(), get_path())
 	var peer = ENetMultiplayerPeer.new()
 	var error := peer.create_client(address, port, channel_count, in_bandwidth, out_bandwidth, local_port)
 	if error != OK:
@@ -122,7 +123,7 @@ func setup_server(port: int, timeout := 5.0, max_clients: int = 32, max_channels
 	
 	# Setup MultiplayerAPI and peer.
 	assert(_current_multiplayer_is_connectionless())
-	get_tree().set_multiplayer(ServerMultiplayerAPI.new())
+	get_tree().set_multiplayer(EasyMultiplayerAPI.new(), get_path())
 	var peer = ENetMultiplayerPeer.new()
 	var error := peer.create_server(port, max_clients, max_channels, in_bandwidth, out_bandwidth)
 	if error != OK:
@@ -189,6 +190,9 @@ func _on_client_peer_disconnect(peer: int):
 ## The process ID of a child internal server.
 var internal_server_pid := -1
 
+## The parent PID of a child internal server.
+var internal_server_parent_pid := -1
+
 ## If we are an internal server, this is the port we are setup with.
 var internal_server_port := -1
 
@@ -199,12 +203,17 @@ func _internal_server_enter_tree():
 	for arg in OS.get_cmdline_user_args():
 		if 'internal_server' in arg:
 			internal_server_port = arg.split('=')[1].to_int()
+		elif 'internal_server_parent' in arg:
+			internal_server_parent_pid = arg.split('=')[1].to_int()
 
 func _internal_server_process():
 	if internal_server_pid != -1:
 		if not OS.is_process_running(internal_server_pid):
 			internal_server_closed.emit()
 			internal_server_pid = -1
+	elif internal_server_parent_pid != -1:
+		if not OS.is_process_running(internal_server_parent_pid):
+			get_tree().quit()
 
 func _internal_server_exit_tree():
 	if internal_server_pid != -1:
@@ -220,7 +229,8 @@ func create_internal_server(scene: PackedScene, port: int, headless := true) -> 
 			'"%s"' % scene.resource_path.substr(6),
 			'--headless' if headless else '',
 			'++',
-			'--internal_server=%s' % port
+			'--internal_server=%s' % port,
+			'--internal_server_parent=%s' % OS.get_process_id()
 		]
 	)
 	return internal_server_pid != -1
@@ -498,6 +508,12 @@ func _clear_scene_interest_hooks(scene_name: String):
 #endregion
 
 #region Peer Metadata
+
+## TODO
+
+#endregion
+
+#region Resource Serializaton
 
 ## TODO
 

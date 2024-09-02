@@ -5,6 +5,7 @@
 [node name="LobbyPeer" type="Node"]
 script = ExtResource("1_600ju")
 metadata/_mp_p = [NodePath(":peer"), NodePath(":username")]
-metadata/_mp_s = [4, 6]
-metadata/_mp_r = [5, 5]
+metadata/_mp_s = [4, 4]
+metadata/_mp_r = [1, 1]
 metadata/_mp_i = [false, false]
+metadata/_mp_e = [true, true]

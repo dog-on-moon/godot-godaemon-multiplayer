@@ -50,10 +50,11 @@ func _finish_themes():
 	tree.set_column_title(2, "Receivers")
 	tree.set_column_custom_minimum_width(2, 120)
 	tree.set_column_expand(2, false)
-	tree.set_column_title(3, "Interp")
-	tree.set_column_custom_minimum_width(4, 0)
-	tree.set_column_expand(3, false)
+	tree.set_column_title(4, "Interpolated")
 	tree.set_column_expand(4, false)
+	tree.set_column_title(3, "Reliable")
+	tree.set_column_expand(3, false)
+	tree.set_column_expand(5, false)
 
 func _on_edited_object_changed():
 	var object := EditorInterface.get_inspector().get_edited_object()
@@ -86,11 +87,17 @@ func _on_property_selected(property_path):
 	
 	var undo_redo := plugin.get_undo_redo()
 	undo_redo.create_action("Add property")
-	undo_redo.add_do_method(self, &"_add_property", object, property_path, ReplicationConstants.DEFAULT_SEND_FILTER, ReplicationConstants.DEFAULT_RECV_FILTER, false)
+	undo_redo.add_do_method(
+		self, &"_add_property", object, property_path,
+		ReplicationConstants.DEFAULT_SEND_FILTER,
+		ReplicationConstants.DEFAULT_RECV_FILTER,
+		ReplicationConstants.DEFAULT_SYNC_INTERP,
+		ReplicationConstants.DEFAULT_SYNC_RELIABLE
+	)
 	undo_redo.add_undo_method(self, &"_remove_property", object, property_path)
 	undo_redo.commit_action()
 
-func _add_property(object: Node, property_path: NodePath, send: int, recv: int, interp: bool):
+func _add_property(object: Node, property_path: NodePath, send: int, recv: int, interp: bool, reliable: bool):
 	if not is_instance_valid(object):
 		return
 	const key_name := ReplicationConstants.META_SYNC_PROPERTIES
@@ -115,8 +122,13 @@ func _add_property(object: Node, property_path: NodePath, send: int, recv: int, 
 		object.set_meta(key_interp, [])
 	object.get_meta(key_interp).append(interp)
 	
+	const key_reliable := ReplicationConstants.META_SYNC_PROPERTIES_RELIABLE
+	if not object.has_meta(key_reliable):
+		object.set_meta(key_reliable, [])
+	object.get_meta(key_reliable).append(reliable)
+	
 	EditorInterface.mark_scene_as_unsaved()
-	_add_property_to_tree(property_path, send, recv, interp)
+	_add_property_to_tree(property_path, send, recv, interp, reliable)
 
 func _remove_property(object: Node, property_path: NodePath):
 	if not is_instance_valid(object):
@@ -132,12 +144,15 @@ func _remove_property(object: Node, property_path: NodePath):
 	object.get_meta(key_recv).pop_at(idx)
 	const key_interp := ReplicationConstants.META_SYNC_PROPERTIES_INTERP
 	object.get_meta(key_interp).pop_at(idx)
+	const key_reliable := ReplicationConstants.META_SYNC_PROPERTIES_RELIABLE
+	object.get_meta(key_reliable).pop_at(idx)
 	
 	if not object.get_meta(key_name, []):
 		object.remove_meta(key_name)
 		object.remove_meta(key_send)
 		object.remove_meta(key_recv)
 		object.remove_meta(key_interp)
+		object.remove_meta(key_reliable)
 	
 	EditorInterface.mark_scene_as_unsaved()
 	_update_tree()
@@ -155,14 +170,16 @@ func _update_tree():
 	const key_send := ReplicationConstants.META_SYNC_PROPERTIES_SEND
 	const key_recv := ReplicationConstants.META_SYNC_PROPERTIES_RECV
 	const key_interp := ReplicationConstants.META_SYNC_PROPERTIES_INTERP
+	const key_reliable := ReplicationConstants.META_SYNC_PROPERTIES_RELIABLE
 	for idx in object.get_meta(key_name, []).size():
 		var np: NodePath = object.get_meta(key_name)[idx]
 		var send: int = object.get_meta(key_send)[idx]
 		var recv: int = object.get_meta(key_recv)[idx]
 		var interp: bool = object.get_meta(key_interp)[idx]
-		_add_property_to_tree(np, send, recv, interp)
+		var reliable: bool = object.get_meta(key_reliable)[idx]
+		_add_property_to_tree(np, send, recv, interp, reliable)
 
-func _add_property_to_tree(property: NodePath, send: int, recv: int, interp: bool):
+func _add_property_to_tree(property: NodePath, send: int, recv: int, interp: bool, reliable: bool):
 	var object := EditorInterface.get_inspector().get_edited_object()
 	if not (object and object is Node):
 		return
@@ -175,10 +192,11 @@ func _add_property_to_tree(property: NodePath, send: int, recv: int, interp: boo
 	item.set_selectable(2, false)
 	item.set_selectable(3, false)
 	item.set_selectable(4, false)
+	item.set_selectable(5, false)
 	item.set_metadata(0, property)
 	item.set_text(0, String(property))
 	item.set_icon(0, editor_theme.get_icon(get_type_name(type), &"EditorIcons"))
-	item.add_button(4, editor_theme.get_icon(&"Remove", &"EditorIcons"))
+	item.add_button(5, editor_theme.get_icon(&"Remove", &"EditorIcons"))
 	
 	item.set_text_alignment(1, HORIZONTAL_ALIGNMENT_CENTER)
 	item.set_cell_mode(1, TreeItem.CELL_MODE_RANGE)
@@ -194,8 +212,12 @@ func _add_property_to_tree(property: NodePath, send: int, recv: int, interp: boo
 	item.set_range(2, ReplicationConstants.real_filter_to_editor_filter(recv))
 	item.set_editable(2, true)
 	
+	item.set_cell_mode(4, TreeItem.CELL_MODE_CHECK)
+	item.set_checked(4, interp)
+	item.set_editable(4, true)
+	
 	item.set_cell_mode(3, TreeItem.CELL_MODE_CHECK)
-	item.set_checked(3, interp)
+	item.set_checked(3, reliable)
 	item.set_editable(3, true)
 
 static func get_type_name(type: int):
@@ -294,10 +316,11 @@ func _tree_button_clicked(item: TreeItem, column: int, id: int, mouse_button_ind
 	var send: int = object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_SEND)[idx]
 	var recv: int = object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_RECV)[idx]
 	var interp: bool = object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_INTERP)[idx]
+	var reliable: bool = object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_RELIABLE)[idx]
 	var undo_redo := plugin.get_undo_redo()
 	undo_redo.create_action("Remove property")
 	undo_redo.add_do_method(self, &"_remove_property", object, property)
-	undo_redo.add_undo_method(self, &"_add_property", object, property, send, recv, interp)
+	undo_redo.add_undo_method(self, &"_add_property", object, property, send, recv, interp, reliable)
 	undo_redo.commit_action()
 
 func _tree_item_edited():
@@ -315,6 +338,7 @@ func _tree_item_edited():
 	var send: int = object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_SEND)[idx]
 	var recv: int = object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_RECV)[idx]
 	var interp: bool = object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_INTERP)[idx]
+	var reliable: bool = object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_RELIABLE)[idx]
 	
 	var undo_redo := plugin.get_undo_redo()
 	var column := tree.get_edited_column()
@@ -331,11 +355,17 @@ func _tree_item_edited():
 			undo_redo.add_do_method(self, &"_set_receiver", item, object, idx, int(item.get_range(column)))
 			undo_redo.add_undo_method(self, &"_set_receiver", item, object, idx, ReplicationConstants.real_filter_to_editor_filter(recv))
 			undo_redo.commit_action()
-		3:
+		4:
 			# Setting interp
 			undo_redo.create_action("Set interp mode")
-			undo_redo.add_do_method(self, &"_set_interp", item, object, idx, item.is_checked(3))
+			undo_redo.add_do_method(self, &"_set_interp", item, object, idx, item.is_checked(4))
 			undo_redo.add_undo_method(self, &"_set_interp", item, object, idx, interp)
+			undo_redo.commit_action()
+		3:
+			# Setting reliable
+			undo_redo.create_action("Set reliable mode")
+			undo_redo.add_do_method(self, &"_set_reliable", item, object, idx, item.is_checked(3))
+			undo_redo.add_undo_method(self, &"_set_reliable", item, object, idx, reliable)
 			undo_redo.commit_action()
 
 func _set_sender(item: TreeItem, object: Node, idx: int, send: int):
@@ -357,4 +387,11 @@ func _set_interp(item: TreeItem, object: Node, idx: int, interp: bool):
 		return
 	object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_INTERP)[idx] = interp
 	item.set_checked(3, interp)
+	EditorInterface.mark_scene_as_unsaved()
+
+func _set_reliable(item: TreeItem, object: Node, idx: int, reliable: bool):
+	if not is_instance_valid(object):
+		return
+	object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_RELIABLE)[idx] = reliable
+	item.set_checked(4, reliable)
 	EditorInterface.mark_scene_as_unsaved()

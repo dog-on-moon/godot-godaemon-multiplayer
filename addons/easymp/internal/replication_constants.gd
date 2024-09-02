@@ -4,6 +4,7 @@ const META_SYNC_PROPERTIES := &"_mp_p"
 const META_SYNC_PROPERTIES_SEND := &"_mp_s"
 const META_SYNC_PROPERTIES_RECV := &"_mp_r"
 const META_SYNC_PROPERTIES_INTERP := &"_mp_i"
+const META_SYNC_PROPERTIES_RELIABLE := &"_mp_e"
 
 enum PeerFilter {
 	CLIENTS = 1,
@@ -22,6 +23,8 @@ const PeerFilterBitfieldToName := {
 
 const DEFAULT_SEND_FILTER := 4
 const DEFAULT_RECV_FILTER := 1
+const DEFAULT_SYNC_INTERP := false
+const DEFAULT_SYNC_RELIABLE := true
 
 static func editor_filter_to_real_filter(editor: int) -> int:
 	return PeerFilterBitfieldToName.keys()[editor]

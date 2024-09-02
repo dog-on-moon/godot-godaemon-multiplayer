@@ -5,15 +5,15 @@ var replication_editor: Control
 var replication_editor_button: Button
 
 func _enter_tree() -> void:
-	add_autoload_singleton("MultiplayerManager", "res://addons/authoritative_multiplayer/multiplayer_manager.gd")
+	add_autoload_singleton("SubprocessServer", "res://addons/easymp/internal/subprocess_server.gd")
 	_load_editor()
 
 func _exit_tree() -> void:
-	remove_autoload_singleton("MultiplayerManager")
+	remove_autoload_singleton("SubprocessServer")
 	_unload_editor()
 
 func _load_editor():
-	replication_editor = load("res://addons/authoritative_multiplayer/editor/replication_editor.tscn").instantiate()
+	replication_editor = load("res://addons/easymp/editor/replication_editor.tscn").instantiate()
 	replication_editor.plugin = self
 	replication_editor_button = add_control_to_bottom_panel(replication_editor, "Replication")
 

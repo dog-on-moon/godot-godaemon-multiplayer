@@ -10,14 +10,14 @@ config_version=5
 
 [application]
 
-config/name="authoritative-server-plugin"
+config/name="godot-authoritative-multiplayer"
 run/main_scene="res://demos/2d/dev_start.tscn"
 config/features=PackedStringArray("4.3", "Forward Plus")
 config/icon="res://icon.svg"
 
 [autoload]
 
-MultiplayerManager="*res://addons/authoritative_multiplayer/multiplayer_manager.gd"
+SubprocessServer="*res://addons/easymp/internal/subprocess_server.gd"
 
 [display]
 
@@ -26,7 +26,7 @@ window/size/viewport_height=324
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/authoritative_multiplayer/plugin.cfg")
+enabled=PackedStringArray("res://addons/easymp/plugin.cfg")
 
 [file_customization]
 

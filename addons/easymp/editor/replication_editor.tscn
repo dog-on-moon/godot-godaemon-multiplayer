@@ -1,6 +1,6 @@
 [gd_scene load_steps=3 format=3 uid="uid://dcbujli04jyj2"]
 
-[ext_resource type="Script" path="res://addons/authoritative_multiplayer/editor/replication_editor.gd" id="1_om8ea"]
+[ext_resource type="Script" path="res://addons/easymp/editor/replication_editor.gd" id="1_om8ea"]
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_dqqmy"]
 
@@ -98,6 +98,6 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 size_flags_vertical = 3
-columns = 5
+columns = 6
 column_titles_visible = true
 hide_root = true
