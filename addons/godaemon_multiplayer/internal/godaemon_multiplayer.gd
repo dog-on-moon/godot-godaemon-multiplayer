@@ -83,6 +83,12 @@ func _recv_command(id: int, bytes: PackedByteArray):
 
 #region RPCs
 
+## An array of functions that modify the outbound RPC channel.
+## They take the arguments:
+## 	(channel: int, from_peer: int, to_peer: int, node: Node, method: StringName, args: Array) 
+## The function will return the new channel.
+var rpc_channel_modifiers: Array[Callable] = []
+
 ## An array of functions that are called on every outbound RPC.
 ## They take the arguments:
 ## 	(from_peer: int, to_peer: int, node: Node, method: StringName, args: Array) 
@@ -122,7 +128,9 @@ func _outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Er
 		push_error("GodaemonMultiplayer._outbound_rpc mismatched argument counts: %s(%s)" % [method, args])
 		return ERR_UNAVAILABLE
 	
-	# Validate filters.
+	# Process hooks.
+	for modifier: Callable in rpc_channel_modifiers:
+		channel = modifier.call(channel, get_unique_id(), peer, node, method, args)
 	for filter: Callable in outbound_rpc_filters:
 		if not filter.call(get_unique_id(), peer, node, method, args):
 			return ERR_UNAVAILABLE
@@ -189,6 +197,9 @@ func check_rpc_ratelimit(node: Node, method: StringName) -> bool:
 	if method not in _node_rpc_ratelimits[node]:
 		return true
 	var rl: RateLimiter = _node_rpc_ratelimits[node][method]
-	return rl.check()
+	var result := rl.check()
+	if not result and OS.has_feature("editor"):
+		push_warning("GodaemonMultiplayer: ratelimited RPC %s.%s()" % [node.name, method])
+	return result
 
 #endregion

@@ -145,12 +145,39 @@ func end_connection() -> bool:
 var services: Array[Node] = []
 var service_cache := {}
 
+var service_channel_start := {}
+var service_channel_count := 0
+
 @onready var __setup_service_signals = _setup_service_signals.call()
 func _setup_service_signals():
 	if Engine.is_editor_hint():
 		return
+	_determine_service_channels()
 	connection_success.connect(_setup_services)
 	server_disconnected.connect(_cleanup_services)
+
+func _determine_service_channels():
+	service_channel_count = 0
+	for script: Script in configuration.service_scripts:
+		if not script.get_global_name():
+			continue
+		var n = script.new()
+		var service_channels = n.get(&"SERVICE_CHANNELS")
+		if service_channels != null:
+			service_channel_start[script.get_global_name()] = service_channel_count
+			service_channel_count += service_channels
+		n.queue_free()
+	for packed_scene: PackedScene in configuration.service_scenes:
+		var n := packed_scene.instantiate()
+		if not n.get_script():
+			continue
+		if not n.get_script().get_global_name():
+			continue
+		var service_channels = n.get(&"SERVICE_CHANNELS")
+		if service_channels != null:
+			service_channel_start[n.get_script().get_global_name()] = service_channel_count
+			service_channel_count += service_channels
+		n.queue_free()
 
 func _setup_services():
 	_cleanup_services()
@@ -207,6 +234,16 @@ func get_service(t: Script) -> Node:
 ## Determines if a service exists on the MultiplayerNode.
 func has_service(t: Script) -> bool:
 	return t in service_cache
+
+## Gets the starting index of a service's channels.
+func get_service_channel_start(t: Script) -> int:
+	var service := get_service(t)
+	assert(service)
+	assert(t.get_global_name() in service_channel_start)
+	return service_channel_start[t.get_global_name()] + configuration.channel_count + 1
+
+func get_total_channel_count() -> int:
+	return 1 + configuration.channel_count + service_channel_count
 
 #endregion
 

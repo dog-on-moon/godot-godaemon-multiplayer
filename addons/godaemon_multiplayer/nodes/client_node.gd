@@ -105,7 +105,7 @@ func start_connection() -> bool:
 	
 	# Create client connection.
 	var error := peer.create_client(
-		address, port, configuration.channel_count,
+		address, port, get_total_channel_count(),
 		configuration.in_bandwidth, configuration.out_bandwidth,
 		local_port
 	)

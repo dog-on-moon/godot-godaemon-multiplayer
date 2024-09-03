@@ -50,7 +50,7 @@ func start_connection() -> bool:
 	
 	# Create server connection.
 	var error := peer.create_server(
-		port, configuration.max_clients, configuration.channel_count,
+		port, configuration.max_clients, get_total_channel_count(),
 		configuration.in_bandwidth, configuration.out_bandwidth
 	)
 	if error != OK:

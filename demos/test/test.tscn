@@ -10,6 +10,14 @@
 script = ExtResource("2_53s1k")
 configuration = ExtResource("2_nbqx3")
 
+[node name="ClientNode2" type="Node" parent="."]
+script = ExtResource("2_53s1k")
+configuration = ExtResource("2_nbqx3")
+
+[node name="ClientNode3" type="Node" parent="."]
+script = ExtResource("2_53s1k")
+configuration = ExtResource("2_nbqx3")
+
 [node name="ServerNode" type="Node" parent="."]
 script = ExtResource("2_04yku")
 configuration = ExtResource("2_nbqx3")
