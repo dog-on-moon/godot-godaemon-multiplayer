@@ -1,18 +1,17 @@
 [gd_scene load_steps=5 format=3 uid="uid://b5406xwndfjbn"]
 
-[ext_resource type="Script" path="res://demos/test/test.gd" id="1_bylf0"]
 [ext_resource type="Script" path="res://addons/godaemon_multiplayer/nodes/server_node.gd" id="2_04yku"]
 [ext_resource type="Script" path="res://addons/godaemon_multiplayer/nodes/client_node.gd" id="2_53s1k"]
-[ext_resource type="Script" path="res://demos/test/chat_service.gd" id="3_hywrf"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/zone_service.gd" id="3_bqbrv"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/chat_service.gd" id="3_hywrf"]
 
 [node name="Test" type="Node"]
-script = ExtResource("1_bylf0")
 
 [node name="ClientNode" type="Node" parent="."]
 script = ExtResource("2_53s1k")
-service_scripts = Array[GDScript]([ExtResource("3_hywrf")])
+service_scripts = Array[Script]([ExtResource("3_bqbrv"), ExtResource("3_hywrf")])
 internal_server_scene = "res://demos/test/internal_server.tscn"
 
 [node name="ServerNode" type="Node" parent="."]
 script = ExtResource("2_04yku")
-service_scripts = Array[GDScript]([ExtResource("3_hywrf")])
+service_scripts = Array[Script]([ExtResource("3_bqbrv"), ExtResource("3_hywrf")])

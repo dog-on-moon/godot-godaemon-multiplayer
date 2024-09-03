@@ -95,3 +95,11 @@ func _recv_command(id: int, bytes: PackedByteArray):
 			peer_packet.emit(id, bytes)
 
 #endregion
+
+#region Ratelimiting
+
+## Sets the ratelimit 
+func set_ratelimit(node: Node, method: StringName, count: int, duration: float):
+	pass
+
+#endregion

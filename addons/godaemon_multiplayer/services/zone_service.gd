@@ -12,7 +12,7 @@ enum PropagatedInputs {
 }
 
 ## Determines how input events are propagated through the ZoneService.
-@export var propagated_inputs := PropagatedInputs.NONE
+@export var propagated_inputs := PropagatedInputs.ALL
 
 func _propagate_input_event(event: InputEvent) -> bool:
 	match propagated_inputs:
@@ -29,6 +29,8 @@ func _propagate_input_event(event: InputEvent) -> bool:
 @onready var mp := MultiplayerNode.fetch(self)
 
 func _ready() -> void:
-	name = 'ZoneService'
-	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# Setup viewport container visuals.
 	stretch = true
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	visible = true if mp.is_client() else false
+	propagated_inputs = PropagatedInputs.ALL if mp.is_client() else PropagatedInputs.NONE

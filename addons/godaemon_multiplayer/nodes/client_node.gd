@@ -22,7 +22,7 @@ class_name ClientNode
 
 ## An array of Scripts that are instantiated to the ClientNode
 ## once a connection has been established.
-@export var service_scripts: Array[GDScript] = []
+@export var service_scripts: Array[Script] = []
 
 ## An array of PackedScenes that are instantiated to the ClientNode
 ## once a connection has been established.
@@ -127,33 +127,6 @@ const KW_INTERNAL_SERVER_PORT := "_INTERNAL_SERVER_PORT"
 
 ## When true, the internal server will run as a background process (headless).
 @export var headless_internal_server := true
-
-#endregion
-
-@export_group("Rendering")
-#region
-
-## Disables rendering of zones (by turning the ZoneService's visibility off).
-@export var disable_rendering := false:
-	set(x):
-		disable_rendering = x
-		if zone_service:
-			zone_service.visible = not x
-
-## Determines the type of input events that are propagated to the zones.
-## It's best to leave this on, unless you're implementing debug tools.
-@export var propagated_inputs := ZoneService.PropagatedInputs.ALL:
-	set(x):
-		propagated_inputs = x
-		if zone_service:
-			zone_service.propagated_inputs = x
-
-## The default stretch shrink for the ZoneService (see SubViewportContainer).
-@export_range(0, 1, 1, "or_greater") var stretch_shrink := 1:
-	set(x):
-		stretch_shrink = x
-		if zone_service:
-			zone_service.stretch_shrink = x
 
 #endregion
 
@@ -390,7 +363,7 @@ func _end_internal_server():
 #region Services
 
 ## Gets all service scripts.
-func get_service_scripts() -> Array[GDScript]:
+func get_service_scripts() -> Array[Script]:
 	return service_scripts
 
 ## Gets all service scenes.

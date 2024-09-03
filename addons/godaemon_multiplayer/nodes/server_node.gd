@@ -24,7 +24,7 @@ class_name ServerNode
 
 ## An array of Scripts that are instantiated to the ServerNode
 ## once a connection has been established.
-@export var service_scripts: Array[GDScript] = []
+@export var service_scripts: Array[Script] = []
 
 ## An array of PackedScenes that are instantiated to the ServerNode
 ## once a connection has been established.
@@ -89,33 +89,6 @@ class_name ServerNode
 ## up to the signing CA (certificates file can be concatenated using a general purpose text editor).
 @export var dtls_certificate: X509Certificate = null
 #endregion
-
-#endregion
-
-@export_group("Rendering")
-#region
-
-## Disables rendering of zones (by turning the ZoneService's visibility off).
-@export var disable_rendering := true:
-	set(x):
-		disable_rendering = x
-		if zone_service:
-			zone_service.visible = not x
-
-## Determines the type of input events that are propagated to the zones.
-## It's best to leave this on, unless you're implementing debug tools.
-@export var propagated_inputs := ZoneService.PropagatedInputs.NONE:
-	set(x):
-		propagated_inputs = x
-		if zone_service:
-			zone_service.propagated_inputs = x
-
-## The default stretch shrink for the ZoneService (see SubViewportContainer).
-@export_range(0, 1, 1, "or_greater") var stretch_shrink := 1:
-	set(x):
-		stretch_shrink = x
-		if zone_service:
-			zone_service.stretch_shrink = x
 
 #endregion
 
@@ -227,7 +200,7 @@ func complete_auth(id: int):
 #region Services
 
 ## Gets all service scripts.
-func get_service_scripts() -> Array[GDScript]:
+func get_service_scripts() -> Array[Script]:
 	return service_scripts
 
 ## Gets all service scenes.
