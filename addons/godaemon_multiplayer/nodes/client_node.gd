@@ -9,77 +9,14 @@ class_name ClientNode
 ## A fully qualified domain name (e.g. "www.example.com")
 ## or an IP address in IPv4 or IPv6 format (e.g. "192.168.1.1")
 ## that the server is hosting on.
-@export var address := "127.0.0.1"
+@export var address := "127.0.0.1":
+	get:
+		return address if not use_internal_server else "127.0.0.1"
 
 ## The port that the server is listening on.
 @export var port := 27027
 
-## How long the ClientNode should attempt to connect to the server before timing out.
-@export_range(0.0, 15.0, 0.1, "or_greater") var timeout := 5.0
-
-@export_group("Client Configuration")
-#region
-
-## An array of Scripts that are instantiated to the ClientNode
-## once a connection has been established.
-@export var service_scripts: Array[Script] = []
-
-## An array of PackedScenes that are instantiated to the ClientNode
-## once a connection has been established.
-@export var service_scenes: Array[PackedScene] = []
-
-@export_subgroup("ENet")
-#region
-## Can be specified to allocate additional ENet channels for RPCs.
-## Note that many channels are reserved in advance for zones.
-@export_range(0, 255, 1) var channel_count := 0
-
-## Set to limit the incoming bandwidth in bytes per second.
-## The default of 0 means unlimited bandwidth.
-##
-## Note that ENet will strategically drop packets on specific sides of a connection
-## between peers to ensure the peer's bandwidth is not overwhelmed.
-## The bandwidth parameters also determine the window size of a connection,
-## which limits the amount of reliable packets that may be in transit at any given time.
-@export_range(0, 65536, 1, "or_greater") var in_bandwidth := 0
-
-## Set to limit the outgoing bandwidth in bytes per second.
-## The default of 0 means unlimited bandwidth.
-##
-## Note that ENet will strategically drop packets on specific sides of a connection
-## between peers to ensure the peer's bandwidth is not overwhelmed.
-## The bandwidth parameters also determine the window size of a connection,
-## which limits the amount of reliable packets that may be in transit at any given time.
-@export_range(0, 65536, 1, "or_greater") var out_bandwidth := 0
-
-## When specified, the client will also listen to the given port.
-## This is useful for some NAT traversal techniques.
-@export var local_port := 0
-#endregion
-
-@export_subgroup("Authentication")
-#region
-## If set to a value greater than 0.0, the maximum amount of time peers can stay
-## in the authenticating state, after which the authentication will automatically fail.
-@export_range(0.0, 15.0, 0.1, "or_greater") var authentication_timeout := 3.0
-#endregion
-
-@export_subgroup("Security")
-#region
-## When true, objects will be encoded and decoded during RPCs.
-## [b]WARNING:[/b] Deserialized objects can contain code which gets executed.
-## Do not use this option if the serialized object comes from untrusted sources
-## to avoid potential security threat such as remote code execution.
-@export var allow_object_decoding := false
-
-## Determines if DTLS encryption is enabled.
-@export var use_dtls_encryption := false:
-	set(x):
-		use_dtls_encryption = x
-		update_configuration_warnings()
-		notify_property_list_changed()
-
-# @export_subgroup("DTLS Configuration")
+@export_group("DTLS Encryption")
 ## The hostname which the server certificate is validated against.
 @export var dtls_hostname := ""
 
@@ -101,14 +38,9 @@ class_name ClientNode
 		if OS.has_feature('release') and not Engine.is_editor_hint():
 			return false
 		return dtls_unsafe_client
-#endregion
-
-#endregion
 
 @export_group("Internal Server")
 #region
-
-const KW_INTERNAL_SERVER_PORT := "_INTERNAL_SERVER_PORT"
 
 ## When true, connection attempts will also setup an additional process
 ## for running an internal server. This process will contain user arguments
@@ -119,14 +51,17 @@ const KW_INTERNAL_SERVER_PORT := "_INTERNAL_SERVER_PORT"
 		update_configuration_warnings()
 		notify_property_list_changed()
 
-## A scene that contains a ServerNode.
-@export_file("*.tscn") var internal_server_scene := "":
-	set(x):
-		internal_server_scene = x
-		update_configuration_warnings()
-
 ## When true, the internal server will run as a background process (headless).
 @export var headless_internal_server := true
+
+#endregion
+
+@export_group("Advanced")
+#region
+
+## When specified, the client will also listen to the given port.
+## This is useful for some NAT traversal techniques. Only for the brave.
+@export var local_port := 0
 
 #endregion
 
@@ -150,8 +85,9 @@ func start_connection() -> bool:
 	
 	# Setup GodaemonMultiplayer and peer.
 	var api := GodaemonMultiplayer.new()
-	api.scene_multiplayer.allow_object_decoding = allow_object_decoding
-	api.scene_multiplayer.auth_timeout = authentication_timeout
+	api.multiplayer_node = self
+	api.scene_multiplayer.allow_object_decoding = configuration.allow_object_decoding
+	api.scene_multiplayer.auth_timeout = configuration.authentication_timeout
 	get_tree().set_multiplayer(api, get_path())
 	var peer = ENetMultiplayerPeer.new()
 	
@@ -160,7 +96,7 @@ func start_connection() -> bool:
 	## https://github.com/godotengine/godot-proposals/issues/10627
 	@warning_ignore("unused_variable")
 	var client_options: TLSOptions = null
-	if use_dtls_encryption:
+	if configuration.use_dtls_encryption:
 		assert(dtls_hostname)
 		if not dtls_unsafe_client:
 			client_options = TLSOptions.client(dtls_trusted_chain, dtls_common_name_override)
@@ -168,7 +104,11 @@ func start_connection() -> bool:
 			client_options = TLSOptions.client_unsafe()
 	
 	# Create client connection.
-	var error := peer.create_client(address, port, channel_count, in_bandwidth, out_bandwidth, local_port)
+	var error := peer.create_client(
+		address, port, configuration.channel_count,
+		configuration.in_bandwidth, configuration.out_bandwidth,
+		local_port
+	)
 	if error != OK:
 		push_warning("ClientNode.attempt_connect had error: %s" % error_string(error))
 		_end_internal_server()
@@ -219,7 +159,7 @@ func _start_connect_await():
 	api.scene_multiplayer.auth_callback = _auth_callback
 	api.scene_multiplayer.peer_authenticating.connect(_connect_await_result_authentication)
 	api.scene_multiplayer.peer_authentication_failed.connect(_connect_await_result_authentication_failed)
-	_client_setup_timer = get_tree().create_timer(timeout)
+	_client_setup_timer = get_tree().create_timer(configuration.connection_timeout)
 	_client_setup_timer.timeout.connect(_connect_await_result_timeout)
 
 func _connect_await_result_connected():
@@ -276,6 +216,7 @@ func end_connection() -> bool:
 	connection_state = ConnectionState.DISCONNECTED
 	var api: GodaemonMultiplayer = multiplayer
 	api.multiplayer_peer.close()
+	api.multiplayer_node = null
 	if api.server_disconnected.is_connected(end_connection):
 		api.server_disconnected.disconnect(end_connection)
 	if api.peer_disconnected.is_connected(_on_client_peer_disconnect):
@@ -339,16 +280,8 @@ var internal_server_pid := -1
 # (since it technically didn't fail!)
 func _start_internal_server() -> bool:
 	if use_internal_server:
-		if KW_INTERNAL_SERVER_PORT in SubprocessServer.kwargs:
-			# Realistically speaking, we should probably avoid a fork bomb
-			return false
-		if not internal_server_scene:
-			push_warning("ClientNode._start_internal_server server scene unspecified")
-			return false
-		internal_server_pid = SubprocessServer.create_subprocess(
-			internal_server_scene, {
-				KW_INTERNAL_SERVER_PORT: port
-			}, headless_internal_server
+		internal_server_pid = InternalServer.start_internal_server(
+			port, configuration, headless_internal_server
 		)
 		if internal_server_pid == -1:
 			return false
@@ -360,18 +293,6 @@ func _end_internal_server():
 
 #endregion
 
-#region Services
-
-## Gets all service scripts.
-func get_service_scripts() -> Array[Script]:
-	return service_scripts
-
-## Gets all service scenes.
-func get_service_scenes() -> Array[PackedScene]:
-	return service_scenes
-
-#endregion
-
 #region Getters
 
 func is_client() -> bool:
@@ -380,8 +301,9 @@ func is_client() -> bool:
 #endregion
 
 func _validate_property(property: Dictionary) -> void:
-	if not use_dtls_encryption:
+	if not configuration or not configuration.use_dtls_encryption:
 		if property.name in [
+			'DTLS Configuration',
 			'dtls_hostname',
 			'dtls_trusted_chain',
 			'dtls_common_name_override',
@@ -394,6 +316,9 @@ func _validate_property(property: Dictionary) -> void:
 			'headless_internal_server'
 				]:
 			property.usage ^= PROPERTY_USAGE_EDITOR
+	else:
+		if property.name in ['address']:
+			property.usage ^= PROPERTY_USAGE_EDITOR
 	if property.name in [
 		'stretch'
 			]:
@@ -401,13 +326,17 @@ func _validate_property(property: Dictionary) -> void:
 
 func _get_configuration_warnings() -> PackedStringArray:
 	var warnings := PackedStringArray()
-	if use_dtls_encryption:
-		warnings.append("DTLS encryption is currently disabled.\nhttps://github.com/godotengine/godot-proposals/issues/10627")
-		if dtls_unsafe_client:
-			warnings.append("dtls_unsafe_client is currently enabled. This is for testing only. It will be disabled in release builds.")
-		if not dtls_hostname:
-			warnings.append("dtls_hostname must be specified for DTLS encryption.")
-	if use_internal_server:
-		if not internal_server_scene:
-			warnings.append("An internal server scene must be specified for an internal server.")
+	if not configuration:
+		warnings.append("A MultiplayerConfiguration must be defined.")
+	else:
+		if configuration.use_dtls_encryption:
+			warnings.append("DTLS encryption is currently disabled.\nhttps://github.com/godotengine/godot-proposals/issues/10627")
+			if dtls_unsafe_client:
+				warnings.append("dtls_unsafe_client is currently enabled. This is for testing only. It will be disabled in release builds.")
+			if not dtls_hostname:
+				warnings.append("dtls_hostname must be specified for DTLS encryption.")
+			if use_internal_server:
+				warnings.append("DTLS encryption is not supported with internal servers.")
+		if use_internal_server and configuration.resource_path.contains('::'):
+			warnings.append("The MultiplayerConfiguration must be saved as a unique resource for use in an internal server.")
 	return warnings

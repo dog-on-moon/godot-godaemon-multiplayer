@@ -6,13 +6,43 @@ class_name MultiplayerNode
 #region Exports
 
 ## Attempts to endlessly multiconnect when the node is added.
+## Note that it is deferred.
 @export var multiconnect_on_ready := true
 
 @onready var __multiconnect_on_ready = _multiconnect_on_ready.call()
 func _multiconnect_on_ready():
+	if Engine.is_editor_hint() or not multiconnect_on_ready:
+		return
+	start_multi_connect.call_deferred()
+
+## Client/Server configuration that should be the same between a ClientNode and ServerNode.
+@export var configuration: MultiplayerConfig:
+	set(x):
+		if configuration:
+			configuration.property_list_changed.disconnect(notify_property_list_changed)
+			configuration.property_list_changed.disconnect(update_configuration_warnings)
+		configuration = x
+		if configuration:
+			configuration.property_list_changed.connect(notify_property_list_changed)
+			configuration.property_list_changed.connect(update_configuration_warnings)
+		notify_property_list_changed()
+		update_configuration_warnings()
+
+@onready var __setup_timeout_handler = _setup_timeout_handler.call()
+func _setup_timeout_handler():
 	if Engine.is_editor_hint():
 		return
-	start_multi_connect()
+	peer_connected.connect(
+		func (p: int):
+			var packet_peer: ENetPacketPeer = multiplayer.multiplayer_peer.get_peer(p)
+			var unlimited_time := configuration.enable_peer_timeout
+			if OS.has_feature("editor"):
+				unlimited_time = configuration.enable_dev_peer_timeout
+			if not unlimited_time:
+				packet_peer.set_timeout(configuration.peer_timeout * 1000.0, configuration.peer_timeout_minimum * 1000.0, configuration.peer_timeout_maximum * 1000.0)
+			else:
+				packet_peer.set_timeout(configuration.peer_timeout * 1000.0, 3600.0 * 1000.0, 3600.0 * 1000.0)
+	)
 
 #endregion
 
@@ -58,7 +88,11 @@ static func get_connection_state_name(state: ConnectionState) -> String:
 	push_error("MultiplayerNode.get_connection_state_name does not know %s" % state)
 	return ""
 
-var zone_service: ZoneService
+var api: GodaemonMultiplayer:
+	get: return multiplayer
+
+func get_remote_sender_id() -> int:
+	return api.remote_sender
 
 #endregion
 
@@ -121,7 +155,7 @@ func _setup_service_signals():
 func _setup_services():
 	_cleanup_services()
 	var nodes_to_add: Array[Node] = []
-	for script: Script in get_service_scripts():
+	for script: Script in configuration.service_scripts:
 		if not script.get_global_name():
 			push_error("MultiplayerNode: service '%s' is missing script global name" % script.resource_path)
 			continue
@@ -133,7 +167,7 @@ func _setup_services():
 		service_cache[script] = n
 		n.name = script.get_global_name()
 		nodes_to_add.append(n)
-	for packed_scene: PackedScene in get_service_scenes():
+	for packed_scene: PackedScene in configuration.service_scenes:
 		var n := packed_scene.instantiate()
 		if not n.get_script():
 			push_error("MultiplayerNode: service '%s' is missing a script" % packed_scene.resource_path)
@@ -174,25 +208,17 @@ func get_service(t: Script) -> Node:
 func has_service(t: Script) -> bool:
 	return t in service_cache
 
-## Gets all service scripts.
-func get_service_scripts() -> Array[Script]:
-	return []
-
-## Gets all service scenes.
-func get_service_scenes() -> Array[PackedScene]:
-	return []
-
 #endregion
 
 #region Getters
 
 ## Returns true if the MultiplayerNode is being ran as a client.
 func is_client() -> bool:
-	return false
+	return multiplayer.get_unique_id() != 1
 
 ## Returns true if the MultiplayerNode is being ran as a server.
 func is_server() -> bool:
-	return false
+	return multiplayer.get_unique_id() == 1
 
 ## Returns true if the Zone is being ran as a local scene.
 ## This is useful for testing and developing areas.

@@ -32,9 +32,9 @@ func _process(delta: float) -> void:
 func _enter_tree():
 	for arg in OS.get_cmdline_user_args():
 		if '=' in arg:
-			kwargs[arg.get_slice('=', 0)] = arg.split('=', true, 1)[1]
+			kwargs[arg.get_slice('=', 0).trim_prefix('--')] = arg.split('=', true, 1)[1]
 		else:
-			kwargs[arg] = null
+			kwargs[arg.trim_prefix('--')] = null
 
 func _exit_tree() -> void:
 	kill_all_subprocesses()
@@ -78,7 +78,6 @@ func kill_all_subprocesses():
 ## Kills a given subprocess.
 func kill_subprocess(pid: int) -> bool:
 	if pid not in subprocesses:
-		push_warning("subprocesseserver.kill_subprocess pid was not found")
 		return false
 	OS.kill(pid)
 	subprocesses.erase(pid)

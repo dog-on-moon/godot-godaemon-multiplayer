@@ -9,78 +9,9 @@ class_name ServerNode
 ## The port that the server is listening on.
 ## If the ServerNode exists in a process that has been created through a
 ## ClientNode's internal scene, this will instead use the ClientNode's port.
-@export var port := 27027:
-	get:
-		if Engine.is_editor_hint():
-			return port
-		var internal_server_port := SubprocessServer.kwargs.get(ClientNode.KW_INTERNAL_SERVER_PORT, 0)
-		return port if internal_server_port == 0 else internal_server_port
+@export var port := 27027
 
-## How long the ServerNode should attempt to create a connection before timing out.
-@export_range(0.0, 15.0, 0.1, "or_greater") var timeout := 5.0
-
-@export_group("Server Configuration")
-#region
-
-## An array of Scripts that are instantiated to the ServerNode
-## once a connection has been established.
-@export var service_scripts: Array[Script] = []
-
-## An array of PackedScenes that are instantiated to the ServerNode
-## once a connection has been established.
-@export var service_scenes: Array[PackedScene] = []
-
-@export_subgroup("ENet")
-#region
-## The maximum number of clients that can connect to the server.
-@export_range(0, 4095, 1) var max_clients := 32
-
-## Can be specified to allocate additional ENet channels for RPCs.
-## Note that many channels are reserved in advance for zones.
-@export_range(0, 255, 1) var channel_count := 0
-
-## Set to limit the incoming bandwidth in bytes per second.
-## The default of 0 means unlimited bandwidth.
-##
-## Note that ENet will strategically drop packets on specific sides of a connection
-## between peers to ensure the peer's bandwidth is not overwhelmed.
-## The bandwidth parameters also determine the window size of a connection,
-## which limits the amount of reliable packets that may be in transit at any given time.
-@export_range(0, 65536, 1, "or_greater") var in_bandwidth := 0
-
-## Set to limit the outgoing bandwidth in bytes per second.
-## The default of 0 means unlimited bandwidth.
-##
-## Note that ENet will strategically drop packets on specific sides of a connection
-## between peers to ensure the peer's bandwidth is not overwhelmed.
-## The bandwidth parameters also determine the window size of a connection,
-## which limits the amount of reliable packets that may be in transit at any given time.
-@export_range(0, 65536, 1, "or_greater") var out_bandwidth := 0
-#endregion
-
-@export_subgroup("Authentication")
-#region
-## If set to a value greater than 0.0, the maximum amount of time peers can stay
-## in the authenticating state, after which the authentication will automatically fail.
-@export_range(0.0, 15.0, 0.1, "or_greater") var authentication_timeout := 3.0
-#endregion
-
-@export_subgroup("Security")
-#region
-## When true, objects will be encoded and decoded during RPCs.
-## [b]WARNING:[/b] Deserialized objects can contain code which gets executed.
-## Do not use this option if the serialized object comes from untrusted sources
-## to avoid potential security threat such as remote code execution.
-@export var allow_object_decoding := false
-
-## Determines if DTLS encryption is enabled.
-@export var use_dtls_encryption := false:
-	set(x):
-		use_dtls_encryption = x
-		update_configuration_warnings()
-		notify_property_list_changed()
-
-# @export_subgroup("DTLS Configuration")
+@export_group("DTLS Encryption")
 ## The key used for setting up a DTLS connection.
 @export var dtls_key: CryptoKey = null
 
@@ -88,9 +19,6 @@ class_name ServerNode
 ## [b]Note:[/b] The certificate should include the full certificate chain
 ## up to the signing CA (certificates file can be concatenated using a general purpose text editor).
 @export var dtls_certificate: X509Certificate = null
-#endregion
-
-#endregion
 
 #endregion
 
@@ -106,8 +34,9 @@ func start_connection() -> bool:
 	
 	# Setup MultiplayerAPI and peer.
 	var api := GodaemonMultiplayer.new()
-	api.scene_multiplayer.allow_object_decoding = allow_object_decoding
-	api.scene_multiplayer.auth_timeout = authentication_timeout
+	api.multiplayer_node = self
+	api.scene_multiplayer.allow_object_decoding = configuration.allow_object_decoding
+	api.scene_multiplayer.auth_timeout = configuration.authentication_timeout
 	get_tree().set_multiplayer(api, get_path())
 	var peer = ENetMultiplayerPeer.new()
 	
@@ -116,11 +45,14 @@ func start_connection() -> bool:
 	## https://github.com/godotengine/godot-proposals/issues/10627
 	@warning_ignore("unused_variable")
 	var server_options: TLSOptions = null
-	if use_dtls_encryption:
+	if configuration.use_dtls_encryption:
 		server_options = TLSOptions.server(dtls_key, dtls_certificate)
 	
 	# Create server connection.
-	var error := peer.create_server(port, max_clients, channel_count, in_bandwidth, out_bandwidth)
+	var error := peer.create_server(
+		port, configuration.max_clients, configuration.channel_count,
+		configuration.in_bandwidth, configuration.out_bandwidth
+	)
 	if error != OK:
 		push_warning("ServerNode.end_connection had error: %s" % error_string(error))
 		connection_failed.emit(connection_state)
@@ -133,7 +65,7 @@ func start_connection() -> bool:
 			push_warning("MultiplayerManager.setup_server could not create ENetMultiplayer peer")
 			connection_failed.emit(connection_state)
 			return false
-		elif (Time.get_ticks_msec() - start_t) > timeout:
+		elif (Time.get_ticks_msec() - start_t) > configuration.connection_timeout:
 			push_warning("Multiplayer.setup_server timed out")
 			connection_state = ConnectionState.TIMEOUT
 			connection_failed.emit(connection_state)
@@ -147,7 +79,7 @@ func start_connection() -> bool:
 	if not api.peer_disconnected.is_connected(peer_disconnected.emit):
 		api.peer_disconnected.connect(peer_disconnected.emit)
 	
-	multiplayer.multiplayer_peer = peer
+	api.multiplayer_peer = peer
 	connection_success.emit()
 	return true
 
@@ -157,8 +89,9 @@ func end_connection() -> bool:
 		push_warning("ServerNode.end_connection was not connected")
 		return false
 	connection_state = ConnectionState.DISCONNECTED
-	multiplayer.multiplayer_peer.close()
 	var api: GodaemonMultiplayer = multiplayer
+	api.multiplayer_peer.close()
+	api.multiplayer_node = null
 	api.scene_multiplayer.auth_callback = Callable()
 	if api.scene_multiplayer.peer_authenticating.is_connected(start_auth_func):
 		api.scene_multiplayer.peer_authenticating.disconnect(start_auth_func)
@@ -197,40 +130,19 @@ func complete_auth(id: int):
 
 #endregion
 
-#region Services
-
-## Gets all service scripts.
-func get_service_scripts() -> Array[Script]:
-	return service_scripts
-
-## Gets all service scenes.
-func get_service_scenes() -> Array[PackedScene]:
-	return service_scenes
-
-#endregion
-
-#region Getters
-
-func is_server() -> bool:
-	return true
-
-#endregion
-
 func _validate_property(property: Dictionary) -> void:
-	if not use_dtls_encryption:
+	if not configuration or not configuration.use_dtls_encryption:
 		if property.name in [
 			'dtls_key',
 			'dtls_certificate',
 				]:
 			property.usage ^= PROPERTY_USAGE_EDITOR
-	if property.name in [
-		'stretch'
-			]:
-		property.usage ^= PROPERTY_USAGE_EDITOR
 
 func _get_configuration_warnings() -> PackedStringArray:
 	var warnings := PackedStringArray()
-	if use_dtls_encryption:
+	if not configuration:
+		warnings.append("A MultiplayerConfiguration must be defined.")
+	elif configuration.use_dtls_encryption:
 		warnings.append("DTLS encryption is currently disabled.\nhttps://github.com/godotengine/godot-proposals/issues/10627")
 		if not dtls_key:
 			warnings.append("dtls_key must be specified for DTLS encryption.")

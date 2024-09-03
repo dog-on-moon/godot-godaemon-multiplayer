@@ -5,7 +5,7 @@ var replication_editor: Control
 var replication_editor_button: Button
 
 func _enter_tree() -> void:
-	add_autoload_singleton("SubprocessServer", "res://addons/godaemon_multiplayer/internal/subprocess_server.gd")
+	add_autoload_singleton("SubprocessServer", "res://addons/godaemon_multiplayer/util/subprocess_server.gd")
 	_load_editor()
 
 func _exit_tree() -> void:

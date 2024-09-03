@@ -8,4 +8,3 @@ script = ExtResource("1_l4c3t")
 
 [node name="ServerNode" type="Node" parent="."]
 script = ExtResource("2_qlymc")
-multiconnect_on_ready = null
