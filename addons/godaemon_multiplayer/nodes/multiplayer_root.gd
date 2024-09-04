@@ -1,7 +1,8 @@
 @tool
+@icon("res://addons/godaemon_multiplayer/icons/SignalsAndGroups.svg")
 extends Node
-class_name MultiplayerNode
-## Contains shared information for ClientNodes and ServerNodes.
+class_name MultiplayerRoot
+## Base class for ClientRoot and ServerRoot.
 
 #region Exports
 
@@ -15,7 +16,7 @@ func _multiconnect_on_ready():
 		return
 	start_multi_connect.call_deferred()
 
-## Client/Server configuration that should be the same between a ClientNode and ServerNode.
+## Client/Server configuration that should be the same between a ClientRoot and ServerRoot.
 @export var configuration: MultiplayerConfig:
 	set(x):
 		if configuration:
@@ -48,10 +49,10 @@ func _setup_timeout_handler():
 
 #region Signals
 
-## Emitted when connection has successfully established with a ClientNode.
+## Emitted when connection has successfully established with a ClientRoot.
 signal connection_success
 
-## Emitted when connection failed with a ClientNode.
+## Emitted when connection failed with a ClientRoot.
 signal connection_failed(state: ConnectionState)
 
 ## Emitted when the server shuts down.
@@ -71,7 +72,7 @@ signal peer_disconnected(peer: int)
 enum ConnectionState {
 	DISCONNECTED,    ## No connection.
 	WAITING,         ## We are waiting to begin authentication.
-	AUTHENTICATING,  ## [client] Currently authenticating with a ServerNode.
+	AUTHENTICATING,  ## [client] Currently authenticating with a ServerRoot.
 	TIMEOUT,         ## We timed out before connecting.
 	AUTH_TIMEOUT,    ## [client] We failed to authenticate.
 	CONNECTED,       ## Connected.
@@ -85,10 +86,10 @@ static func get_connection_state_name(state: ConnectionState) -> String:
 	for n in ConnectionState:
 		if ConnectionState[n] == state:
 			return n
-	push_error("MultiplayerNode.get_connection_state_name does not know %s" % state)
+	push_error("MultiplayerRoot.get_connection_state_name does not know %s" % state)
 	return ""
 
-var api: GodaemonMultiplayer:
+var api: GodaemonMultiplayerAPI:
 	get: return multiplayer
 
 func get_remote_sender_id() -> int:
@@ -97,7 +98,7 @@ func get_remote_sender_id() -> int:
 var authenticator: PeerAuthenticator
 
 func setup_peer_authenticator():
-	assert(api is GodaemonMultiplayer)
+	assert(api is GodaemonMultiplayerAPI)
 	if not authenticator:
 		authenticator = PeerAuthenticator.new()
 		authenticator.api = api
@@ -122,7 +123,7 @@ var _currently_multi_connecting := false
 
 ## Attempts multiple reconnects to the server.
 ## Set attempts to -1 for unlimited attempts.
-## Can be cancelled with ServerNode.cancel_multiple_connects.
+## Can be cancelled with ServerRoot.cancel_multiple_connects.
 func start_multi_connect(attempts := -1) -> bool:
 	assert(connection_state == ConnectionState.DISCONNECTED)
 	_currently_multi_connecting = true
@@ -139,7 +140,7 @@ func start_multi_connect(attempts := -1) -> bool:
 ## Cancels multi-connecting once the current connection attempt is complete.
 func end_multi_connect():
 	if not _currently_multi_connecting:
-		push_warning("MultiplayerNode.end_multi_connect was not actively multi-connecting")
+		push_warning("MultiplayerRoot.end_multi_connect was not actively multi-connecting")
 	_currently_multi_connecting = false
 
 #endregion
@@ -154,8 +155,9 @@ func end_connection() -> bool:
 
 #region Services
 
-var services: Array[Node] = []
+var services: Array[ServiceBase] = []
 var service_cache := {}
+var service_name_cache := {}
 
 var service_channel_start := {}
 var service_channel_count := 0
@@ -170,67 +172,49 @@ func _setup_service_signals():
 
 func _determine_service_channels():
 	service_channel_count = 0
-	for script: Script in configuration.service_scripts:
+	for script: Script in configuration.services:
 		if not script.get_global_name():
 			continue
 		var n = script.new()
-		var service_channels = n.get(&"SERVICE_CHANNELS")
+		if n is not ServiceBase:
+			continue
+		var service: ServiceBase = n
+		var service_channels = service.get_reserved_channels()
 		if service_channels != null:
 			service_channel_start[script.get_global_name()] = service_channel_count
-			service_channel_count += service_channels
-		n.queue_free()
-	for packed_scene: PackedScene in configuration.service_scenes:
-		var n := packed_scene.instantiate()
-		if not n.get_script():
-			continue
-		if not n.get_script().get_global_name():
-			continue
-		var service_channels = n.get(&"SERVICE_CHANNELS")
-		if service_channels != null:
-			service_channel_start[n.get_script().get_global_name()] = service_channel_count
 			service_channel_count += service_channels
 		n.queue_free()
 
 func _setup_services():
 	_cleanup_services()
-	var nodes_to_add: Array[Node] = []
-	for script: Script in configuration.service_scripts:
+	var nodes_to_add: Array[ServiceBase] = []
+	for script: Script in configuration.services:
 		if not script.get_global_name():
-			push_error("MultiplayerNode: service '%s' is missing script global name" % script.resource_path)
+			push_error("MultiplayerRoot: service '%s' is missing script global name" % script.resource_path)
 			continue
 		var n = script.new()
-		if n is not Node:
-			push_error("MultiplayerNode: service '%s' is not a node" % script.resource_path)
+		if n is not ServiceBase:
+			push_error("MultiplayerRoot: service '%s' is not a ServiceBase" % script.resource_path)
 			continue
 		services.append(n)
 		service_cache[script] = n
+		service_name_cache[script.get_global_name()] = n
 		n.name = script.get_global_name()
-		nodes_to_add.append(n)
-	for packed_scene: PackedScene in configuration.service_scenes:
-		var n := packed_scene.instantiate()
-		if not n.get_script():
-			push_error("MultiplayerNode: service '%s' is missing a script" % packed_scene.resource_path)
-			continue
-		if not n.get_script().get_global_name():
-			push_error("MultiplayerNode: service '%s' is missing script global name" % n.get_script().resource_path)
-			continue
-		services.append(n)
-		service_cache[n.get_script()] = n
-		n.name = n.get_script().get_global_name()
 		nodes_to_add.append(n)
 	
 	# this add children shenanigans is a bit tragic,
 	# but it basically calls _enter_tree on all services (in reverse)
 	# and then calls _ready on all services (in order)
 	nodes_to_add.reverse()
-	_add_children(nodes_to_add)
+	_add_services(nodes_to_add)
 
-func _add_children(nodes: Array[Node]):
+func _add_services(nodes: Array[ServiceBase]):
 	if not nodes:
 		return
 	var n := nodes.pop_at(0)
-	n.tree_entered.connect(_add_children.bind(nodes), CONNECT_ONE_SHOT)
+	n.tree_entered.connect(_add_services.bind(nodes), CONNECT_ONE_SHOT)
 	add_child(n)
+	n._setup()
 	move_child(n, -1)
 
 func _cleanup_services():
@@ -238,34 +222,36 @@ func _cleanup_services():
 		service.queue_free()
 	services = []
 	service_cache = {}
+	service_name_cache = {}
 
 ## Returns a service by script reference.
-func get_service(t: Script) -> Node:
+func get_service(t: Script) -> ServiceBase:
 	return service_cache.get(t, null)
 
-## Determines if a service exists on the MultiplayerNode.
+## Returns a service by name reference.
+func get_service_from_name(service_name: StringName) -> ServiceBase:
+	return service_name_cache.get(service_name, null)
+
+## Determines if a service exists on the MultiplayerRoot.
 func has_service(t: Script) -> bool:
 	return t in service_cache
 
 ## Gets the starting index of a service's channels.
-func get_service_channel_start(t: Script) -> int:
-	var service := get_service(t)
-	assert(service)
-	assert(t.get_global_name() in service_channel_start)
-	return service_channel_start[t.get_global_name()] + configuration.channel_count + 1
-
-func get_total_channel_count() -> int:
-	return 1 + configuration.channel_count + service_channel_count
+func get_service_channel_start(service: ServiceBase) -> int:
+	var key: StringName = service.get_script().get_global_name()
+	if key not in service_channel_start:
+		return 0
+	return service_channel_start[key] + configuration.channel_count + 1
 
 #endregion
 
 #region Getters
 
-## Returns true if the MultiplayerNode is being ran as a client.
+## Returns true if the MultiplayerRoot is being ran as a client.
 func is_client() -> bool:
 	return multiplayer.get_unique_id() != 1
 
-## Returns true if the MultiplayerNode is being ran as a server.
+## Returns true if the MultiplayerRoot is being ran as a server.
 func is_server() -> bool:
 	return multiplayer.get_unique_id() == 1
 
@@ -274,15 +260,19 @@ func is_server() -> bool:
 func is_local_dev() -> bool:
 	return self == get_tree().current_scene
 
-## Finds the MultiplayerNode associated with a given Node.
-static func fetch(node: Node) -> MultiplayerNode:
+## Finds the MultiplayerRoot associated with a given Node.
+static func fetch(node: Node) -> MultiplayerRoot:
 	var tree := node.get_tree()
 	if not tree:
 		return null
-	while node is not MultiplayerNode and node != tree.root:
+	while node is not MultiplayerRoot and node != tree.root:
 		node = node.get_parent()
-	if node is MultiplayerNode:
+	if node is MultiplayerRoot:
 		return node
 	return null
+
+## Returns the total channel count allocated for the MultiplayerRoot.
+func get_total_channel_count() -> int:
+	return 1 + configuration.channel_count + service_channel_count
 
 #endregion

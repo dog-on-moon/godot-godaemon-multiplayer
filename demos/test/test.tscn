@@ -1,85 +1,80 @@
 [gd_scene load_steps=4 format=3 uid="uid://b5406xwndfjbn"]
 
-[ext_resource type="Script" path="res://addons/godaemon_multiplayer/nodes/server_node.gd" id="2_04yku"]
-[ext_resource type="Script" path="res://addons/godaemon_multiplayer/nodes/client_node.gd" id="2_53s1k"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/nodes/server_root.gd" id="2_04yku"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/nodes/client_root.gd" id="2_53s1k"]
 [ext_resource type="Resource" uid="uid://b2qso0xh85c76" path="res://demos/test/test_config.tres" id="2_nbqx3"]
 
-[node name="Test" type="Node"]
-
-[node name="ColorRect" type="ColorRect" parent="."]
+[node name="BaseColor" type="ColorRect"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.10967, 0.1001, 0.11, 1)
+color = Color(0.07633, 0.0221, 0.17, 1)
 
-[node name="Window1" type="Window" parent="."]
+[node name="ViewportSplit" type="GridContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+columns = 2
+
+[node name="ClientViewport1" type="SubViewportContainer" parent="ViewportSplit"]
+custom_minimum_size = Vector2(572, 320)
+layout_mode = 2
+stretch = true
+
+[node name="SubViewport" type="SubViewport" parent="ViewportSplit/ClientViewport1"]
+handle_input_locally = false
 size = Vector2i(572, 320)
-borderless = true
+render_target_update_mode = 4
 
-[node name="ColorRect" type="ColorRect" parent="Window1"]
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-color = Color(0.234167, 0.2, 0.25, 1)
-
-[node name="ClientNode" type="Node" parent="Window1"]
+[node name="ClientRoot" type="Node" parent="ViewportSplit/ClientViewport1/SubViewport"]
 script = ExtResource("2_53s1k")
 configuration = ExtResource("2_nbqx3")
 
-[node name="Window2" type="Window" parent="."]
-auto_translate_mode = 1
-position = Vector2i(580, 0)
+[node name="ClientViewport2" type="SubViewportContainer" parent="ViewportSplit"]
+custom_minimum_size = Vector2(572, 320)
+layout_mode = 2
+stretch = true
+
+[node name="SubViewport" type="SubViewport" parent="ViewportSplit/ClientViewport2"]
+handle_input_locally = false
 size = Vector2i(572, 320)
-borderless = true
+render_target_update_mode = 4
 
-[node name="ColorRect" type="ColorRect" parent="Window2"]
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-color = Color(0.234167, 0.2, 0.25, 1)
-
-[node name="ClientNode" type="Node" parent="Window2"]
+[node name="ClientRoot" type="Node" parent="ViewportSplit/ClientViewport2/SubViewport"]
 script = ExtResource("2_53s1k")
 configuration = ExtResource("2_nbqx3")
 
-[node name="Window3" type="Window" parent="."]
-auto_translate_mode = 1
-position = Vector2i(0, 328)
+[node name="ClientViewport3" type="SubViewportContainer" parent="ViewportSplit"]
+custom_minimum_size = Vector2(572, 320)
+layout_mode = 2
+stretch = true
+
+[node name="SubViewport" type="SubViewport" parent="ViewportSplit/ClientViewport3"]
+handle_input_locally = false
 size = Vector2i(572, 320)
-borderless = true
+render_target_update_mode = 4
 
-[node name="ColorRect" type="ColorRect" parent="Window3"]
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-color = Color(0.234167, 0.2, 0.25, 1)
-
-[node name="ClientNode" type="Node" parent="Window3"]
+[node name="ClientRoot" type="Node" parent="ViewportSplit/ClientViewport3/SubViewport"]
 script = ExtResource("2_53s1k")
 configuration = ExtResource("2_nbqx3")
 
-[node name="Window4" type="Window" parent="."]
-auto_translate_mode = 1
-position = Vector2i(580, 328)
+[node name="ServerViewport" type="SubViewportContainer" parent="ViewportSplit"]
+custom_minimum_size = Vector2(572, 320)
+layout_mode = 2
+stretch = true
+
+[node name="SubViewport" type="SubViewport" parent="ViewportSplit/ServerViewport"]
+handle_input_locally = false
 size = Vector2i(572, 320)
-borderless = true
+render_target_update_mode = 4
 
-[node name="ColorRect" type="ColorRect" parent="Window4"]
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-color = Color(0.234167, 0.2, 0.25, 1)
-
-[node name="ServerNode" type="Node" parent="Window4"]
+[node name="ServerRoot" type="Node" parent="ViewportSplit/ServerViewport/SubViewport"]
 script = ExtResource("2_04yku")
 configuration = ExtResource("2_nbqx3")

@@ -1,7 +1,6 @@
-extends Node
+extends ServiceBase
 class_name ChatService
-
-@onready var mp := MultiplayerNode.fetch(self)
+## Implements a simple chat protocol.
 
 func _ready() -> void:
 	mp.peer_connected.connect(_peer_connected)

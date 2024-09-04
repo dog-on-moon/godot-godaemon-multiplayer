@@ -2,7 +2,7 @@
 extends SubViewport
 class_name Zone
 ## A Zone is the root node of all distributed scenes in the godaemon_multiplayer API.
-## After a ServerNode adds a scene, it lives within a Zone.
+## After a ServerRoot adds a scene, it lives within a Zone.
 ## The contents can then be automatically replicated to clients
 ## by assigning peer visibility.
 
@@ -50,7 +50,7 @@ var use_window_render_settings := true
 
 #region Properties
 
-@onready var mp := MultiplayerNode.fetch(self)
+@onready var mp := MultiplayerRoot.fetch(self)
 @onready var zone_service: ZoneService = mp.get_service(ZoneService)
 
 #endregion
@@ -120,5 +120,5 @@ func _ready() -> void:
 
 func _get_configuration_warnings() -> PackedStringArray:
 	var warnings := PackedStringArray()
-	warnings.append("The Zone class is not meant to be instantiated. It is an internal class use to hold scenes within a ServerNode.")
+	warnings.append("The Zone class is not meant to be instantiated. It is an internal class use to hold scenes within a ServerRoot.")
 	return warnings

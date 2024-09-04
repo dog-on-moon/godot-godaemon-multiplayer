@@ -1,8 +1,10 @@
 @tool
-extends MultiplayerNode
-class_name ClientNode
+extends MultiplayerRoot
+class_name ClientRoot
 ## The client node for a multiplayer session.
-## Establishes a connection with a ServerNode.
+## Establishes a connection with a ServerRoot.
+
+const InternalServer = preload("res://addons/godaemon_multiplayer/nodes/internal_server/internal_server.gd")
 
 #region Exports
 
@@ -73,19 +75,19 @@ class_name ClientNode
 func start_connection() -> bool:
 	# Ensure we are not currently connecting.
 	if connection_state in [ConnectionState.WAITING, ConnectionState.AUTHENTICATING, ConnectionState.CONNECTED]:
-		push_warning("ClientNode.attempt_connect was still connecting")
+		push_warning("ClientRoot.attempt_connect was still connecting")
 		return false
 	connection_state = ConnectionState.DISCONNECTED
 	
 	# Attempt creating an internal server.
 	if not _start_internal_server():
-		push_warning("ClientNode.attempt_connect could not make internal server")
+		push_warning("ClientRoot.attempt_connect could not make internal server")
 		connection_failed.emit(connection_state)
 		return false
 	
-	# Setup GodaemonMultiplayer and peer.
-	var api := GodaemonMultiplayer.new()
-	api.multiplayer_node = self
+	# Setup GodaemonMultiplayerAPI and peer.
+	var api := GodaemonMultiplayerAPI.new()
+	api.mp = self
 	api.scene_multiplayer.allow_object_decoding = configuration.allow_object_decoding
 	api.scene_multiplayer.auth_timeout = configuration.authentication_timeout
 	get_tree().set_multiplayer(api, get_path())
@@ -110,12 +112,12 @@ func start_connection() -> bool:
 		local_port
 	)
 	if error != OK:
-		push_warning("ClientNode.attempt_connect had error: %s" % error_string(error))
+		push_warning("ClientRoot.attempt_connect had error: %s" % error_string(error))
 		_end_internal_server()
 		connection_failed.emit(connection_state)
 		return false
 	if peer.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
-		push_warning("ClientNode.attempt_connect could not create ENetMultiplayer peer")
+		push_warning("ClientRoot.attempt_connect could not create ENetMultiplayer peer")
 		_end_internal_server()
 		connection_failed.emit(connection_state)
 		return false
@@ -152,7 +154,7 @@ signal _connect_await_end
 var _client_setup_timer: SceneTreeTimer
 
 func _start_connect_await():
-	var api: GodaemonMultiplayer = multiplayer
+	var api: GodaemonMultiplayerAPI = multiplayer
 	setup_peer_authenticator()
 	api.connected_to_server.connect(_connect_await_result_connected)
 	api.server_disconnected.connect(_connect_await_result_disconnected)
@@ -190,7 +192,7 @@ func _connect_await_result_authentication_failed(id: int):
 		_connect_await_result(ConnectionState.AUTH_TIMEOUT)
 
 func _connect_await_result(state: ConnectionState):
-	var api: GodaemonMultiplayer = multiplayer
+	var api: GodaemonMultiplayerAPI = multiplayer
 	if api.connected_to_server.is_connected(_connect_await_result_connected):
 		api.connected_to_server.disconnect(_connect_await_result_connected)
 	if api.server_disconnected.is_connected(_connect_await_result_disconnected):
@@ -212,15 +214,15 @@ func _connect_await_result(state: ConnectionState):
 
 #endregion
 
-## Ends an active connection with the ServerNode.
+## Ends an active connection with the ServerRoot.
 func end_connection() -> bool:
 	if connection_state != ConnectionState.CONNECTED:
-		push_warning("ClientNode.end_connection was not connected")
+		push_warning("ClientRoot.end_connection was not connected")
 		return false
 	connection_state = ConnectionState.DISCONNECTED
-	var api: GodaemonMultiplayer = multiplayer
+	var api: GodaemonMultiplayerAPI = multiplayer
 	api.multiplayer_peer.close()
-	api.multiplayer_node = null
+	api.mp = null
 	if api.server_disconnected.is_connected(end_connection):
 		api.server_disconnected.disconnect(end_connection)
 	if api.peer_disconnected.is_connected(_on_client_peer_disconnect):

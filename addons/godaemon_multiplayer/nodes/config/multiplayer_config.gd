@@ -1,20 +1,17 @@
 @tool
 extends Resource
 class_name MultiplayerConfig
-## Configuration data for MultiplayerNodes.
-## This should be shared between connecting ClientNodes and ServerNodes.
+## Configuration data for MultiplayerRoots.
+## This should be shared between connecting ClientRoots and ServerRoots.
 
 const DEFAULT_AUTHENTICATOR = preload("res://addons/godaemon_multiplayer/nodes/config/peer_authenticator.gd")
 
 # @export_group("Services")
 #region
-## An array of Scripts that are instantiated to the ServerNode
-## once a connection has been established.
-@export var service_scripts: Array[Script] = []
 
-## An array of PackedScenes that are instantiated to the ServerNode
+## An array of ServiceBase scripts that are instantiated to the ServerRoot
 ## once a connection has been established.
-@export var service_scenes: Array[PackedScene] = []
+@export var services: Array[Script] = []
 
 #endregion
 
@@ -48,7 +45,7 @@ const DEFAULT_AUTHENTICATOR = preload("res://addons/godaemon_multiplayer/nodes/c
 
 @export_group("Authentication")
 #region
-## How long the ServerNode/ClientNode should attempt to create a connection before timing out.
+## How long the ServerRoot/ClientRoot should attempt to create a connection before timing out.
 @export_range(0.0, 15.0, 0.1, "or_greater") var connection_timeout := 5.0
 
 ## The authentication protocol used by the client/server to establish a connection.

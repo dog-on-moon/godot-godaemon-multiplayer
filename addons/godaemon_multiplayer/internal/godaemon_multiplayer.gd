@@ -1,11 +1,11 @@
 extends MultiplayerAPIExtension
-class_name GodaemonMultiplayer
+class_name GodaemonMultiplayerAPI
 ## An extension of SceneMultiplayer, re-implementing its base overrides.
 
-var multiplayer_node: MultiplayerNode
+var mp: MultiplayerRoot
 
 ## Use this instead of get_remote_sender_id().
-## Can also do MultiplayerNode.get_remote_sender_id()
+## Can also do MultiplayerRoot.get_remote_sender_id()
 var remote_sender: int = 0
 
 #region SceneMultiplayer Overrides
@@ -60,6 +60,7 @@ func send_packet(bytes: PackedByteArray, id := 0, mode := MultiplayerPeer.TRANSF
 enum NetCommand {
 	RAW = 0,  ## Raw packets -- users can use this
 	RPC = 1,  ## Re-route for RPCs
+	SERVICE = 2,  ## Service communications
 }
 
 ## Sends a command. The bytes array is modified.
@@ -76,7 +77,11 @@ func _recv_command(id: int, bytes: PackedByteArray):
 			peer_packet.emit(id, bytes)
 		NetCommand.RPC:
 			remote_sender = id
-			_inbound_rpc.callv([id] + bytes_to_var(bytes))
+			_inbound_rpc.callv(bytes_to_var(bytes))
+			remote_sender = 0
+		NetCommand.SERVICE:
+			remote_sender = id
+			_recv_service_message.call(bytes_to_var(bytes))
 			remote_sender = 0
 
 #endregion
@@ -111,7 +116,7 @@ func _outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Er
 		if node.get_script():
 			config = node.get_script().get_rpc_config()
 	if method not in config:
-		push_error("GodaemonMultiplayer._outbound_rpc could not find RPC config")
+		push_error("GodaemonMultiplayerAPI._outbound_rpc could not find RPC config")
 		return ERR_UNCONFIGURED
 	config = config[method]
 	var rpc_mode: RPCMode = config.get("rpc_mode", RPC_MODE_AUTHORITY)
@@ -120,15 +125,15 @@ func _outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Er
 	var channel: int = config.get("channel", 0)
 	
 	# Validate node.
-	var path := multiplayer_node.get_path_to(node)
+	var path := mp.get_path_to(node)
 	if not path:
-		push_error("GodaemonMultiplayer._outbound_rpc could not find path to node")
+		push_error("GodaemonMultiplayerAPI._outbound_rpc could not find path to node")
 		return ERR_UNAVAILABLE
 	if not node.has_method(method):
-		push_error("GodaemonMultiplayer._outbound_rpc node missing method %s" % method)
+		push_error("GodaemonMultiplayerAPI._outbound_rpc node missing method %s" % method)
 		return ERR_UNAVAILABLE
 	if node[method].get_argument_count() != args.size():
-		push_error("GodaemonMultiplayer._outbound_rpc mismatched argument counts: %s(%s)" % [method, args])
+		push_error("GodaemonMultiplayerAPI._outbound_rpc mismatched argument counts: %s(%s)" % [method, args])
 		return ERR_UNAVAILABLE
 	
 	# Process hooks.
@@ -143,14 +148,14 @@ func _outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Er
 	if call_local:
 		node[method].callv(args)
 	
-	# Filter RPC through MultiplayerNode.
-	var target_peer: int = 1 if multiplayer_node.is_client() else peer
+	# Filter RPC through MultiplayerRoot.
+	var target_peer: int = 1 if mp.is_client() else peer
 	_send_command(NetCommand.RPC, var_to_bytes([peer, path, method, args]), target_peer, transfer_mode, channel)
 	return OK
 
-func _inbound_rpc(from_peer: int, to_peer: int, node_path: NodePath, method: StringName, args: Array):
+func _inbound_rpc(to_peer: int, node_path: NodePath, method: StringName, args: Array):
 	# Ensure node and callable can be found.
-	var node := multiplayer_node.get_node_or_null(node_path)
+	var node := mp.get_node_or_null(node_path)
 	if not node:
 		return
 	if not node.has_method(method):
@@ -158,6 +163,7 @@ func _inbound_rpc(from_peer: int, to_peer: int, node_path: NodePath, method: Str
 	var callable: Callable = node[method].bindv(args)
 	
 	# Test ratelimit.
+	var from_peer: int = remote_sender
 	if not check_rpc_ratelimit(from_peer, node, method):
 		return
 	
@@ -184,7 +190,7 @@ func _inbound_rpc(from_peer: int, to_peer: int, node_path: NodePath, method: Str
 			callable.call()
 		if not method_is_server_only:
 			for p in get_peers():
-				if p == skip_peer or p == 1:
+				if p == skip_peer or p == 1 or p == from_peer:
 					continue
 				callable.rpc_id(p)
 
@@ -204,13 +210,49 @@ func get_node_channel(node: Node, default_channel: int) -> int:
 
 #endregion
 
+#region Service Commands
+
+## Sends a message for a given service.
+## The service on target peers will be called with ServiceBase.recv_message(args).
+func send_service_message(service_name: StringName, args: Variant, peer := 0, mode := MultiplayerPeer.TRANSFER_MODE_RELIABLE, channel := 0):
+	var data := var_to_bytes([service_name, args, peer, mode, channel])
+	_send_command(NetCommand.SERVICE, data, peer if mp.is_server() else 1, mode, channel)
+
+func _recv_service_message(data: Array):
+	var service_name: StringName = data[0]
+	var service: ServiceBase = mp.get_service_from_name(service_name)
+	if not service:
+		return
+		
+	var args: Variant = data[1]
+	var to_peer: int = data[2]
+	
+	# Call or re-route service message.
+	if to_peer == 1 or remote_sender == 1:
+		service.recv_message(args)
+	else:
+		var mode: MultiplayerPeer.TransferMode = data[3]
+		var channel: int = data[4]
+		if to_peer > 0:
+			send_service_message(service_name, args, to_peer, mode, channel)
+		else:
+			var skip_peer := -to_peer
+			if skip_peer != 1:
+				service.recv_message(args)
+			for p in get_peers():
+				if p == skip_peer or p == 1 or p == remote_sender:
+					continue
+				send_service_message(service_name, args, p, mode, channel)
+
+#endregion
+
 #region Ratelimiting
 
 var _node_rpc_ratelimits := {}
 
 ## Sets the ratelimit on a given RPC for a Node.
 func set_rpc_ratelimit(node: Node, method: StringName, count: int, duration: float):
-	_node_rpc_ratelimits.get_or_add(node, {})[method] = RateLimiter.new(multiplayer_node, count, duration)
+	_node_rpc_ratelimits.get_or_add(node, {})[method] = RateLimiter.new(mp, count, duration)
 	node.tree_exited.connect(clear_rpc_ratelimit.bind(node), CONNECT_ONE_SHOT)
 
 ## Tests the ratelimit on a given RPC for a Node.
@@ -222,7 +264,7 @@ func check_rpc_ratelimit(peer: int, node: Node, method: StringName) -> bool:
 	var rl: RateLimiter = _node_rpc_ratelimits[node][method]
 	var result := rl.check(peer)
 	if not result and OS.has_feature("editor"):
-		push_warning("GodaemonMultiplayer: ratelimited RPC %s.%s()" % [node.name, method])
+		push_warning("GodaemonMultiplayerAPI: ratelimited RPC %s.%s()" % [node.name, method])
 	return result
 
 func clear_rpc_ratelimit(node: Node):

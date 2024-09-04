@@ -2,13 +2,13 @@ extends RefCounted
 class_name RateLimiter
 ## Can be used to ratelimit requests on specific peers.
 
-var mp: MultiplayerNode
+var mp: MultiplayerRoot
 var count: int = 5
 var duration: float = 1.0
 
 var ids := {}
 
-func _init(_mp: MultiplayerNode, _count: int, _duration: float) -> void:
+func _init(_mp: MultiplayerRoot, _count: int, _duration: float) -> void:
 	mp = _mp
 	count = _count
 	duration = _duration

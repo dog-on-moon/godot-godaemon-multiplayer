@@ -1,4 +1,4 @@
-extends Node
+extends ServiceBase
 class_name UsernameService
 ## Assigns usernames to new clients, allows them to change their usernames.
 
@@ -11,7 +11,6 @@ signal username_updated(peer: int, username: StringName)
 ## Emitted when a local username request failed.
 signal username_request_failed()
 
-@onready var mp := MultiplayerNode.fetch(self)
 @onready var peer_service: PeerService = mp.get_service(PeerService)
 
 func _ready() -> void:
@@ -28,7 +27,7 @@ func _ready() -> void:
 	)
 	mp.api.set_rpc_ratelimit(self, &"_request_username", 2, 1.0)
 	mp.api.set_rpc_server_receive_only(self, &"_request_username")
-	mp.api.set_node_channel(self, mp.get_service_channel_start(PeerService))
+	mp.api.set_node_channel(self, peer_service.get_initial_channel(mp))
 
 func _setup_peer_name(peer: int):
 	if mp.is_server():

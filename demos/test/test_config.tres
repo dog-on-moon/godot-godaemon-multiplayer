@@ -10,8 +10,7 @@
 
 [resource]
 script = ExtResource("1_m7k37")
-service_scripts = Array[Script]([ExtResource("2_2vi7k"), ExtResource("3_ma52y"), ExtResource("4_xvgbh"), ExtResource("5_uwcq7"), ExtResource("5_dtl3b")])
-service_scenes = Array[PackedScene]([])
+services = Array[Script]([ExtResource("4_xvgbh"), ExtResource("3_ma52y"), ExtResource("5_uwcq7"), ExtResource("2_2vi7k"), ExtResource("5_dtl3b")])
 max_clients = 32
 channel_count = 0
 in_bandwidth = 0

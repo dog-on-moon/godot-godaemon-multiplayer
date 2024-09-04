@@ -13,8 +13,8 @@ class_name PeerAuthenticator
 ## [b]While this can be used to exchange sensitive information (such as passwords),
 ## you must enable and properly configure DTLS encryption to do it securely.[/b]
 
-var api: GodaemonMultiplayer
-var mp: MultiplayerNode
+var api: GodaemonMultiplayerAPI
+var mp: MultiplayerRoot
 
 #region Client
 

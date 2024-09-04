@@ -1,4 +1,4 @@
-extends Node
+extends ServiceBase
 class_name PeerService
 ## This service allows the server to write out data for connected peers,
 ## which can be replicated back to all connected clients.
@@ -28,9 +28,6 @@ signal full_updated
 ## Emits data that is dropped upon a peer's disconnection.
 signal peer_data_dropped(peer: int, data: Dictionary, local_data: Dictionary)
 
-@onready var mp := MultiplayerNode.fetch(self)
-static var SERVICE_CHANNELS := 1
-
 ## A dictionary from peer IDs to their data {}.
 ## This is replicated to all clients.
 var peer_data := {}
@@ -43,7 +40,9 @@ func _ready() -> void:
 	mp.peer_disconnected.connect(_peer_disconnected)
 	mp.api.set_rpc_ratelimit(self, &"_request_sync", 1, 1.0)
 	mp.api.set_rpc_server_receive_only(self, &"_request_sync")
-	mp.api.set_node_channel(self, mp.get_service_channel_start(PeerService))
+
+func get_reserved_channels() -> int:
+	return 1
 
 func _peer_connected(peer: int):
 	_sync.rpc_id(peer, peer_data)

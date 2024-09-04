@@ -1,11 +1,10 @@
 @tool
-extends ServerNode
-class_name InternalServer
-## A node that is ran as a ServerNode subprocess.
+extends ServerRoot
+## A node that is ran as a ServerRoot subprocess, created by a ClientRoot.
 
 const KW_INTERNAL_SERVER_PORT := "_INTERNAL_SERVER_PORT"
 const KW_INTERNAL_SERVER_CONFIG_PATH := "_INTERNAL_SERVER_CONFIG_PATH"
-const INTERNAL_SERVER_SCENE := "res://addons/godaemon_multiplayer/nodes/internal_server.tscn"
+const INTERNAL_SERVER_SCENE := "res://addons/godaemon_multiplayer/nodes/internal_server/internal_server.tscn"
 
 @onready var terminal: Control = $Terminal
 

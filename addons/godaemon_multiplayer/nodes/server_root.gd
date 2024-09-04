@@ -1,14 +1,14 @@
 @tool
-extends MultiplayerNode
-class_name ServerNode
+extends MultiplayerRoot
+class_name ServerRoot
 ## The server node for a multiplayer session.
-## Establishes a connection with a ClientNode.
+## Establishes a connection with a ClientRoot.
 
 #region Exports
 
 ## The port that the server is listening on.
-## If the ServerNode exists in a process that has been created through a
-## ClientNode's internal scene, this will instead use the ClientNode's port.
+## If the ServerRoot exists in a process that has been created through a
+## ClientRoot's internal scene, this will instead use the ClientRoot's port.
 @export var port := 27027
 
 @export_group("DTLS Encryption")
@@ -28,13 +28,13 @@ class_name ServerNode
 func start_connection() -> bool:
 	# Ensure we are not currently connecting.
 	if connection_state in [ConnectionState.WAITING, ConnectionState.CONNECTED]:
-		push_warning("ServerNode.start_connection was still connecting")
+		push_warning("ServerRoot.start_connection was still connecting")
 		return false
 	connection_state = ConnectionState.DISCONNECTED
 	
 	# Setup MultiplayerAPI and peer.
-	var api := GodaemonMultiplayer.new()
-	api.multiplayer_node = self
+	var api := GodaemonMultiplayerAPI.new()
+	api.mp = self
 	api.scene_multiplayer.allow_object_decoding = configuration.allow_object_decoding
 	api.scene_multiplayer.auth_timeout = configuration.authentication_timeout
 	get_tree().set_multiplayer(api, get_path())
@@ -54,7 +54,7 @@ func start_connection() -> bool:
 		configuration.in_bandwidth, configuration.out_bandwidth
 	)
 	if error != OK:
-		push_warning("ServerNode.end_connection had error: %s" % error_string(error))
+		push_warning("ServerRoot.end_connection had error: %s" % error_string(error))
 		connection_failed.emit(connection_state)
 		return false
 	
@@ -87,12 +87,12 @@ func start_connection() -> bool:
 ## Closes the server.
 func end_connection() -> bool:
 	if connection_state != ConnectionState.CONNECTED:
-		push_warning("ServerNode.end_connection was not connected")
+		push_warning("ServerRoot.end_connection was not connected")
 		return false
 	connection_state = ConnectionState.DISCONNECTED
-	var api: GodaemonMultiplayer = multiplayer
+	var api: GodaemonMultiplayerAPI = multiplayer
 	api.multiplayer_peer.close()
-	api.multiplayer_node = null
+	api.mp = null
 	api.scene_multiplayer.auth_callback = Callable()
 	if api.scene_multiplayer.peer_authenticating.is_connected(authenticator.server_start_auth):
 		api.scene_multiplayer.peer_authenticating.disconnect(authenticator.server_start_auth)

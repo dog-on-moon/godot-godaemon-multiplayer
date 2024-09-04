@@ -2,6 +2,9 @@ extends Control
 
 @onready var rich_text_label: RichTextLabel = $RichTextLabel
 
+func _ready() -> void:
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
 func info(msg: String):
 	if rich_text_label.text:
 		rich_text_label.text += '\n' + msg
