@@ -4,6 +4,8 @@ class_name MultiplayerConfig
 ## Configuration data for MultiplayerNodes.
 ## This should be shared between connecting ClientNodes and ServerNodes.
 
+const DEFAULT_AUTHENTICATOR = preload("res://addons/godaemon_multiplayer/nodes/config/peer_authenticator.gd")
+
 # @export_group("Services")
 #region
 ## An array of Scripts that are instantiated to the ServerNode
@@ -48,6 +50,14 @@ class_name MultiplayerConfig
 #region
 ## How long the ServerNode/ClientNode should attempt to create a connection before timing out.
 @export_range(0.0, 15.0, 0.1, "or_greater") var connection_timeout := 5.0
+
+## The authentication protocol used by the client/server to establish a connection.
+## Can be overridden to implement custom authentication protocol.
+@export var authenticator: Script = DEFAULT_AUTHENTICATOR:
+	set(x):
+		if not x:
+			x = DEFAULT_AUTHENTICATOR
+		authenticator = x
 
 ## If set to a value greater than 0.0, the maximum amount of time peers can stay
 ## in the authenticating state, after which the authentication will automatically fail.

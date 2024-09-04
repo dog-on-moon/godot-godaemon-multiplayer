@@ -94,6 +94,18 @@ var api: GodaemonMultiplayer:
 func get_remote_sender_id() -> int:
 	return api.remote_sender
 
+var authenticator: PeerAuthenticator
+
+func setup_peer_authenticator():
+	assert(api is GodaemonMultiplayer)
+	if not authenticator:
+		authenticator = PeerAuthenticator.new()
+		authenticator.api = api
+		authenticator.mp = self
+
+func cleanup_peer_authenticator():
+	authenticator = null
+
 #endregion
 
 #region Connection

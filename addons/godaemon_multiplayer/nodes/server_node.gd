@@ -71,9 +71,10 @@ func start_connection() -> bool:
 			connection_failed.emit(connection_state)
 			return false
 	
-	api.scene_multiplayer.auth_callback = receive_auth_func
-	if not api.scene_multiplayer.peer_authenticating.is_connected(start_auth_func):
-		api.scene_multiplayer.peer_authenticating.connect(start_auth_func)
+	setup_peer_authenticator()
+	api.scene_multiplayer.auth_callback = authenticator.server_receive_auth
+	if not api.scene_multiplayer.peer_authenticating.is_connected(authenticator.server_start_auth):
+		api.scene_multiplayer.peer_authenticating.connect(authenticator.server_start_auth)
 	if not api.peer_connected.is_connected(peer_connected.emit):
 		api.peer_connected.connect(peer_connected.emit)
 	if not api.peer_disconnected.is_connected(peer_disconnected.emit):
@@ -93,40 +94,15 @@ func end_connection() -> bool:
 	api.multiplayer_peer.close()
 	api.multiplayer_node = null
 	api.scene_multiplayer.auth_callback = Callable()
-	if api.scene_multiplayer.peer_authenticating.is_connected(start_auth_func):
-		api.scene_multiplayer.peer_authenticating.disconnect(start_auth_func)
+	if api.scene_multiplayer.peer_authenticating.is_connected(authenticator.server_start_auth):
+		api.scene_multiplayer.peer_authenticating.disconnect(authenticator.server_start_auth)
 	if api.peer_connected.is_connected(peer_connected.emit):
 		api.peer_connected.disconnect(peer_connected.emit)
 	if api.peer_disconnected.is_connected(peer_disconnected.emit):
 		api.peer_disconnected.disconnect(peer_disconnected.emit)
+	cleanup_peer_authenticator()
 	server_disconnected.emit()
 	return true
-
-#endregion
-
-#region Authentication
-
-## The default function for when client/server authentication begins.
-## Can be set to implement a more refined authentication procedure.
-var start_auth_func := func (id: int):
-	send_auth(id, PackedByteArray([1]))
-
-## The default authentication callback from the client after they use send_auth for us.
-## Can be set to implement a more refined authentication procedure.
-var receive_auth_func := func (id: int, data: PackedByteArray):
-	if data == PackedByteArray([id]):
-		complete_auth(id)
-
-## Sends authentication information to the server.
-func send_auth(id: int, data: PackedByteArray):
-	var api: GodaemonMultiplayer = multiplayer
-	api.scene_multiplayer.send_auth(id, data)
-
-## Completes authentication on the server end.
-## The client will have to complete authentication as well.
-func complete_auth(id: int):
-	var api: GodaemonMultiplayer = multiplayer
-	api.scene_multiplayer.complete_auth(id)
 
 #endregion
 

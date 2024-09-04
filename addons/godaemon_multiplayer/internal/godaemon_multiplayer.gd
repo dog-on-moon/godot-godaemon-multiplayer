@@ -83,6 +83,9 @@ func _recv_command(id: int, bytes: PackedByteArray):
 
 #region RPCs
 
+## Mapping of node to override channel.
+var node_channels := {}
+
 ## An array of functions that modify the outbound RPC channel.
 ## They take the arguments:
 ## 	(channel: int, from_peer: int, to_peer: int, node: Node, method: StringName, args: Array) 
@@ -129,6 +132,7 @@ func _outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Er
 		return ERR_UNAVAILABLE
 	
 	# Process hooks.
+	channel = get_node_channel(node, channel)
 	for modifier: Callable in rpc_channel_modifiers:
 		channel = modifier.call(channel, get_unique_id(), peer, node, method, args)
 	for filter: Callable in outbound_rpc_filters:
@@ -154,7 +158,7 @@ func _inbound_rpc(from_peer: int, to_peer: int, node_path: NodePath, method: Str
 	var callable: Callable = node[method].bindv(args)
 	
 	# Test ratelimit.
-	if not check_rpc_ratelimit(node, method):
+	if not check_rpc_ratelimit(from_peer, node, method):
 		return
 	
 	# Test filters.
@@ -162,23 +166,41 @@ func _inbound_rpc(from_peer: int, to_peer: int, node_path: NodePath, method: Str
 		if not filter.call(from_peer, to_peer, node, method, args):
 			return
 	
+	var method_is_server_only: bool = method in _node_rpc_server_receive_only.get(node, {})
+	
 	# Call or re-route RPC.
 	if to_peer == 1 or from_peer == 1:
 		# This RPC is specifically for the server or from the server, so perform.
 		callable.call()
 	elif to_peer > 0:
-		# OK, this RPC was designated for a specific target instead.
-		# We will need to RPC it back to that peer.
-		callable.rpc_id(to_peer)
+		if not method_is_server_only:
+			# OK, this RPC was designated for a specific target instead.
+			# We will need to RPC it back to that peer.
+			callable.rpc_id(to_peer)
 	else:
 		# This RPC was designed for everyone but a certain peer.
 		var skip_peer := -to_peer
 		if skip_peer != 1:
 			callable.call()
-		for p in get_peers():
-			if p == skip_peer or p == 1:
-				continue
-			callable.rpc_id(p)
+		if not method_is_server_only:
+			for p in get_peers():
+				if p == skip_peer or p == 1:
+					continue
+				callable.rpc_id(p)
+
+## Overrides the RPC channels on a given Node.
+## Make sure to clean up in exit_tree.
+func set_node_channel(node: Node, channel: int):
+	node_channels[node] = channel
+	node.tree_exited.connect(clear_node_channel.bind(node), CONNECT_ONE_SHOT)
+
+## Clears the channels set on a Node.
+func clear_node_channel(node: Node):
+	node_channels.erase(node)
+
+## Returns the channel of a Node.
+func get_node_channel(node: Node, default_channel: int) -> int:
+	return node_channels.get(node, default_channel)
 
 #endregion
 
@@ -189,17 +211,36 @@ var _node_rpc_ratelimits := {}
 ## Sets the ratelimit on a given RPC for a Node.
 func set_rpc_ratelimit(node: Node, method: StringName, count: int, duration: float):
 	_node_rpc_ratelimits.get_or_add(node, {})[method] = RateLimiter.new(multiplayer_node, count, duration)
+	node.tree_exited.connect(clear_rpc_ratelimit.bind(node), CONNECT_ONE_SHOT)
 
 ## Tests the ratelimit on a given RPC for a Node.
-func check_rpc_ratelimit(node: Node, method: StringName) -> bool:
+func check_rpc_ratelimit(peer: int, node: Node, method: StringName) -> bool:
 	if node not in _node_rpc_ratelimits:
 		return true
 	if method not in _node_rpc_ratelimits[node]:
 		return true
 	var rl: RateLimiter = _node_rpc_ratelimits[node][method]
-	var result := rl.check()
+	var result := rl.check(peer)
 	if not result and OS.has_feature("editor"):
 		push_warning("GodaemonMultiplayer: ratelimited RPC %s.%s()" % [node.name, method])
 	return result
+
+func clear_rpc_ratelimit(node: Node):
+	_node_rpc_ratelimits.erase(node)
+
+#endregion
+
+#region Security
+
+var _node_rpc_server_receive_only := {}
+
+## Sets an RPC to only allow being received by the server.
+## This will prevent the server from routing blocked RPCs back out to clients.
+func set_rpc_server_receive_only(node: Node, method: StringName):
+	_node_rpc_server_receive_only.get_or_add(node, {})[method] = null
+	node.tree_exited.connect(_clear_node_rpc_server_receive_only.bind(node), CONNECT_ONE_SHOT)
+
+func _clear_node_rpc_server_receive_only(node: Node):
+	_node_rpc_server_receive_only.erase(node)
 
 #endregion

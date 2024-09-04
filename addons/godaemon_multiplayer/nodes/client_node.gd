@@ -153,10 +153,13 @@ var _client_setup_timer: SceneTreeTimer
 
 func _start_connect_await():
 	var api: GodaemonMultiplayer = multiplayer
+	setup_peer_authenticator()
 	api.connected_to_server.connect(_connect_await_result_connected)
 	api.server_disconnected.connect(_connect_await_result_disconnected)
 	api.connection_failed.connect(_connect_await_result_failed)
-	api.scene_multiplayer.auth_callback = _auth_callback
+	api.scene_multiplayer.auth_callback = func (id: int, data: PackedByteArray):
+		if id == 1:
+			authenticator.client_receive_auth(data)
 	api.scene_multiplayer.peer_authenticating.connect(_connect_await_result_authentication)
 	api.scene_multiplayer.peer_authentication_failed.connect(_connect_await_result_authentication_failed)
 	_client_setup_timer = get_tree().create_timer(configuration.connection_timeout)
@@ -180,7 +183,7 @@ func _connect_await_result_timeout():
 func _connect_await_result_authentication(id: int):
 	if id == 1:
 		connection_state = ConnectionState.AUTHENTICATING
-	start_auth_func.call()
+	authenticator.client_start_auth()
 
 func _connect_await_result_authentication_failed(id: int):
 	if id == 1:
@@ -203,6 +206,7 @@ func _connect_await_result(state: ConnectionState):
 		if _client_setup_timer.timeout.is_connected(_connect_await_result_timeout):
 			_client_setup_timer.timeout.disconnect(_connect_await_result_timeout)
 		_client_setup_timer = null
+	cleanup_peer_authenticator()
 	connection_state = state
 	_connect_await_end.emit()
 
@@ -233,40 +237,6 @@ func _on_client_peer_disconnect(peer: int):
 	# Forces a disconnection whenever the server peer disconencts
 	if connection_state == ConnectionState.CONNECTED and peer == 1:
 		end_connection()
-
-#endregion
-
-#region Authentication
-
-## The default function for when client/server authentication begins.
-## Can be set to implement a more refined authentication procedure.
-var start_auth_func := func ():
-	send_auth(PackedByteArray([multiplayer.get_unique_id()]))
-
-## The default authentication callback from the server after they use send_auth for us.
-## Can be set to implement a more refined authentication procedure.
-var receive_auth_func := func (data: PackedByteArray):
-	if data == PackedByteArray([1]):
-		complete_auth()
-
-## Sends authentication information to the server.
-func send_auth(data: PackedByteArray):
-	if connection_state != ConnectionState.AUTHENTICATING:
-		push_warning("ClientNode.send_auth can only be done during authentication (ClientNode.start_auth_func and ClientNode.receive_auth_func)")
-		return
-	var api: GodaemonMultiplayer = multiplayer
-	api.scene_multiplayer.send_auth(1, data)
-
-## Completes authentication on the client end.
-## The server will have to complete authentication as well.
-func complete_auth():
-	var api: GodaemonMultiplayer = multiplayer
-	api.scene_multiplayer.complete_auth(1)
-
-## The internal auth callback for the GodaemonMultiplayer.
-func _auth_callback(id: int, data: PackedByteArray):
-	if id == 1:
-		receive_auth_func.call(data)
 
 #endregion
 

@@ -13,8 +13,14 @@ signal local_updated
 ## Emitted when a peer's data is updated.
 signal peer_updated(peer: int)
 
+## Emitted when a peer's data is updated (for a specific key).
+signal peer_key_updated(peer: int, key: Variant)
+
 ## Emitted when a peer's local data is updated.
 signal peer_local_updated(peer: int)
+
+## Emitted when a peer's local data is updated (for a specific key).
+signal peer_key_local_updated(peer: int, key: Variant)
 
 ## Emitted when data has fully resynced.
 signal full_updated
@@ -33,15 +39,11 @@ var peer_data := {}
 var peer_local_data := {}
 
 func _ready() -> void:
-	mp.api.set_rpc_ratelimit(self, &"_request_sync", 1, 1.0)
 	mp.peer_connected.connect(_peer_connected)
 	mp.peer_disconnected.connect(_peer_disconnected)
-	
-	# Route these RPCs on a unique channel for the service.
-	mp.api.rpc_channel_modifiers.append(
-		func (channel: int, from_peer: int, to_peer: int, node: Node, method: StringName, args: Array):
-			return channel if node != self else mp.get_service_channel_start(PeerService)
-	)
+	mp.api.set_rpc_ratelimit(self, &"_request_sync", 1, 1.0)
+	mp.api.set_rpc_server_receive_only(self, &"_request_sync")
+	mp.api.set_node_channel(self, mp.get_service_channel_start(PeerService))
 
 func _peer_connected(peer: int):
 	_sync.rpc_id(peer, peer_data)
@@ -64,18 +66,20 @@ func get_peers(include_server := false) -> Array[int]:
 
 #region Data Interface
 
-## Adds data for a peer. Replicated to all clients.
-func add_data(peer: int, key: Variant, value: Variant = null):
+## Sets data for a peer. Replicated to all clients.
+func set_data(peer: int, key: Variant, value: Variant = null):
 	assert(mp.is_server())
 	peer_data.get_or_add(peer, {})[key] = value
+	peer_key_updated.emit(peer, key)
 	peer_updated.emit(peer)
 	updated.emit()
-	_sync_add_data.rpc(peer, key, value, peer_data.hash())
+	_sync_set_data.rpc(peer, key, value, peer_data.hash())
 
 ## Removes data from a peer. Replicated to all clients.
 func remove_data(peer: int, key: Variant):
 	assert(mp.is_server())
 	peer_data.get_or_add(peer, {}).erase(key)
+	peer_key_updated.emit(peer, key)
 	peer_updated.emit(peer)
 	updated.emit()
 	_sync_remove_data.rpc(peer, key, peer_data.hash())
@@ -96,15 +100,17 @@ func find_peers(key: Variant, value: Variant) -> Array[int]:
 			peers.append(peer)
 	return peers
 
-## Adds data for a peer. Only exists on the process.
-func add_local_data(peer: int, key: Variant, value: Variant = null):
+## Sets data for a peer. Only exists on the process.
+func set_local_data(peer: int, key: Variant, value: Variant = null):
 	peer_local_data.get_or_add(peer, {})[key] = value
+	peer_key_local_updated.emit(peer, key)
 	peer_local_updated.emit(peer)
 	local_updated.emit()
 
 ## Removes local data from a peer.
 func remove_local_data(peer: int, key: Variant):
 	peer_local_data.get_or_add(peer, {}).erase(key)
+	peer_key_local_updated.emit(peer, key)
 	peer_local_updated.emit(peer)
 	local_updated.emit()
 
@@ -129,20 +135,22 @@ func find_local_peers(key: Variant, value: Variant) -> Array[int]:
 #region Client Synchronization
 
 @rpc("authority")
-func _sync_add_data(peer: int, key: Variant, value: Variant, hash: int):
+func _sync_set_data(peer: int, key: Variant, value: Variant, hash: int):
 	peer_data.get_or_add(peer, {})[key] = value
+	peer_key_updated.emit(peer, key)
 	peer_updated.emit(peer)
 	updated.emit()
 	if peer_data.hash() != hash:
-		_request_sync.rpc_id(1)
+		_request_sync.rpc()
 
 @rpc("authority")
 func _sync_remove_data(peer: int, key: Variant, hash: int):
 	peer_data.get_or_add(peer, {}).erase(key)
+	peer_key_updated.emit(peer, key)
 	peer_updated.emit(peer)
 	updated.emit()
 	if peer_data.hash() != hash:
-		_request_sync.rpc_id(1)
+		_request_sync.rpc()
 
 @rpc("authority")
 func _sync(_peer_data: Dictionary):
@@ -152,8 +160,6 @@ func _sync(_peer_data: Dictionary):
 
 @rpc("any_peer")
 func _request_sync():
-	if not mp.is_server():
-		return
 	_sync.rpc_id(mp.get_remote_sender_id(), peer_data)
 
 #endregion

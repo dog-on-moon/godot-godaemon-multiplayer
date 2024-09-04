@@ -6,18 +6,80 @@
 
 [node name="Test" type="Node"]
 
-[node name="ClientNode" type="Node" parent="."]
+[node name="ColorRect" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.10967, 0.1001, 0.11, 1)
+
+[node name="Window1" type="Window" parent="."]
+size = Vector2i(572, 320)
+borderless = true
+
+[node name="ColorRect" type="ColorRect" parent="Window1"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.234167, 0.2, 0.25, 1)
+
+[node name="ClientNode" type="Node" parent="Window1"]
 script = ExtResource("2_53s1k")
 configuration = ExtResource("2_nbqx3")
 
-[node name="ClientNode2" type="Node" parent="."]
+[node name="Window2" type="Window" parent="."]
+auto_translate_mode = 1
+position = Vector2i(580, 0)
+size = Vector2i(572, 320)
+borderless = true
+
+[node name="ColorRect" type="ColorRect" parent="Window2"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.234167, 0.2, 0.25, 1)
+
+[node name="ClientNode" type="Node" parent="Window2"]
 script = ExtResource("2_53s1k")
 configuration = ExtResource("2_nbqx3")
 
-[node name="ClientNode3" type="Node" parent="."]
+[node name="Window3" type="Window" parent="."]
+auto_translate_mode = 1
+position = Vector2i(0, 328)
+size = Vector2i(572, 320)
+borderless = true
+
+[node name="ColorRect" type="ColorRect" parent="Window3"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.234167, 0.2, 0.25, 1)
+
+[node name="ClientNode" type="Node" parent="Window3"]
 script = ExtResource("2_53s1k")
 configuration = ExtResource("2_nbqx3")
 
-[node name="ServerNode" type="Node" parent="."]
+[node name="Window4" type="Window" parent="."]
+auto_translate_mode = 1
+position = Vector2i(580, 328)
+size = Vector2i(572, 320)
+borderless = true
+
+[node name="ColorRect" type="ColorRect" parent="Window4"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.234167, 0.2, 0.25, 1)
+
+[node name="ServerNode" type="Node" parent="Window4"]
 script = ExtResource("2_04yku")
 configuration = ExtResource("2_nbqx3")
