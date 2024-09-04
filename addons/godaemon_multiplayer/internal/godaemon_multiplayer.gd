@@ -2,11 +2,16 @@ extends MultiplayerAPIExtension
 class_name GodaemonMultiplayerAPI
 ## An extension of SceneMultiplayer, re-implementing its base overrides.
 
+
 var mp: MultiplayerRoot
 
 ## Use this instead of get_remote_sender_id().
 ## Can also do MultiplayerRoot.get_remote_sender_id()
 var remote_sender: int = 0
+
+## The peer whose requests are shown on the network profiler.
+## When set to 0, all peers are shown.
+static var network_profiler_peer := 0
 
 #region SceneMultiplayer Overrides
 
@@ -77,7 +82,7 @@ func _recv_command(id: int, bytes: PackedByteArray):
 			peer_packet.emit(id, bytes)
 		NetCommand.RPC:
 			remote_sender = id
-			_inbound_rpc.callv(bytes_to_var(bytes))
+			_inbound_rpc.call(bytes)
 			remote_sender = 0
 		NetCommand.SERVICE:
 			remote_sender = id
@@ -149,11 +154,20 @@ func _outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Er
 		node[method].callv(args)
 	
 	# Filter RPC through MultiplayerRoot.
+	var bytes := var_to_bytes([peer, path, method, args])
 	var target_peer: int = 1 if mp.is_client() else peer
-	_send_command(NetCommand.RPC, var_to_bytes([peer, path, method, args]), target_peer, transfer_mode, channel)
+	_profile_rpc(false, node.get_instance_id(), bytes.size() + 1)
+	_send_command(NetCommand.RPC, bytes, target_peer, transfer_mode, channel)
 	return OK
 
-func _inbound_rpc(to_peer: int, node_path: NodePath, method: StringName, args: Array):
+func _inbound_rpc(bytes: PackedByteArray):
+	# Read bytes.
+	var data := bytes_to_var(bytes)
+	var to_peer: int = data[0]
+	var node_path: NodePath = data[1]
+	var method: StringName = data[2]
+	var args: Array = data[3]
+	
 	# Ensure node and callable can be found.
 	var node := mp.get_node_or_null(node_path)
 	if not node:
@@ -171,6 +185,8 @@ func _inbound_rpc(to_peer: int, node_path: NodePath, method: StringName, args: A
 	for filter: Callable in inbound_rpc_filters:
 		if not filter.call(from_peer, to_peer, node, method, args):
 			return
+	
+	_profile_rpc(true, node.get_instance_id(), bytes.size())
 	
 	var method_is_server_only: bool = method in _node_rpc_server_receive_only.get(node, {})
 	
@@ -207,6 +223,16 @@ func clear_node_channel(node: Node):
 ## Returns the channel of a Node.
 func get_node_channel(node: Node, default_channel: int) -> int:
 	return node_channels.get(node, default_channel)
+
+func _profile_rpc(inbound: bool, instance_id: int, size: int):
+	if not OS.has_feature('debug'):
+		return
+	if network_profiler_peer != 0 and get_unique_id() != network_profiler_peer:
+		return
+	if EngineDebugger.is_profiling(&"multiplayer:rpc"):
+		EngineDebugger.profiler_add_frame_data(&"multiplayer:rpc",
+		["rpc_in" if inbound else "rpc_out", instance_id, size]
+	)
 
 #endregion
 
