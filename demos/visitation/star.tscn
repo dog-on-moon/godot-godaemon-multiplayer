@@ -1,0 +1,15 @@
+[gd_scene load_steps=2 format=3 uid="uid://bpc7xmr810jmb"]
+
+[ext_resource type="Texture2D" uid="uid://lnofiff3si8o" path="res://icon.svg" id="1_aixar"]
+
+[node name="Star" type="TextureRect"]
+offset_right = 128.0
+offset_bottom = 128.0
+scale = Vector2(0.305, 0.305)
+pivot_offset = Vector2(64, 64)
+texture = ExtResource("1_aixar")
+metadata/_mp = {
+NodePath(":position"): [0, 2, true, false],
+NodePath(":rotation"): [0, 2, true, false]
+}
+metadata/_r = 0

@@ -62,6 +62,13 @@ grow_horizontal = 0
 grow_vertical = 2
 alignment = 2
 
+[node name="SceneReplicateButton" type="CheckBox" parent="Header/Right"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "When checked, the ZoneService will watch for the currently edited scene being added on the server.
+The scene and its replicated properties will be given to clients with interest."
+text = "Replicate Scene in Zone"
+
 [node name="ReloadButton" type="Button" parent="Header/Right"]
 unique_name_in_owner = true
 layout_mode = 2

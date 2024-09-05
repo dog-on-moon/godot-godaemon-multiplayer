@@ -111,6 +111,12 @@ var rpc_channel_modifiers: Array[Callable] = []
 
 ## An array of functions that are called on every outbound RPC.
 ## They take the arguments:
+## 	(from_peer: int, target_peers: Array[int], node: Node, method: StringName, args: Array) 
+## Modifying the target_peers array in-place will modify the target peers of the RPC.
+var outbound_rpc_target_modifiers: Array[Callable] = []
+
+## An array of functions that are called on every outbound RPC.
+## They take the arguments:
 ## 	(from_peer: int, to_peer: int, node: Node, method: StringName, args: Array) 
 ## The RPC is blocked if a filter function returns false.
 var outbound_rpc_filters: Array[Callable] = []
@@ -160,21 +166,26 @@ func _outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Er
 	channel = get_node_channel(node, channel)
 	for modifier: Callable in rpc_channel_modifiers:
 		channel = modifier.call(channel, node, transfer_mode)
-	for filter: Callable in outbound_rpc_filters:
-		if not filter.call(from_peer, peer, node, method, args):
-			return ERR_UNAVAILABLE
 	
-	# Perform local call.
-	if call_local:
-		node[method].callv(args)
-	if peer == from_peer:
-		return OK
-	
-	# Filter RPC through MultiplayerRoot.
-	var bytes := var_to_bytes([int(from_peer), peer, path, method, args])
-	var target_peer: int = 1 if mp.is_client() else peer
-	_profile_rpc(false, node.get_instance_id(), bytes.size() + 1)
-	_send_command(NetCommand.RPC, bytes, target_peer, transfer_mode, channel)
+	var target_peers: Array[int] = [peer]
+	for modifier: Callable in outbound_rpc_target_modifiers:
+		modifier.call(from_peer, target_peers, node, method, args)
+	for to_peer in target_peers:
+		for filter: Callable in outbound_rpc_filters:
+			if not filter.call(from_peer, to_peer, node, method, args):
+				return ERR_UNAVAILABLE
+		
+		# Perform local call.
+		if call_local:
+			node[method].callv(args)
+		if to_peer == from_peer:
+			continue
+		
+		# Filter RPC through MultiplayerRoot.
+		var bytes := var_to_bytes([int(from_peer), to_peer, path, method, args])
+		var target_peer: int = 1 if mp.is_client() else to_peer
+		_profile_rpc(false, node.get_instance_id(), bytes.size() + 1)
+		_send_command(NetCommand.RPC, bytes, target_peer, transfer_mode, channel)
 	return OK
 
 func _inbound_rpc(bytes: PackedByteArray):

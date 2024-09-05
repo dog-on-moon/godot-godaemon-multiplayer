@@ -1,7 +1,7 @@
 @tool
 extends VBoxContainer
 
-const ReplicationConstants = preload("res://addons/godaemon_multiplayer/services/replication/replication_constants.gd")
+const REPCO = preload("res://addons/godaemon_multiplayer/services/replication/replication_constants.gd")
 
 var PROPERTY_TYPE_FILTER := PackedInt32Array([
 	TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING, TYPE_VECTOR2, TYPE_VECTOR2I,
@@ -16,6 +16,7 @@ var PROPERTY_TYPE_FILTER := PackedInt32Array([
 
 @onready var add_property_button: Button = %AddPropertyButton
 @onready var node_label: Button = %NodeLabel
+@onready var scene_replicate_button: CheckBox = %SceneReplicateButton
 @onready var reload_button: Button = %ReloadButton
 @onready var unselected_label: Label = %UnselectedLabel
 @onready var tree: Tree = %PropertyTree
@@ -31,6 +32,12 @@ func _ready() -> void:
 	_on_edited_object_changed()
 	
 	add_property_button.pressed.connect(_add_property_pressed)
+	
+	var scene_root := get_tree().edited_scene_root
+	if scene_root:
+		scene_replicate_button.button_pressed = scene_root.has_meta(REPCO.META_REPLICATE_SCENE)
+	scene_replicate_button.toggled.connect(_toggle_scene_replication)
+	plugin.scene_changed.connect(_on_scene_changed)
 	
 	reload_button.pressed.connect(plugin._reload_editor)
 	tree.button_clicked.connect(_tree_button_clicked)
@@ -50,11 +57,44 @@ func _finish_themes():
 	tree.set_column_title(2, "Receivers")
 	tree.set_column_custom_minimum_width(2, 120)
 	tree.set_column_expand(2, false)
-	tree.set_column_title(4, "Interpolated")
-	tree.set_column_expand(4, false)
 	tree.set_column_title(3, "Reliable")
 	tree.set_column_expand(3, false)
+	tree.set_column_title(4, "Interpolated")
+	tree.set_column_expand(4, false)
 	tree.set_column_expand(5, false)
+
+func _toggle_scene_replication(mode: bool):
+	var scene_root := get_tree().edited_scene_root
+	const key := REPCO.META_REPLICATE_SCENE
+	var new_value := null if not mode else 0
+	var new_value_exists: bool = new_value == 0
+	var value_exists: bool = scene_root.has_meta(key)
+	if value_exists != new_value_exists:
+		scene_root.set_meta(key, new_value)
+		EditorInterface.mark_scene_as_unsaved()
+
+func _on_scene_changed(n):
+	_nodes_with_properties = {}
+	var scene_root := get_tree().edited_scene_root
+	if scene_root:
+		scene_replicate_button.button_pressed = scene_root.has_meta(REPCO.META_REPLICATE_SCENE)
+		for node in REPCO.get_replicated_nodes(scene_root):
+			_nodes_with_properties[node] = null
+		_nodes_with_properties_updated()
+
+func _nodes_with_properties_updated():
+	var scene_root := get_tree().edited_scene_root
+	if scene_root:
+		if _nodes_with_properties:
+			scene_replicate_button.disabled = true
+			if not scene_root.has_meta(REPCO.META_REPLICATE_SCENE):
+				scene_root.set_meta(REPCO.META_REPLICATE_SCENE, null)
+				scene_replicate_button.button_pressed = true
+				EditorInterface.mark_scene_as_unsaved()
+		else:
+			scene_replicate_button.disabled = false
+
+var _nodes_with_properties := {}
 
 func _on_edited_object_changed():
 	var object := EditorInterface.get_inspector().get_edited_object()
@@ -84,76 +124,38 @@ func _on_property_selected(property_path):
 	var object := EditorInterface.get_inspector().get_edited_object()
 	if not (object and object is Node):
 		return
+	if REPCO.get_replicated_property(object, property_path):
+		return
 	
 	var undo_redo := plugin.get_undo_redo()
 	undo_redo.create_action("Add property")
 	undo_redo.add_do_method(
 		self, &"_add_property", object, property_path,
-		ReplicationConstants.DEFAULT_SEND_FILTER,
-		ReplicationConstants.DEFAULT_RECV_FILTER,
-		ReplicationConstants.DEFAULT_SYNC_INTERP,
-		ReplicationConstants.DEFAULT_SYNC_RELIABLE
+		REPCO.DEFAULT_SEND_FILTER,
+		REPCO.DEFAULT_RECV_FILTER,
+		REPCO.DEFAULT_SYNC_RELIABLE,
+		REPCO.DEFAULT_SYNC_INTERP,
 	)
 	undo_redo.add_undo_method(self, &"_remove_property", object, property_path)
 	undo_redo.commit_action()
 
-func _add_property(object: Node, property_path: NodePath, send: int, recv: int, interp: bool, reliable: bool):
+func _add_property(object: Node, property_path: NodePath, send: int, recv: int, reliable: bool, interp: bool):
 	if not is_instance_valid(object):
 		return
-	const key_name := ReplicationConstants.META_SYNC_PROPERTIES
-	if not object.has_meta(key_name):
-		object.set_meta(key_name, [])
-	if property_path in object.get_meta(key_name):
-		return
-	object.get_meta(key_name).append(property_path)
-	
-	const key_send := ReplicationConstants.META_SYNC_PROPERTIES_SEND
-	if not object.has_meta(key_send):
-		object.set_meta(key_send, [])
-	object.get_meta(key_send).append(send)
-	
-	const key_recv := ReplicationConstants.META_SYNC_PROPERTIES_RECV
-	if not object.has_meta(key_recv):
-		object.set_meta(key_recv, [])
-	object.get_meta(key_recv).append(recv)
-	
-	const key_interp := ReplicationConstants.META_SYNC_PROPERTIES_INTERP
-	if not object.has_meta(key_interp):
-		object.set_meta(key_interp, [])
-	object.get_meta(key_interp).append(interp)
-	
-	const key_reliable := ReplicationConstants.META_SYNC_PROPERTIES_RELIABLE
-	if not object.has_meta(key_reliable):
-		object.set_meta(key_reliable, [])
-	object.get_meta(key_reliable).append(reliable)
-	
+	REPCO.set_replicated_property(object, property_path, send, recv, reliable, interp)
+	if object not in _nodes_with_properties:
+		_nodes_with_properties[object] = null
+		_nodes_with_properties_updated()
 	EditorInterface.mark_scene_as_unsaved()
-	_add_property_to_tree(property_path, send, recv, interp, reliable)
+	_add_property_to_tree(object, property_path)
 
 func _remove_property(object: Node, property_path: NodePath):
 	if not is_instance_valid(object):
 		return
-	const key_name := ReplicationConstants.META_SYNC_PROPERTIES
-	var idx: int = object.get_meta(key_name, []).find(property_path)
-	if idx == -1:
-		return
-	object.get_meta(key_name).pop_at(idx)
-	const key_send := ReplicationConstants.META_SYNC_PROPERTIES_SEND
-	object.get_meta(key_send).pop_at(idx)
-	const key_recv := ReplicationConstants.META_SYNC_PROPERTIES_RECV
-	object.get_meta(key_recv).pop_at(idx)
-	const key_interp := ReplicationConstants.META_SYNC_PROPERTIES_INTERP
-	object.get_meta(key_interp).pop_at(idx)
-	const key_reliable := ReplicationConstants.META_SYNC_PROPERTIES_RELIABLE
-	object.get_meta(key_reliable).pop_at(idx)
-	
-	if not object.get_meta(key_name, []):
-		object.remove_meta(key_name)
-		object.remove_meta(key_send)
-		object.remove_meta(key_recv)
-		object.remove_meta(key_interp)
-		object.remove_meta(key_reliable)
-	
+	REPCO.remove_replicated_property(object, property_path)
+	if object in _nodes_with_properties and not REPCO.get_replicated_property_dict(object):
+		_nodes_with_properties.erase(object)
+		_nodes_with_properties_updated()
 	EditorInterface.mark_scene_as_unsaved()
 	_update_tree()
 
@@ -166,25 +168,18 @@ func _update_tree():
 	var object := EditorInterface.get_inspector().get_edited_object()
 	if not (object and object is Node):
 		return
-	const key_name := ReplicationConstants.META_SYNC_PROPERTIES
-	const key_send := ReplicationConstants.META_SYNC_PROPERTIES_SEND
-	const key_recv := ReplicationConstants.META_SYNC_PROPERTIES_RECV
-	const key_interp := ReplicationConstants.META_SYNC_PROPERTIES_INTERP
-	const key_reliable := ReplicationConstants.META_SYNC_PROPERTIES_RELIABLE
-	for idx in object.get_meta(key_name, []).size():
-		var np: NodePath = object.get_meta(key_name)[idx]
-		var send: int = object.get_meta(key_send)[idx]
-		var recv: int = object.get_meta(key_recv)[idx]
-		var interp: bool = object.get_meta(key_interp)[idx]
-		var reliable: bool = object.get_meta(key_reliable)[idx]
-		_add_property_to_tree(np, send, recv, interp, reliable)
+	for property_path in REPCO.get_replicated_property_dict(object):
+		_add_property_to_tree.call(object, property_path)
 
-func _add_property_to_tree(property: NodePath, send: int, recv: int, interp: bool, reliable: bool):
-	var object := EditorInterface.get_inspector().get_edited_object()
-	if not (object and object is Node):
-		return
-	var value := object.get_indexed(property)
+func _add_property_to_tree(object: Node, property_path: NodePath):
+	var value := object.get_indexed(property_path)
 	var type := typeof(value)
+	
+	var property_data := REPCO.get_replicated_property(object, property_path)
+	var send: int = property_data[0]
+	var recv: int = property_data[1]
+	var reliable: bool = property_data[2]
+	var interp: bool = property_data[3]
 	
 	var item := tree.create_item()
 	item.set_selectable(0, false)
@@ -193,32 +188,32 @@ func _add_property_to_tree(property: NodePath, send: int, recv: int, interp: boo
 	item.set_selectable(3, false)
 	item.set_selectable(4, false)
 	item.set_selectable(5, false)
-	item.set_metadata(0, property)
-	item.set_text(0, String(property))
+	item.set_metadata(0, property_path)
+	item.set_text(0, String(property_path))
 	item.set_icon(0, editor_theme.get_icon(get_type_name(type), &"EditorIcons"))
 	item.add_button(5, editor_theme.get_icon(&"Remove", &"EditorIcons"))
 	
 	item.set_text_alignment(1, HORIZONTAL_ALIGNMENT_CENTER)
 	item.set_cell_mode(1, TreeItem.CELL_MODE_RANGE)
-	item.set_range_config(1, 0, ReplicationConstants.PeerFilterBitfieldToName.size(), 1)
-	item.set_text(1, ",".join(ReplicationConstants.PeerFilterBitfieldToName.values()))
-	item.set_range(1, ReplicationConstants.real_filter_to_editor_filter(send))
+	item.set_range_config(1, 0, REPCO.PeerFilterBitfieldToName.size(), 1)
+	item.set_text(1, ",".join(REPCO.PeerFilterBitfieldToName.values()))
+	item.set_range(1, REPCO.real_filter_to_editor_filter(send))
 	item.set_editable(1, true)
 	
 	item.set_text_alignment(2, HORIZONTAL_ALIGNMENT_CENTER)
 	item.set_cell_mode(2, TreeItem.CELL_MODE_RANGE)
-	item.set_range_config(2, 0, ReplicationConstants.PeerFilterBitfieldToName.size(), 1)
-	item.set_text(2, ",".join(ReplicationConstants.PeerFilterBitfieldToName.values()))
-	item.set_range(2, ReplicationConstants.real_filter_to_editor_filter(recv))
+	item.set_range_config(2, 0, REPCO.PeerFilterBitfieldToName.size(), 1)
+	item.set_text(2, ",".join(REPCO.PeerFilterBitfieldToName.values()))
+	item.set_range(2, REPCO.real_filter_to_editor_filter(recv))
 	item.set_editable(2, true)
-	
-	item.set_cell_mode(4, TreeItem.CELL_MODE_CHECK)
-	item.set_checked(4, interp)
-	item.set_editable(4, true)
 	
 	item.set_cell_mode(3, TreeItem.CELL_MODE_CHECK)
 	item.set_checked(3, reliable)
 	item.set_editable(3, true)
+	
+	item.set_cell_mode(4, TreeItem.CELL_MODE_CHECK)
+	item.set_checked(4, interp)
+	item.set_editable(4, true)
 
 static func get_type_name(type: int):
 	match type:
@@ -308,20 +303,14 @@ func _tree_button_clicked(item: TreeItem, column: int, id: int, mouse_button_ind
 	var object := EditorInterface.get_inspector().get_edited_object()
 	if not (object and object is Node):
 		return
-	var properties: Array = object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES, [])
-	var property: NodePath = NodePath(item.get_metadata(0))
-	var idx := properties.find(property)
-	if idx == -1:
-		return
-	var send: int = object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_SEND)[idx]
-	var recv: int = object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_RECV)[idx]
-	var interp: bool = object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_INTERP)[idx]
-	var reliable: bool = object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_RELIABLE)[idx]
-	var undo_redo := plugin.get_undo_redo()
-	undo_redo.create_action("Remove property")
-	undo_redo.add_do_method(self, &"_remove_property", object, property)
-	undo_redo.add_undo_method(self, &"_add_property", object, property, send, recv, interp, reliable)
-	undo_redo.commit_action()
+	var property_path: NodePath = NodePath(item.get_metadata(0))
+	var data := REPCO.get_replicated_property(object, property_path)
+	if data:
+		var undo_redo := plugin.get_undo_redo()
+		undo_redo.create_action("Remove property")
+		undo_redo.add_do_method(self, &"_remove_property", object, property_path)
+		undo_redo.add_undo_method(self, &"_add_property", object, property_path, data[0], data[1], data[2], data[3])
+		undo_redo.commit_action()
 
 func _tree_item_edited():
 	var item := tree.get_edited()
@@ -330,68 +319,67 @@ func _tree_item_edited():
 	var object := EditorInterface.get_inspector().get_edited_object()
 	if not (object and object is Node):
 		return
-	var properties: Array = object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES, [])
-	var property: NodePath = NodePath(item.get_metadata(0))
-	var idx := properties.find(property)
-	if idx == -1:
+	var property_path: NodePath = NodePath(item.get_metadata(0))
+	var data := REPCO.get_replicated_property(object, property_path)
+	if data:
+		var send: int = data[0]
+		var recv: int = data[1]
+		var reliable: bool = data[2]
+		var interp: bool = data[3]
+		
+		var undo_redo := plugin.get_undo_redo()
+		var column := tree.get_edited_column()
+		match column:
+			1:
+				# Setting sender
+				undo_redo.create_action("Set sender mode")
+				undo_redo.add_do_method(self, &"_set_sender", item, object, property_path, int(item.get_range(column)))
+				undo_redo.add_undo_method(self, &"_set_sender", item, object, property_path, REPCO.real_filter_to_editor_filter(send))
+				undo_redo.commit_action()
+			2:
+				# Setting receiver
+				undo_redo.create_action("Set receiver mode")
+				undo_redo.add_do_method(self, &"_set_receiver", item, object, property_path, int(item.get_range(column)))
+				undo_redo.add_undo_method(self, &"_set_receiver", item, object, property_path, REPCO.real_filter_to_editor_filter(recv))
+				undo_redo.commit_action()
+			3:
+				# Setting reliable
+				undo_redo.create_action("Set reliable mode")
+				undo_redo.add_do_method(self, &"_set_reliable", item, object, property_path, item.is_checked(3))
+				undo_redo.add_undo_method(self, &"_set_reliable", item, object, property_path, reliable)
+				undo_redo.commit_action()
+			4:
+				# Setting interp
+				undo_redo.create_action("Set interp mode")
+				undo_redo.add_do_method(self, &"_set_interp", item, object, property_path, item.is_checked(4))
+				undo_redo.add_undo_method(self, &"_set_interp", item, object, property_path, interp)
+				undo_redo.commit_action()
 		return
-	var send: int = object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_SEND)[idx]
-	var recv: int = object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_RECV)[idx]
-	var interp: bool = object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_INTERP)[idx]
-	var reliable: bool = object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_RELIABLE)[idx]
-	
-	var undo_redo := plugin.get_undo_redo()
-	var column := tree.get_edited_column()
-	match column:
-		1:
-			# Setting sender
-			undo_redo.create_action("Set sender mode")
-			undo_redo.add_do_method(self, &"_set_sender", item, object, idx, int(item.get_range(column)))
-			undo_redo.add_undo_method(self, &"_set_sender", item, object, idx, ReplicationConstants.real_filter_to_editor_filter(send))
-			undo_redo.commit_action()
-		2:
-			# Setting receiver
-			undo_redo.create_action("Set receiver mode")
-			undo_redo.add_do_method(self, &"_set_receiver", item, object, idx, int(item.get_range(column)))
-			undo_redo.add_undo_method(self, &"_set_receiver", item, object, idx, ReplicationConstants.real_filter_to_editor_filter(recv))
-			undo_redo.commit_action()
-		4:
-			# Setting interp
-			undo_redo.create_action("Set interp mode")
-			undo_redo.add_do_method(self, &"_set_interp", item, object, idx, item.is_checked(4))
-			undo_redo.add_undo_method(self, &"_set_interp", item, object, idx, interp)
-			undo_redo.commit_action()
-		3:
-			# Setting reliable
-			undo_redo.create_action("Set reliable mode")
-			undo_redo.add_do_method(self, &"_set_reliable", item, object, idx, item.is_checked(3))
-			undo_redo.add_undo_method(self, &"_set_reliable", item, object, idx, reliable)
-			undo_redo.commit_action()
 
-func _set_sender(item: TreeItem, object: Node, idx: int, send: int):
+func _set_sender(item: TreeItem, object: Node, property_path: NodePath, send: int):
 	if not is_instance_valid(object):
 		return
-	object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_SEND)[idx] = ReplicationConstants.editor_filter_to_real_filter(send)
+	REPCO.get_replicated_property(object, property_path)[0] = REPCO.editor_filter_to_real_filter(send)
 	item.set_range(1, send)
 	EditorInterface.mark_scene_as_unsaved()
 
-func _set_receiver(item: TreeItem, object: Node, idx: int, recv: int):
+func _set_receiver(item: TreeItem, object: Node, property_path: NodePath, recv: int):
 	if not is_instance_valid(object):
 		return
-	object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_RECV)[idx] = ReplicationConstants.editor_filter_to_real_filter(recv)
+	REPCO.get_replicated_property(object, property_path)[1] = REPCO.editor_filter_to_real_filter(recv)
 	item.set_range(2, recv)
 	EditorInterface.mark_scene_as_unsaved()
 
-func _set_interp(item: TreeItem, object: Node, idx: int, interp: bool):
+func _set_reliable(item: TreeItem, object: Node, property_path: NodePath, reliable: bool):
 	if not is_instance_valid(object):
 		return
-	object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_INTERP)[idx] = interp
-	item.set_checked(3, interp)
+	REPCO.get_replicated_property(object, property_path)[2] = reliable
+	item.set_checked(3, reliable)
 	EditorInterface.mark_scene_as_unsaved()
 
-func _set_reliable(item: TreeItem, object: Node, idx: int, reliable: bool):
+func _set_interp(item: TreeItem, object: Node, property_path: NodePath, interp: bool):
 	if not is_instance_valid(object):
 		return
-	object.get_meta(ReplicationConstants.META_SYNC_PROPERTIES_RELIABLE)[idx] = reliable
-	item.set_checked(4, reliable)
+	REPCO.get_replicated_property(object, property_path)[3] = interp
+	item.set_checked(4, interp)
 	EditorInterface.mark_scene_as_unsaved()

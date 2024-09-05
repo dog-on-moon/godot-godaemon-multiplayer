@@ -120,6 +120,120 @@ func update_render_properties(viewport: Viewport):
 
 #endregion
 
+#region Replication
+
+const REPCO = preload("res://addons/godaemon_multiplayer/services/replication/replication_constants.gd")
+
+## Server-sided set of all nodes with some kind of replication state.
+var replication_nodes := {}
+
+@onready var __setup_replication := _setup_replication.call()
+func _setup_replication():
+	if not mp.is_server():
+		return
+	
+	# Perform an initial search of the scene.
+	_node_enter_zone(scene, replication_nodes)
+
+func _node_enter_zone(root: Node, data: Dictionary):
+	# Does this node have replicated properties?
+	const key := REPCO.META_SYNC_PROPERTIES
+	if root.has_meta(key):
+		data[root] = null
+	
+	# Setup signals on this node.
+	if not root.is_node_ready():
+		await root.ready
+	root.child_entered_tree.connect(_node_child_entered_zone)
+	root.tree_exited.connect(_node_exit_zone, CONNECT_ONE_SHOT)
+	
+	# Continue iteration.
+	for child in root.get_children():
+		_node_enter_zone(child, data)
+
+func _node_exit_zone(node: Node):
+	replication_nodes.erase(node)
+	node.child_entered_tree.disconnect(_node_child_entered_zone)
+
+func _node_child_entered_zone(node: Node):
+	const key := REPCO.META_REPLICATE_SCENE
+	if node.has_meta(key):
+		var replication_subnodes := {}
+		await _node_enter_zone(node, replication_subnodes)
+		replicate_to_interest(replication_subnodes)
+		replication_nodes.merge(replication_subnodes)
+
+## Given a set of Nodes, convert it to data for a client to replicate.
+func get_replication_rpc_data(for_peer: int, node_set: Dictionary) -> Dictionary:
+	"""
+	{
+		node_path: [
+			['', properties, owner]
+		]
+		parent_path: [
+			[scene_file_path, properties, owner]
+		]
+	}
+	"""
+	var replication_rpc_data := {}
+	for node: Node in node_set:
+		var replication_data := REPCO.get_replicated_property_dict(node)
+		var property_dict := {}
+		var node_owner := REPCO.get_node_owner(node)
+		var data_array := ['', property_dict, node_owner]
+		if node.has_meta(REPCO.META_REPLICATE_SCENE):
+			var parent_path := scene.get_path_to(node.get_parent())
+			replication_rpc_data.get_or_add(parent_path, []).append(data_array)
+			assert(node.scene_file_path)
+			data_array[0] = node.scene_file_path
+		else:
+			var node_path := scene.get_path_to(node)
+			replication_rpc_data.get_or_add(node_path, []).append(data_array)
+		for property_path in replication_data:
+			var property_data: Array = replication_data[property_path]
+			match property_data[1]:  # match receive filter
+				REPCO.PeerFilter.SERVER:
+					continue
+				REPCO.PeerFilter.OWNER_SERVER:
+					if for_peer != node_owner:
+						continue
+			var value := node.get_indexed(property_path)
+			property_dict[property_path] = value
+	return replication_rpc_data
+
+## When called on a client, replicates nodes from a get_replication_rpc_data data structure.
+@rpc
+func set_replication_rpc_data(replication_rpc_data: Dictionary):
+	for node_path: NodePath in replication_rpc_data:
+		for node_data: Array in replication_rpc_data[node_path]:
+			var node_scene_file_path: String = node_data[0]
+			var node_property_dict: Dictionary = node_data[1]
+			var node_owner: int = node_data[2]
+			
+			var target_node: Node = scene.get_node_or_null(node_path)
+			var parent_node: Node
+			if not target_node:
+				push_warning("Zone.set_replication_rpc_data could not find target node %s" % node_path)
+				continue
+			if node_scene_file_path:
+				parent_node = target_node
+				target_node = load(node_scene_file_path).instantiate()
+			
+			for property_path in node_property_dict:
+				target_node.set_indexed(property_path, node_property_dict[property_path])
+			if node_owner != 1:
+				target_node.set_meta(REPCO.META_OWNER, node_owner)
+			
+			if node_scene_file_path:
+				parent_node.add_child(target_node)
+
+func replicate_to_interest(node_set: Dictionary):
+	for peer in interest:
+		var replication_rpc_data := get_replication_rpc_data(peer, node_set)
+		set_replication_rpc_data.rpc_id(peer, replication_rpc_data)
+
+#endregion
+
 ## Finds the Zone associated with a given Node.
 static func fetch(node: Node, mp: MultiplayerRoot = null) -> Zone:
 	if not mp:

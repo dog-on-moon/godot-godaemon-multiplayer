@@ -21,6 +21,7 @@ func _ready() -> void:
 	mp.peer_disconnected.connect(_peer_disconnected)
 	
 	if mp.is_server():
+		mp.api.outbound_rpc_target_modifiers.append(_outbound_rpc_target_modifier)
 		mp.api.outbound_rpc_filters.append(_rpc_filter)
 	mp.api.rpc_channel_modifiers.append(_zone_service_channel_modifier)
 	_initial_channel = get_initial_channel(mp)
@@ -41,6 +42,21 @@ func _zone_service_channel_modifier(channel: int, node: Node, transfer_mode: Mul
 	if zone:
 		channel = get_zone_channel(zone, transfer_mode)
 	return channel
+
+func _outbound_rpc_target_modifier(from_peer: int, target_peers: Array[int], node: Node, method: StringName, args: Array):
+	var zone := get_node_zone(node)
+	if zone:
+		if target_peers == [0]:
+			target_peers.clear()
+			for p in zone.interest:
+				target_peers.append(p)
+		elif not target_peers:
+			return
+		elif target_peers[0] > 0:
+			target_peers.assign(target_peers.filter(func (p: int): return p in zone.interest))
+		else:
+			var skip_peer: int = -target_peers[0]
+			target_peers.assign(target_peers.filter(func (p: int): return p in zone.interest and p != skip_peer))
 
 func _rpc_filter(from_peer: int, to_peer: int, node: Node, method: StringName, args: Array):
 	var zone := get_node_zone(node)
@@ -129,7 +145,10 @@ func add_interest(peer: int, zone: Zone) -> bool:
 	var zone_index: int = zones[zone]
 	var _channel := mp.api.get_node_channel(self)
 	mp.api.set_node_channel(self, get_zone_channel(zone))
-	_target_add_interest.rpc_id(peer, zone.scene.scene_file_path, zone_index, zone.interest)
+	_target_add_interest.rpc_id(
+		peer, zone.scene.scene_file_path, zone_index, zone.interest,
+		zone.get_replication_rpc_data(peer, zone.replication_nodes)
+	)
 	for each_peer_that_cares in zone.interest:
 		if each_peer_that_cares == peer:
 			continue
@@ -179,7 +198,7 @@ func clear_peer_interest(peer: int):
 
 ## Emitted on a target client to give them interest.
 @rpc()
-func _target_add_interest(scene_path: String, zone_index: int, current_interest: Dictionary):
+func _target_add_interest(scene_path: String, zone_index: int, current_interest: Dictionary, replication_rpc_data: Dictionary):
 	assert(mp.is_client())
 	var zone := Zone.new()
 	zone.mp = mp
@@ -195,6 +214,7 @@ func _target_add_interest(scene_path: String, zone_index: int, current_interest:
 	for peer in zone.interest:
 		peer_to_zones.get_or_add(peer, {})[zone] = null
 		zone.interest_added.emit(peer)
+	zone.set_replication_rpc_data(replication_rpc_data)
 	cl_added_interest.emit(zone)
 	return zone
 

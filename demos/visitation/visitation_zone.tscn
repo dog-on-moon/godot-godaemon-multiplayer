@@ -3,6 +3,8 @@
 [sub_resource type="GDScript" id="GDScript_xsbw1"]
 script/source = "extends Button
 
+const STAR = preload(\"res://demos/visitation/star.tscn\")
+
 @onready var initial_text := text
 
 @export var press_count := 0:
@@ -16,8 +18,9 @@ script/source = "extends Button
 func _ready() -> void:
 	pressed.connect(_request_pressed.rpc)
 	
-	var spawn_region := Vector2(get_parent().size.x, position.y) - size
-	position = Vector2(spawn_region.x * randf(), spawn_region.y * randf())
+	if mp.is_server():
+		var spawn_region := Vector2(get_parent().size.x, position.y) - size
+		position = Vector2(spawn_region.x * randf(), spawn_region.y * randf())
 	
 	mp.api.set_rpc_server_receive_only(self, &\"_request_pressed\")
 	
@@ -26,6 +29,11 @@ func _ready() -> void:
 @rpc(\"any_peer\")
 func _request_pressed():
 	press_count += 1
+	
+	var star := STAR.instantiate()
+	star.position = Vector2(get_parent().size.x * randf(), get_parent().size.y * randf())
+	star.rotation_degrees = randi_range(0, 360)
+	get_parent().add_child(star)
 "
 
 [node name="VisitationZone" type="Control"]
@@ -35,6 +43,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+metadata/_r = 0
 
 [node name="Button" type="Button" parent="."]
 custom_minimum_size = Vector2(128, 48)
@@ -52,3 +61,7 @@ grow_horizontal = 2
 grow_vertical = 2
 text = "Presses: %s"
 script = SubResource("GDScript_xsbw1")
+metadata/_mp = {
+NodePath(":press_count"): [0, 2, true, false],
+NodePath(":position"): [0, 2, true, false]
+}
