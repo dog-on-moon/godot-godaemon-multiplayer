@@ -65,11 +65,11 @@ func start_connection() -> bool:
 	if peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
 		await get_tree().process_frame
 		if peer.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
-			push_warning("MultiplayerManager.setup_server could not create ENetMultiplayer peer")
+			push_warning("ServerRoot.setup_server could not create ENetMultiplayer peer")
 			connection_failed.emit(connection_state)
 			return false
 		elif (Time.get_ticks_msec() - start_t) > configuration.connection_timeout:
-			push_warning("Multiplayer.setup_server timed out")
+			push_warning("ServerRoot.setup_server timed out")
 			connection_state = ConnectionState.TIMEOUT
 			connection_failed.emit(connection_state)
 			return false

@@ -1,7 +1,0 @@
-[gd_scene load_steps=2 format=3 uid="uid://bnfkdougo8ehb"]
-
-[ext_resource type="Script" path="res://demos/2d/network/client.gd" id="1_t3db0"]
-
-[node name="Client" type="Node2D"]
-script = ExtResource("1_t3db0")
-port = 12345
