@@ -17,7 +17,7 @@ func _exit_tree() -> void:
 	_unload_editor()
 
 func _load_editor():
-	replication_editor = load("res://addons/godaemon_multiplayer/editor/replication_editor.tscn").instantiate()
+	replication_editor = load("res://addons/godaemon_multiplayer/services/replication/editor/replication_editor.tscn").instantiate()
 	replication_editor.plugin = self
 	replication_editor_button = add_control_to_bottom_panel(replication_editor, "Replication")
 

@@ -1,0 +1,2 @@
+extends ServiceBase
+class_name ReplicationService

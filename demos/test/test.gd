@@ -1,27 +1,43 @@
 extends Node
 
-@onready var client_root: ClientRoot = $ClientRoot
-@onready var server_root: ServerRoot = $ServerRoot
+@onready var mp := MultiplayerRoot.fetch(self)
+@onready var username_service: UsernameService = mp.get_service(UsernameService)
+@onready var zone := Zone.fetch(self, mp)
+
+@onready var scene_name := get_parent().name
 
 func _ready() -> void:
-	client_root.connection_success.connect(func (): print('Client connection success'))
-	client_root.connection_failed.connect(
-		func (s: ClientRoot.ConnectionState):
-			print('Client connection failed: %s' % ClientRoot.get_connection_state_name(s))
+	zone.interest_added.connect(
+		func (peer: int):
+			if mp.is_client():
+				var my_username := username_service.get_local_username()
+				var username := username_service.get_username(peer)
+				print('[%s]: I see %s in %s' % [my_username, username, scene_name])
+				
+				if peer == mp.local_peer:
+					_unreliable_hello.rpc()
+					_reliable_hello.rpc()
 	)
-	client_root.server_disconnected.connect(
-		func ():
-			print('Server disconnected')
+	zone.interest_removed.connect(
+		func (peer: int):
+			if mp.is_client():
+				var my_username := username_service.get_local_username()
+				var username := username_service.get_username(peer)
+				print('[%s]: %s is leaving %s' % [my_username, username, scene_name])
 	)
-	client_root.start_multi_connect(-1)
-	
-	server_root.connection_success.connect(_server_connected)
-	server_root.connection_failed.connect(
-		func (s: ServerRoot.ConnectionState):
-			print('Server connection failed: %s' % ServerRoot.get_connection_state_name(s))
-	)
-	server_root.start_multi_connect(-1)
 
-func _server_connected():
-	print('Server connection success')
-	var _zone_service: ZoneService = server_root.get_service(ZoneService)
+@rpc("unreliable")
+func _unreliable_hello():
+	if mp.is_server():
+		return
+	var my_username := username_service.get_local_username()
+	var username := username_service.get_username(mp.get_remote_sender_id())
+	print('[%s]: %s says hi in %s! (unreliable)' % [my_username, username, scene_name])
+
+@rpc("reliable")
+func _reliable_hello():
+	if mp.is_server():
+		return
+	var my_username := username_service.get_local_username()
+	var username := username_service.get_username(mp.get_remote_sender_id())
+	print('[%s]: %s says hi in %s! (reliable)' % [my_username, username, scene_name])

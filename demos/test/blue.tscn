@@ -1,0 +1,26 @@
+[gd_scene load_steps=2 format=3 uid="uid://bmelysgf4kmqb"]
+
+[ext_resource type="Script" path="res://demos/test/test.gd" id="1_55gan"]
+
+[node name="Blue" type="HBoxContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Control1" type="Control" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Control2" type="Control" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ColorRect" type="ColorRect" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+color = Color(0, 0.466667, 1, 0.392157)
+
+[node name="Node" type="Node" parent="."]
+script = ExtResource("1_55gan")

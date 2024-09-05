@@ -37,7 +37,18 @@ func _setup_peer_name(peer: int):
 		peer_service.set_data(peer, USERNAME_KEY, &"Player%s" % idx)
 
 func get_username(peer: int) -> StringName:
-	return peer_service.get_data(peer, USERNAME_KEY, &"Unnamed")
+	match peer:
+		0:
+			return &"Everyone"
+		1:
+			return &"Server"
+		_:
+			return peer_service.get_data(peer, USERNAME_KEY, &"Unnamed")
+
+func get_local_username() -> StringName:
+	if mp.is_server():
+		return &"Server"
+	return peer_service.get_data(mp.local_peer, USERNAME_KEY, &"Unnamed")
 
 ## Requests a username on the client.
 func request_username(username: StringName):

@@ -49,6 +49,9 @@ func start_connection() -> bool:
 		server_options = TLSOptions.server(dtls_key, dtls_certificate)
 	
 	# Create server connection.
+	if get_total_channel_count() > MAX_ENET_CHANNELS:
+		push_error("ServerRoot.start_connection exceeded channel limit, max is %s (currently %s)" % [MAX_ENET_CHANNELS, get_total_channel_count()])
+		return false
 	var error := peer.create_server(
 		port, configuration.max_clients, get_total_channel_count(),
 		configuration.in_bandwidth, configuration.out_bandwidth

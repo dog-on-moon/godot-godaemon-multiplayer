@@ -106,6 +106,9 @@ func start_connection() -> bool:
 			client_options = TLSOptions.client_unsafe()
 	
 	# Create client connection.
+	if get_total_channel_count() > MAX_ENET_CHANNELS:
+		push_error("ClientRoot.start_connection exceeded channel limit, max is %s (currently %s)" % [MAX_ENET_CHANNELS, get_total_channel_count()])
+		return false
 	var error := peer.create_client(
 		address, port, get_total_channel_count(),
 		configuration.in_bandwidth, configuration.out_bandwidth,

@@ -27,5 +27,9 @@ func _ready() -> void:
 	# Setup viewport container visuals.
 	stretch = true
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	visible = true if mp.is_client() else false
-	propagated_inputs = PropagatedInputs.ALL if mp.is_client() else PropagatedInputs.NONE
+	
+	visible = true
+	propagated_inputs = PropagatedInputs.ALL
+	if mp.is_server() and get_viewport() == get_window():
+		visible = false
+		propagated_inputs = PropagatedInputs.NONE

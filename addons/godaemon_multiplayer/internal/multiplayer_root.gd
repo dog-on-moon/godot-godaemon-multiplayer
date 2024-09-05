@@ -4,6 +4,8 @@ extends Node
 class_name MultiplayerRoot
 ## Base class for ClientRoot and ServerRoot.
 
+const MAX_ENET_CHANNELS := 253
+
 #region Exports
 
 ## Attempts to endlessly multiconnect when the node is added.
@@ -91,6 +93,9 @@ static func get_connection_state_name(state: ConnectionState) -> String:
 
 var api: GodaemonMultiplayerAPI:
 	get: return multiplayer
+
+var local_peer: int:
+	get: return api.get_unique_id()
 
 func get_remote_sender_id() -> int:
 	return api.remote_sender

@@ -45,6 +45,8 @@ func get_reserved_channels() -> int:
 	return 1
 
 func _peer_connected(peer: int):
+	if peer == 1:
+		return
 	_sync.rpc_id(peer, peer_data)
 
 func _peer_disconnected(peer: int):
@@ -135,6 +137,7 @@ func find_local_peers(key: Variant, value: Variant) -> Array[int]:
 
 @rpc("authority")
 func _sync_set_data(peer: int, key: Variant, value: Variant, hash: int):
+	assert(mp.is_client())
 	peer_data.get_or_add(peer, {})[key] = value
 	peer_key_updated.emit(peer, key)
 	peer_updated.emit(peer)
@@ -144,6 +147,7 @@ func _sync_set_data(peer: int, key: Variant, value: Variant, hash: int):
 
 @rpc("authority")
 func _sync_remove_data(peer: int, key: Variant, hash: int):
+	assert(mp.is_client())
 	peer_data.get_or_add(peer, {}).erase(key)
 	peer_key_updated.emit(peer, key)
 	peer_updated.emit(peer)
@@ -153,12 +157,14 @@ func _sync_remove_data(peer: int, key: Variant, hash: int):
 
 @rpc("authority")
 func _sync(_peer_data: Dictionary):
+	assert(mp.is_client())
 	peer_data = _peer_data
 	updated.emit()
 	full_updated.emit()
 
 @rpc("any_peer")
 func _request_sync():
+	assert(mp.is_server() and mp.get_remote_sender_id() != 1)
 	_sync.rpc_id(mp.get_remote_sender_id(), peer_data)
 
 #endregion

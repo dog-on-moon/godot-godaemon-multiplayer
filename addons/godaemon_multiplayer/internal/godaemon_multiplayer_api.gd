@@ -2,7 +2,6 @@ extends MultiplayerAPIExtension
 class_name GodaemonMultiplayerAPI
 ## An extension of SceneMultiplayer, re-implementing its base overrides.
 
-
 var mp: MultiplayerRoot
 
 ## Use this instead of get_remote_sender_id().
@@ -12,6 +11,10 @@ var remote_sender: int = 0
 ## The peer whose requests are shown on the network profiler.
 ## When set to 0, all peers are shown.
 static var network_profiler_peer := 0
+
+## Cache for connected peers, mapping them to null.
+## Does not include the server.
+var connected_peers := {}
 
 #region SceneMultiplayer Overrides
 
@@ -26,6 +29,10 @@ func _init():
 	scene_multiplayer.peer_disconnected.connect(peer_disconnected.emit)
 	scene_multiplayer.peer_packet.connect(_recv_command)
 	scene_multiplayer.server_relay = false
+	
+	connected_to_server.connect(func (): connected_peers = {})
+	peer_connected.connect(func (peer: int): if peer != 1: connected_peers[peer] = null)
+	peer_disconnected.connect(func (peer: int): connected_peers.erase(peer))
 
 func _poll():
 	return scene_multiplayer.poll()
@@ -98,7 +105,7 @@ var node_channels := {}
 
 ## An array of functions that modify the outbound RPC channel.
 ## They take the arguments:
-## 	(channel: int, from_peer: int, to_peer: int, node: Node, method: StringName, args: Array) 
+## 	(channel: int, node: Node, transfer_mode: MultiplayerPeer.TransferMode) 
 ## The function will return the new channel.
 var rpc_channel_modifiers: Array[Callable] = []
 
@@ -113,6 +120,13 @@ var outbound_rpc_filters: Array[Callable] = []
 ## 	(from_peer: int, to_peer: int, node: Node, method: StringName, args: Array) 
 ## The RPC is blocked if a filter function returns false.
 var inbound_rpc_filters: Array[Callable] = []
+
+# Server Remote Sender Override
+# Overrides the remote_sender that the client peer receives from their RPC.
+# This is only applicable to the server.
+var srs_override := 0
+
+static var test_idx := 0
 
 func _outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Error:
 	# Ensure there is a valid RPC config.
@@ -142,19 +156,22 @@ func _outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Er
 		return ERR_UNAVAILABLE
 	
 	# Process hooks.
+	var from_peer := srs_override if srs_override != 0 else get_unique_id()
 	channel = get_node_channel(node, channel)
 	for modifier: Callable in rpc_channel_modifiers:
-		channel = modifier.call(channel, get_unique_id(), peer, node, method, args)
+		channel = modifier.call(channel, node, transfer_mode)
 	for filter: Callable in outbound_rpc_filters:
-		if not filter.call(get_unique_id(), peer, node, method, args):
+		if not filter.call(from_peer, peer, node, method, args):
 			return ERR_UNAVAILABLE
 	
 	# Perform local call.
 	if call_local:
 		node[method].callv(args)
+	if peer == from_peer:
+		return OK
 	
 	# Filter RPC through MultiplayerRoot.
-	var bytes := var_to_bytes([peer, path, method, args])
+	var bytes := var_to_bytes([int(from_peer), peer, path, method, args])
 	var target_peer: int = 1 if mp.is_client() else peer
 	_profile_rpc(false, node.get_instance_id(), bytes.size() + 1)
 	_send_command(NetCommand.RPC, bytes, target_peer, transfer_mode, channel)
@@ -163,10 +180,11 @@ func _outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Er
 func _inbound_rpc(bytes: PackedByteArray):
 	# Read bytes.
 	var data := bytes_to_var(bytes)
-	var to_peer: int = data[0]
-	var node_path: NodePath = data[1]
-	var method: StringName = data[2]
-	var args: Array = data[3]
+	var from_peer: int = data[0] if mp.is_client() else remote_sender
+	var to_peer: int = data[1]
+	var node_path: NodePath = data[2]
+	var method: StringName = data[3]
+	var args: Array = data[4]
 	
 	# Ensure node and callable can be found.
 	var node := mp.get_node_or_null(node_path)
@@ -177,7 +195,6 @@ func _inbound_rpc(bytes: PackedByteArray):
 	var callable: Callable = node[method].bindv(args)
 	
 	# Test ratelimit.
-	var from_peer: int = remote_sender
 	if not check_rpc_ratelimit(from_peer, node, method):
 		return
 	
@@ -191,37 +208,45 @@ func _inbound_rpc(bytes: PackedByteArray):
 	var method_is_server_only: bool = method in _node_rpc_server_receive_only.get(node, {})
 	
 	# Call or re-route RPC.
-	if to_peer == 1 or from_peer == 1:
-		# This RPC is specifically for the server or from the server, so perform.
+	if to_peer == 1:
+		# This RPC is specifically for the server.
+		callable.call()
+	elif remote_sender == 1:
+		# This RPC is on and for the client, so call with the true remote sender
+		remote_sender = from_peer
 		callable.call()
 	elif to_peer > 0:
 		if not method_is_server_only:
 			# OK, this RPC was designated for a specific target instead.
 			# We will need to RPC it back to that peer.
+			srs_override = from_peer
 			callable.rpc_id(to_peer)
+			srs_override = 0
 	else:
 		# This RPC was designed for everyone but a certain peer.
 		var skip_peer := -to_peer
 		if skip_peer != 1:
 			callable.call()
 		if not method_is_server_only:
+			srs_override = from_peer
 			for p in get_peers():
 				if p == skip_peer or p == 1 or p == from_peer:
 					continue
 				callable.rpc_id(p)
+			srs_override = 0
 
 ## Overrides the RPC channels on a given Node.
-## Make sure to clean up in exit_tree.
 func set_node_channel(node: Node, channel: int):
+	if node not in node_channels:
+		node.tree_exited.connect(clear_node_channel.bind(node), CONNECT_ONE_SHOT)
 	node_channels[node] = channel
-	node.tree_exited.connect(clear_node_channel.bind(node), CONNECT_ONE_SHOT)
 
 ## Clears the channels set on a Node.
 func clear_node_channel(node: Node):
 	node_channels.erase(node)
 
 ## Returns the channel of a Node.
-func get_node_channel(node: Node, default_channel: int) -> int:
+func get_node_channel(node: Node, default_channel: int = 0) -> int:
 	return node_channels.get(node, default_channel)
 
 func _profile_rpc(inbound: bool, instance_id: int, size: int):

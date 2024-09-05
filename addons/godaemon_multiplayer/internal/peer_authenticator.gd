@@ -21,7 +21,7 @@ var mp: MultiplayerRoot
 ## The default function for when client authentication begins.
 ## Can be set to implement a more refined authentication procedure.
 func client_start_auth():
-	send_auth(PackedByteArray([api.get_unique_id()]))
+	send_auth(PackedByteArray([mp.local_peer]))
 
 ## The default authentication callback from the server after they use send_auth for us.
 ## Can be set to implement a more refined authentication procedure.
@@ -48,11 +48,11 @@ func server_receive_auth(peer: int, data: PackedByteArray):
 
 ## Sends authentication information to the target peer.
 func send_auth(data: PackedByteArray, peer := 1):
-	assert(peer != api.get_unique_id(), "Incorrect target peer")
+	assert(peer != mp.local_peer, "Incorrect target peer")
 	api.scene_multiplayer.send_auth(peer, data)
 
 ## Completes authentication with the target peer.
 ## Both the client and server must call this.
 func complete_auth(peer := 1):
-	assert(peer != api.get_unique_id(), "Incorrect target peer")
+	assert(peer != mp.local_peer, "Incorrect target peer")
 	api.scene_multiplayer.complete_auth(peer)

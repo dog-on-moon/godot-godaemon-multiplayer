@@ -1,22 +1,22 @@
 [gd_resource type="Resource" script_class="MultiplayerConfig" load_steps=8 format=3 uid="uid://b2qso0xh85c76"]
 
-[ext_resource type="Script" path="res://addons/godaemon_multiplayer/nodes/config/multiplayer_config.gd" id="1_m7k37"]
-[ext_resource type="Script" path="res://addons/godaemon_multiplayer/nodes/config/peer_authenticator.gd" id="1_p00ur"]
-[ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/zone_service.gd" id="2_2vi7k"]
-[ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/chat_service.gd" id="3_ma52y"]
-[ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/peer_service.gd" id="4_xvgbh"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/internal/peer_authenticator.gd" id="1_1w6pl"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/zone/zone_service.gd" id="2_2vi7k"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/internal/multiplayer_config.gd" id="2_20dqm"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/general/chat_service.gd" id="3_ma52y"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/general/peer_service.gd" id="4_xvgbh"]
 [ext_resource type="Script" path="res://demos/test/test_service.gd" id="5_dtl3b"]
-[ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/username_service.gd" id="5_uwcq7"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/general/username_service.gd" id="5_uwcq7"]
 
 [resource]
-script = ExtResource("1_m7k37")
+script = ExtResource("2_20dqm")
 services = Array[Script]([ExtResource("4_xvgbh"), ExtResource("3_ma52y"), ExtResource("5_uwcq7"), ExtResource("2_2vi7k"), ExtResource("5_dtl3b")])
 max_clients = 32
 channel_count = 0
 in_bandwidth = 0
 out_bandwidth = 0
 connection_timeout = 5.0
-authenticator = ExtResource("1_p00ur")
+authenticator = ExtResource("1_1w6pl")
 authentication_timeout = 3.0
 allow_object_decoding = false
 use_dtls_encryption = false
