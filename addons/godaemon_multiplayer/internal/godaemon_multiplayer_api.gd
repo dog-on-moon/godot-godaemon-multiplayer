@@ -10,7 +10,7 @@ var remote_sender: int = 0
 
 ## The peer whose requests are shown on the network profiler.
 ## When set to 0, all peers are shown.
-static var network_profiler_peer := 0
+static var network_profiler_peer := 1
 
 ## Cache for connected peers, mapping them to null.
 ## Does not include the server.

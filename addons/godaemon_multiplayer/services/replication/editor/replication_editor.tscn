@@ -66,7 +66,12 @@ alignment = 2
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "When checked, the ZoneService will watch for the currently edited scene being added on the server.
-The scene and its replicated properties will be given to clients with interest."
+The scene and its replicated properties will be given to clients with interest.
+
+Replication filtering is done via the receiver setting:
+- Client + Server: Property is replicated to all clients.
+- Owner + Server: Property is replicated to owner only.
+- Server Only: Property is not replicated to any client."
 text = "Replicate Scene in Zone"
 
 [node name="ReloadButton" type="Button" parent="Header/Right"]

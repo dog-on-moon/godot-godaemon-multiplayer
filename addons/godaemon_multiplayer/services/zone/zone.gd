@@ -181,7 +181,7 @@ func get_replication_rpc_data(for_peer: int, node_set: Dictionary) -> Dictionary
 		var property_dict := {}
 		var node_owner := REPCO.get_node_owner(node)
 		var data_array := ['', property_dict, node_owner]
-		if node.has_meta(REPCO.META_REPLICATE_SCENE):
+		if node.has_meta(REPCO.META_REPLICATE_SCENE) and node != scene:
 			var parent_path := scene.get_path_to(node.get_parent())
 			replication_rpc_data.get_or_add(parent_path, []).append(data_array)
 			assert(node.scene_file_path)

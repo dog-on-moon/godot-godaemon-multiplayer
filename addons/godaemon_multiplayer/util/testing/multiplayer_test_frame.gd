@@ -20,6 +20,13 @@ const MtfSvc = preload("res://addons/godaemon_multiplayer/util/testing/mtf_svc.g
 		if is_node_ready():
 			_update_position()
 
+## Labels the SVC services.
+@export var label_services := true:
+	set(x):
+		label_services = x
+		if is_node_ready():
+			_update_nodes()
+
 @export_group("Connection")
 ## The port to use for connection.
 @export_range(0, 65535, 1) var port := 27027:
@@ -75,20 +82,29 @@ func _update_nodes():
 	# Create server viewport if it does not exist.
 	if not server_svc:
 		server_svc = MtfSvc.new()
-		server_svc.name = "ServerViewport"
+		server_svc.name = "Server"
 		server_svc.client = false
 		server_svc.config = configuration
+		if label_services:
+			var label := Label.new()
+			label.text = "Server"
+			server_svc.add_child(label)
 		viewport_split.add_child(server_svc)
 	
 	# Clean up/rebuild client viewports.
 	for svc in client_svcs.duplicate():
+		viewport_split.remove_child(svc)
 		svc.queue_free()
 	client_svcs = []
 	for i in clients:
 		var client_svc := MtfSvc.new()
-		client_svc.name = "ClientViewport1"
+		client_svc.name = "Client%s" % (i + 1)
 		client_svc.client = true
 		client_svc.config = configuration
+		if label_services:
+			var label := Label.new()
+			label.text = "Client%s" % (i + 1)
+			client_svc.add_child(label)
 		viewport_split.add_child(client_svc)
 		client_svcs.append(client_svc)
 	

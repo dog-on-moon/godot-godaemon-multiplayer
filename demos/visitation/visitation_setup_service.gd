@@ -12,8 +12,11 @@ func _ready() -> void:
 		var swapper: Node = ZONE_SWAPPER.instantiate()
 		var swapper_zone := zone_service.add_zone(swapper)
 		
+		var colors := [Color.RED, Color.GREEN, Color.BLUE]
+		
 		for i in 3:
 			var visitation: Node = VISITATION_ZONE.instantiate()
+			visitation.modulate = colors[i]
 			var visitation_zone := zone_service.add_zone(visitation)
 			swapper.server_zones.append(visitation_zone)
 		
