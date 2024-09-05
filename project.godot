@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="godot-godaemon-multiplayer"
-run/main_scene="res://demos/2d/dev_start.tscn"
+run/main_scene="res://demos/visitation/game.tscn"
 config/features=PackedStringArray("4.3", "Forward Plus")
 config/icon="res://icon.svg"
 
