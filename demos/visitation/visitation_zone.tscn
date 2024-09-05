@@ -1,0 +1,54 @@
+[gd_scene load_steps=2 format=3 uid="uid://dkxgxgxhxlxbe"]
+
+[sub_resource type="GDScript" id="GDScript_xsbw1"]
+script/source = "extends Button
+
+@onready var initial_text := text
+
+@export var press_count := 0:
+	set(x):
+		press_count = x
+		if is_node_ready():
+			text = initial_text % press_count
+
+@onready var mp := MultiplayerRoot.fetch(self)
+
+func _ready() -> void:
+	pressed.connect(_request_pressed.rpc)
+	
+	var spawn_region := Vector2(get_parent().size.x, position.y) - size
+	position = Vector2(spawn_region.x * randf(), spawn_region.y * randf())
+	
+	mp.api.set_rpc_server_receive_only(self, &\"_request_pressed\")
+	
+	press_count = press_count
+
+@rpc(\"any_peer\")
+func _request_pressed():
+	press_count += 1
+"
+
+[node name="VisitationZone" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Button" type="Button" parent="."]
+custom_minimum_size = Vector2(128, 48)
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -64.0
+offset_top = 100.0
+offset_right = 64.0
+offset_bottom = 148.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "Presses: %s"
+script = SubResource("GDScript_xsbw1")

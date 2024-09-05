@@ -67,7 +67,7 @@ var scene: Node
 func _setup_rendering():
 	# Set default rendering parameters of the Viewport.
 	render_target_clear_mode = CLEAR_MODE_ALWAYS
-	render_target_update_mode = UPDATE_WHEN_VISIBLE
+	render_target_update_mode = UPDATE_ALWAYS if mp.is_client() else UPDATE_WHEN_VISIBLE
 	transparent_bg = true
 	handle_input_locally = false
 	

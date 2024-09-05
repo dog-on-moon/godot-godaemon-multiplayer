@@ -28,8 +28,9 @@ func _ready() -> void:
 	stretch = true
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	
-	visible = true
 	propagated_inputs = PropagatedInputs.ALL
 	if mp.is_server() and get_viewport() == get_window():
 		visible = false
 		propagated_inputs = PropagatedInputs.NONE
+	else:
+		visible = true

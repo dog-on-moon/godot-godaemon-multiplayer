@@ -1,0 +1,42 @@
+[gd_scene load_steps=2 format=3 uid="uid://inrt54jihwgj"]
+
+[ext_resource type="Script" path="res://demos/visitation/zone_swapper.gd" id="1_y5u33"]
+
+[node name="ZoneSwapper" type="Control"]
+layout_mode = 3
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -64.0
+grow_horizontal = 2
+grow_vertical = 0
+script = ExtResource("1_y5u33")
+
+[node name="Panel" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Zone1" type="Button" parent="Panel/HBoxContainer"]
+layout_mode = 2
+text = "Zone 1"
+
+[node name="Zone2" type="Button" parent="Panel/HBoxContainer"]
+layout_mode = 2
+text = "Zone 2"
+
+[node name="Zone3" type="Button" parent="Panel/HBoxContainer"]
+layout_mode = 2
+text = "Zone 3"

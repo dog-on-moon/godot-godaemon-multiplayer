@@ -11,7 +11,7 @@
 [resource]
 script = ExtResource("2_20dqm")
 services = Array[Script]([ExtResource("4_xvgbh"), ExtResource("3_ma52y"), ExtResource("5_uwcq7"), ExtResource("2_2vi7k"), ExtResource("5_dtl3b")])
-max_clients = 32
+max_clients = 128
 channel_count = 0
 in_bandwidth = 0
 out_bandwidth = 0

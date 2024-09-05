@@ -3,7 +3,7 @@ class_name TestService
 
 @onready var username_service: UsernameService = mp.get_service(UsernameService)
 
-const TERMINAL = preload("res://addons/godaemon_multiplayer/util/terminal.tscn")
+const TERMINAL = preload("res://addons/godaemon_multiplayer/util/terminal/terminal.tscn")
 var terminal
 
 func _ready() -> void:

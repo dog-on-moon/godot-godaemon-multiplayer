@@ -19,6 +19,10 @@ config/icon="res://icon.svg"
 
 SubprocessServer="*res://addons/godaemon_multiplayer/util/subprocess_server.gd"
 
+[display]
+
+window/stretch/mode="viewport"
+
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/godaemon_multiplayer/plugin.cfg")

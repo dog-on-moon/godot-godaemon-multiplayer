@@ -1,80 +1,11 @@
-[gd_scene load_steps=4 format=3 uid="uid://b5406xwndfjbn"]
+[gd_scene load_steps=3 format=3 uid="uid://b5406xwndfjbn"]
 
-[ext_resource type="Script" path="res://addons/godaemon_multiplayer/nodes/server_root.gd" id="2_04yku"]
-[ext_resource type="Script" path="res://addons/godaemon_multiplayer/nodes/client_root.gd" id="2_53s1k"]
+[ext_resource type="PackedScene" uid="uid://dd5cv6d0t044y" path="res://addons/godaemon_multiplayer/util/testing/multiplayer_test_frame.tscn" id="1_7dws1"]
 [ext_resource type="Resource" uid="uid://b2qso0xh85c76" path="res://demos/test/test_config.tres" id="2_nbqx3"]
 
-[node name="BaseColor" type="ColorRect"]
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-color = Color(0.07633, 0.0221, 0.17, 1)
+[node name="BaseColor" type="Node"]
 
-[node name="ViewportSplit" type="GridContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_constants/h_separation = 8
-theme_override_constants/v_separation = 8
-columns = 2
-
-[node name="ClientViewport1" type="SubViewportContainer" parent="ViewportSplit"]
-custom_minimum_size = Vector2(572, 320)
-layout_mode = 2
-stretch = true
-
-[node name="SubViewport" type="SubViewport" parent="ViewportSplit/ClientViewport1"]
-handle_input_locally = false
-size = Vector2i(572, 320)
-render_target_update_mode = 4
-
-[node name="ClientRoot" type="Node" parent="ViewportSplit/ClientViewport1/SubViewport"]
-script = ExtResource("2_53s1k")
+[node name="MultiplayerTestFrame" parent="." instance=ExtResource("1_7dws1")]
+clients = 3
 configuration = ExtResource("2_nbqx3")
-
-[node name="ClientViewport2" type="SubViewportContainer" parent="ViewportSplit"]
-custom_minimum_size = Vector2(572, 320)
-layout_mode = 2
-stretch = true
-
-[node name="SubViewport" type="SubViewport" parent="ViewportSplit/ClientViewport2"]
-handle_input_locally = false
-size = Vector2i(572, 320)
-render_target_update_mode = 4
-
-[node name="ClientRoot" type="Node" parent="ViewportSplit/ClientViewport2/SubViewport"]
-script = ExtResource("2_53s1k")
-configuration = ExtResource("2_nbqx3")
-
-[node name="ClientViewport3" type="SubViewportContainer" parent="ViewportSplit"]
-custom_minimum_size = Vector2(572, 320)
-layout_mode = 2
-stretch = true
-
-[node name="SubViewport" type="SubViewport" parent="ViewportSplit/ClientViewport3"]
-handle_input_locally = false
-size = Vector2i(572, 320)
-render_target_update_mode = 4
-
-[node name="ClientRoot" type="Node" parent="ViewportSplit/ClientViewport3/SubViewport"]
-script = ExtResource("2_53s1k")
-configuration = ExtResource("2_nbqx3")
-
-[node name="ServerViewport" type="SubViewportContainer" parent="ViewportSplit"]
-custom_minimum_size = Vector2(572, 320)
-layout_mode = 2
-stretch = true
-
-[node name="SubViewport" type="SubViewport" parent="ViewportSplit/ServerViewport"]
-handle_input_locally = false
-size = Vector2i(572, 320)
-render_target_update_mode = 4
-
-[node name="ServerRoot" type="Node" parent="ViewportSplit/ServerViewport/SubViewport"]
-script = ExtResource("2_04yku")
-configuration = ExtResource("2_nbqx3")
+padding = 4

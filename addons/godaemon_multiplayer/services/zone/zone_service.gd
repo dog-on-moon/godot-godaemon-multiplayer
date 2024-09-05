@@ -2,6 +2,12 @@ extends ServiceBase
 class_name ZoneService
 ## The root node containing Zones in a ClientRoot/ServerRoot.
 
+## Emitted on a client whenever they've received interest for a zone.
+signal cl_added_interest(zone: Zone)
+
+## Emitted on a client whenever they've lost interest for a zone.
+signal cl_removed_interest(zone: Zone)
+
 ## The number of reserved channels we'll use for Zones.
 const RESERVED_ZONE_CHANNELS := 32
 const RESERVED_ZONE_CHANNELS_HALF := RESERVED_ZONE_CHANNELS / 2
@@ -116,7 +122,7 @@ func add_interest(peer: int, zone: Zone) -> bool:
 		return false
 	
 	# Update interest state.
-	peer_to_zones.get_or_add(peer, []).append(zone)
+	peer_to_zones.get_or_add(peer, {})[zone] = null
 	zone.interest[peer] = null
 	
 	# Broadcast this information.
@@ -141,7 +147,7 @@ func remove_interest(peer: int, zone: Zone) -> bool:
 		return false
 	
 	# Update interest state.
-	peer_to_zones.get_or_add(peer, []).erase(zone)
+	peer_to_zones.get_or_add(peer, {}).erase(zone)
 	if peer not in peer_to_zones:
 		peer_to_zones.erase(peer)
 	zone.interest.erase(peer)
@@ -159,10 +165,16 @@ func remove_interest(peer: int, zone: Zone) -> bool:
 	zone.interest_removed.emit(peer)
 	return true
 
+## Determines if a peer has interest.
+## (NOTE: When calling on the client, this will only check for zones
+## that the client peer shares with the target peer.)
+func has_interest(peer: int, zone: Zone) -> bool:
+	return zone in peer_to_zones.get(peer, {})
+
 ## Clears all interest from a peer, preventing them from viewing any Zone.
 func clear_peer_interest(peer: int):
 	assert(mp.is_server())
-	for zone: Zone in peer_to_zones.get(peer, []).duplicate():
+	for zone: Zone in peer_to_zones.get(peer, {}).duplicate():
 		remove_interest(peer, zone)
 
 ## Emitted on a target client to give them interest.
@@ -181,8 +193,9 @@ func _target_add_interest(scene_path: String, zone_index: int, current_interest:
 	zone.add_child(node)
 	svc.add_child(zone)
 	for peer in zone.interest:
-		peer_to_zones.get_or_add(peer, []).append(zone)
+		peer_to_zones.get_or_add(peer, {})[zone] = null
 		zone.interest_added.emit(peer)
+	cl_added_interest.emit(zone)
 	return zone
 
 ## Emitted for all clients (not including the target) to inform them of interest.
@@ -193,7 +206,7 @@ func _global_add_interest(peer: int, zone_index: int):
 		push_warning("ZoneService._global_add_interest did not have zone index, bug?")
 		return
 	var zone: Zone = zone_index_to_zone[zone_index]
-	peer_to_zones.get_or_add(peer, []).append(zone)
+	peer_to_zones.get_or_add(peer, {})[zone] = null
 	zone.interest[peer] = null
 	zone.interest_added.emit(peer)
 
@@ -206,11 +219,12 @@ func _target_remove_interest(zone_index: int):
 		return
 	var peer: int = mp.local_peer
 	var zone: Zone = zone_index_to_zone[zone_index]
-	peer_to_zones.get_or_add(peer, []).erase(zone)
+	peer_to_zones.get_or_add(peer, {}).erase(zone)
 	if not peer_to_zones[peer]:
 		peer_to_zones.erase(peer)
 	zone.interest.erase(peer)
 	zone.interest_removed.emit(peer)
+	cl_removed_interest.emit(zone)
 	
 	zones.erase(zone)
 	zone_index_to_zone.erase(zone_index)
@@ -225,7 +239,7 @@ func _global_remove_interest(peer: int, zone_index: int):
 		push_warning("ZoneService._global_remove_interest did not have zone index, bug?")
 		return
 	var zone: Zone = zone_index_to_zone[zone_index]
-	peer_to_zones.get_or_add(peer, []).erase(zone)
+	peer_to_zones.get_or_add(peer, {}).erase(zone)
 	if not peer_to_zones[peer]:
 		peer_to_zones.erase(peer)
 	zone.interest.erase(peer)

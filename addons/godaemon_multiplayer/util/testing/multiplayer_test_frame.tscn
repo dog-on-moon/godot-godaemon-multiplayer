@@ -1,0 +1,21 @@
+[gd_scene load_steps=2 format=3 uid="uid://dd5cv6d0t044y"]
+
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/util/testing/multiplayer_test_frame.gd" id="1_knfsj"]
+
+[node name="MultiplayerTestFrame" type="Container"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_knfsj")
+
+[node name="ColorRect" type="ColorRect" parent="."]
+layout_mode = 2
+color = Color(0.125, 0.031, 0.149, 1)
+
+[node name="ViewportSplit" type="GridContainer" parent="."]
+layout_mode = 2
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+columns = 2

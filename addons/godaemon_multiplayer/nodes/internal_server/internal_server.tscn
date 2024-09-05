@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3 uid="uid://dtyac7d8hdu76"]
 
 [ext_resource type="Script" path="res://addons/godaemon_multiplayer/nodes/internal_server/internal_server.gd" id="1_qm4c6"]
-[ext_resource type="PackedScene" uid="uid://k2ixxslb858p" path="res://addons/godaemon_multiplayer/util/terminal.tscn" id="2_6hkw5"]
+[ext_resource type="PackedScene" uid="uid://k2ixxslb858p" path="res://addons/godaemon_multiplayer/util/terminal/terminal.tscn" id="2_6hkw5"]
 
 [node name="InternalServer" type="Node"]
 script = ExtResource("1_qm4c6")
