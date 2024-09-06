@@ -1,7 +1,6 @@
-[gd_scene load_steps=3 format=3 uid="uid://bpc7xmr810jmb"]
+[gd_scene load_steps=2 format=3 uid="uid://bpc7xmr810jmb"]
 
 [ext_resource type="Texture2D" uid="uid://lnofiff3si8o" path="res://icon.svg" id="1_aixar"]
-[ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/service_base.gd" id="2_djpr0"]
 
 [node name="Star" type="TextureRect"]
 offset_right = 128.0
@@ -13,29 +12,4 @@ metadata/_r = 0
 metadata/_mp = {
 NodePath(":position"): [0, 2, true, false],
 NodePath(":rotation"): [0, 2, true, false]
-}
-
-[node name="Control" type="Control" parent="."]
-anchors_preset = 0
-offset_right = 40.0
-offset_bottom = 40.0
-metadata/_mp = {
-NodePath(":position"): [0, 2, true, false]
-}
-
-[node name="Test" type="Control" parent="Control"]
-anchors_preset = 0
-offset_right = 40.0
-offset_bottom = 40.0
-
-[node name="Node2D" type="Node2D" parent="Control/Test"]
-
-[node name="ServiceBase" type="Node" parent="Control/Test/Node2D"]
-script = ExtResource("2_djpr0")
-
-[node name="Window" type="Window" parent="Control/Test/Node2D/ServiceBase"]
-
-[node name="StatusIndicator" type="StatusIndicator" parent="Control/Test/Node2D/ServiceBase/Window"]
-metadata/_mp = {
-NodePath(":process_mode"): [0, 2, true, false]
 }
