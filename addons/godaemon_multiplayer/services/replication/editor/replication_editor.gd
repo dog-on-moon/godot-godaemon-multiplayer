@@ -38,6 +38,7 @@ func _ready() -> void:
 		scene_replicate_button.button_pressed = scene_root.has_meta(REPCO.META_REPLICATE_SCENE)
 	scene_replicate_button.toggled.connect(_toggle_scene_replication)
 	plugin.scene_changed.connect(_on_scene_changed)
+	_on_scene_changed()
 	
 	reload_button.pressed.connect(plugin._reload_editor)
 	tree.button_clicked.connect(_tree_button_clicked)
@@ -72,13 +73,13 @@ func _toggle_scene_replication(mode: bool):
 	if value_exists != new_value_exists:
 		scene_root.set_meta(key, new_value)
 		EditorInterface.mark_scene_as_unsaved()
-
+		
 		if new_value == 0:
 			ReplicationCacheManager.add_node_to_storage(scene_root)
 		else:
 			ReplicationCacheManager.remove_node_from_storage(scene_root)
 
-func _on_scene_changed(n):
+func _on_scene_changed(n=null):
 	_nodes_with_properties = {}
 	var scene_root := get_tree().edited_scene_root
 	if scene_root:
