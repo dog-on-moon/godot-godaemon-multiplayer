@@ -137,7 +137,7 @@ func _setup_replication():
 
 func _node_enter_zone(root: Node, data: Dictionary):
 	# Does this node have replicated properties?
-	const key := REPCO.META_SYNC_PROPERTIES
+	const key := REPCO.META_REPLICATE_SCENE
 	if root.has_meta(key):
 		data[root] = null
 	
@@ -168,28 +168,28 @@ func get_replication_rpc_data(for_peer: int, node_set: Dictionary) -> Dictionary
 	"""
 	{
 		node_path: [
-			['', properties, owner]
-		]
+			[-1, property_values, owner]
+		],
 		parent_path: [
-			[scene_file_path, properties, owner]
+			[index, property_values, owner]
 		]
 	}
 	"""
 	var replication_rpc_data := {}
 	for node: Node in node_set:
-		var replication_data := REPCO.get_replicated_property_dict(node)
-		var property_dict := {}
+		var property_values := []
 		var node_owner := REPCO.get_node_owner(node)
-		var data_array := ['', property_dict, node_owner]
-		if node.has_meta(REPCO.META_REPLICATE_SCENE) and node != scene:
-			var parent_path := scene.get_path_to(node.get_parent())
-			replication_rpc_data.get_or_add(parent_path, []).append(data_array)
-			assert(node.scene_file_path)
-			data_array[0] = node.scene_file_path
+		var data_array := [0, property_values, node_owner]
+		var target_node_path := NodePath()
+		if node != scene:
+			target_node_path = scene.get_path_to(node.get_parent())
+			data_array[0] = ReplicationCacheManager.get_index(node.scene_file_path)
 		else:
-			var node_path := scene.get_path_to(node)
-			replication_rpc_data.get_or_add(node_path, []).append(data_array)
-		for property_path in replication_data:
+			data_array[0] = -1
+		replication_rpc_data.get_or_add(target_node_path, []).append(data_array)
+		
+		var replication_data: Dictionary = node.get_meta(REPCO.META_SYNC_PROPERTIES, {})
+		for property_path: NodePath in replication_data:
 			var property_data: Array = replication_data[property_path]
 			match property_data[1]:  # match receive filter
 				REPCO.PeerFilter.SERVER:
@@ -197,8 +197,11 @@ func get_replication_rpc_data(for_peer: int, node_set: Dictionary) -> Dictionary
 				REPCO.PeerFilter.OWNER_SERVER:
 					if for_peer != node_owner:
 						continue
-			var value := node.get_indexed(property_path)
-			property_dict[property_path] = value
+			var node_path := NodePath(property_path.get_concatenated_names())
+			var prop_path := NodePath(property_path.get_concatenated_subnames())
+			var target_node := node.get_node(node_path) if node_path else node
+			var value := target_node.get_indexed(prop_path)
+			property_values.append(value)
 	return replication_rpc_data
 
 ## When called on a client, replicates nodes from a get_replication_rpc_data data structure.
@@ -206,25 +209,45 @@ func get_replication_rpc_data(for_peer: int, node_set: Dictionary) -> Dictionary
 func set_replication_rpc_data(replication_rpc_data: Dictionary):
 	for node_path: NodePath in replication_rpc_data:
 		for node_data: Array in replication_rpc_data[node_path]:
-			var node_scene_file_path: String = node_data[0]
-			var node_property_dict: Dictionary = node_data[1]
+			var node_scene_index: int = node_data[0]
+			var node_property_values: Array = node_data[1]
 			var node_owner: int = node_data[2]
 			
-			var target_node: Node = scene.get_node_or_null(node_path)
+			var target_node: Node = scene.get_node_or_null(node_path) if node_path else scene
 			var parent_node: Node
 			if not target_node:
 				push_warning("Zone.set_replication_rpc_data could not find target node %s" % node_path)
 				continue
-			if node_scene_file_path:
+			if node_scene_index != -1:
 				parent_node = target_node
-				target_node = load(node_scene_file_path).instantiate()
+				var scene_path := ReplicationCacheManager.get_scene_file_path(node_scene_index)
+				target_node = load(scene_path).instantiate()
 			
-			for property_path in node_property_dict:
-				target_node.set_indexed(property_path, node_property_dict[property_path])
+			var replication_data: Dictionary = target_node.get_meta(REPCO.META_SYNC_PROPERTIES, {})
+			var replication_data_keys := replication_data.keys()
+			var true_idx := -1
+			for idx: int in replication_data_keys.size():
+				var property_path: NodePath = replication_data_keys[idx]
+				var property_data: Array = replication_data[property_path]
+				match property_data[1]:  # match receive filter
+					REPCO.PeerFilter.SERVER:
+						continue
+					REPCO.PeerFilter.OWNER_SERVER:
+						if mp.local_peer != node_owner:
+							continue
+				true_idx += 1
+				
+				var prop_node_path := NodePath(property_path.get_concatenated_names())
+				var prop_path := NodePath(property_path.get_concatenated_subnames())
+				
+				var prop_node := target_node.get_node(prop_node_path) if prop_node_path else target_node
+				var value: Variant = node_property_values[true_idx]
+				prop_node.set_indexed(prop_path, value)
+			
 			if node_owner != 1:
 				target_node.set_meta(REPCO.META_OWNER, node_owner)
 			
-			if node_scene_file_path:
+			if node_scene_index != -1:
 				parent_node.add_child(target_node)
 
 func replicate_to_interest(node_set: Dictionary):

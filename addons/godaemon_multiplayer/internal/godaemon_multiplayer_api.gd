@@ -276,13 +276,16 @@ func _profile_rpc(inbound: bool, instance_id: int, size: int):
 
 ## Sends a message for a given service.
 ## The service on target peers will be called with ServiceBase.recv_message(args).
-func send_service_message(service_name: StringName, args: Variant, peer := 0, mode := MultiplayerPeer.TRANSFER_MODE_RELIABLE, channel := 0):
+func send_service_message(service: ServiceBase, args: Variant, peer := 0, mode := MultiplayerPeer.TRANSFER_MODE_RELIABLE, channel := 0):
+	var service_name := service.name
 	var data := var_to_bytes([service_name, args, peer, mode, channel])
+	_profile_rpc(false, service.get_instance_id(), data.size())
 	_send_command(NetCommand.SERVICE, data, peer if mp.is_server() else 1, mode, channel)
 
 func _recv_service_message(data: Array):
 	var service_name: StringName = data[0]
 	var service: ServiceBase = mp.get_service_from_name(service_name)
+	_profile_rpc(true, service.get_instance_id(), data.size())
 	if not service:
 		return
 		
@@ -296,7 +299,7 @@ func _recv_service_message(data: Array):
 		var mode: MultiplayerPeer.TransferMode = data[3]
 		var channel: int = data[4]
 		if to_peer > 0:
-			send_service_message(service_name, args, to_peer, mode, channel)
+			send_service_message(service, args, to_peer, mode, channel)
 		else:
 			var skip_peer := -to_peer
 			if skip_peer != 1:
@@ -304,7 +307,7 @@ func _recv_service_message(data: Array):
 			for p in get_peers():
 				if p == skip_peer or p == 1 or p == remote_sender:
 					continue
-				send_service_message(service_name, args, p, mode, channel)
+				send_service_message(service, args, p, mode, channel)
 
 #endregion
 

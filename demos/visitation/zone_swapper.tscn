@@ -12,6 +12,7 @@ offset_top = -64.0
 grow_horizontal = 2
 grow_vertical = 0
 script = ExtResource("1_y5u33")
+metadata/_r = 0
 
 [node name="Panel" type="Panel" parent="."]
 layout_mode = 1

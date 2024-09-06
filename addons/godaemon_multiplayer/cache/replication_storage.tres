@@ -1,9 +1,11 @@
-[gd_resource type="Resource" load_steps=2 format=3 uid="uid://voi7rwp4fjvg"]
+[gd_resource type="Resource" load_steps=2 format=3 uid="uid://c26faleftm0sh"]
 
-[ext_resource type="Script" path="res://addons/godaemon_multiplayer/cache/replication_storage_resource.gd" id="1_3pdjn"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/cache/replication_storage_resource.gd" id="1_cf2jc"]
 
 [resource]
-script = ExtResource("1_3pdjn")
+script = ExtResource("1_cf2jc")
 cache_dict = {
-"res://demos/visitation/star.tscn": 0
+"res://demos/visitation/star.tscn": 0,
+"res://demos/visitation/visitation_zone.tscn": 1,
+"res://demos/visitation/zone_swapper.tscn": 2
 }

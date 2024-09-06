@@ -2,6 +2,7 @@
 extends VBoxContainer
 
 const REPCO = preload("res://addons/godaemon_multiplayer/services/replication/replication_constants.gd")
+const Util = preload("res://addons/godaemon_multiplayer/util/util.gd")
 
 var PROPERTY_TYPE_FILTER := PackedInt32Array([
 	TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING, TYPE_VECTOR2, TYPE_VECTOR2I,
@@ -33,12 +34,9 @@ func _ready() -> void:
 	
 	add_property_button.pressed.connect(_add_property_pressed)
 	
-	var scene_root := get_tree().edited_scene_root
-	if scene_root:
-		scene_replicate_button.button_pressed = scene_root.has_meta(REPCO.META_REPLICATE_SCENE)
 	scene_replicate_button.toggled.connect(_toggle_scene_replication)
-	plugin.scene_changed.connect(_on_scene_changed)
-	_on_scene_changed()
+	plugin.scene_changed.connect(_nodes_with_properties_updated)
+	_nodes_with_properties_updated()
 	
 	reload_button.pressed.connect(plugin._reload_editor)
 	tree.button_clicked.connect(_tree_button_clicked)
@@ -79,19 +77,11 @@ func _toggle_scene_replication(mode: bool):
 		else:
 			ReplicationCacheManager.remove_node_from_storage(scene_root)
 
-func _on_scene_changed(n=null):
-	_nodes_with_properties = {}
+func _nodes_with_properties_updated(n=null):
 	var scene_root := get_tree().edited_scene_root
 	if scene_root:
 		scene_replicate_button.button_pressed = scene_root.has_meta(REPCO.META_REPLICATE_SCENE)
-		for node in REPCO.get_replicated_nodes(scene_root):
-			_nodes_with_properties[node] = null
-		_nodes_with_properties_updated()
-
-func _nodes_with_properties_updated():
-	var scene_root := get_tree().edited_scene_root
-	if scene_root:
-		if _nodes_with_properties:
+		if scene_root.has_meta(REPCO.META_SYNC_PROPERTIES):
 			scene_replicate_button.disabled = true
 			if not scene_root.has_meta(REPCO.META_REPLICATE_SCENE):
 				scene_root.set_meta(REPCO.META_REPLICATE_SCENE, null)
@@ -100,8 +90,6 @@ func _nodes_with_properties_updated():
 				EditorInterface.mark_scene_as_unsaved()
 		else:
 			scene_replicate_button.disabled = false
-
-var _nodes_with_properties := {}
 
 func _on_edited_object_changed():
 	var object := EditorInterface.get_inspector().get_edited_object()
@@ -150,9 +138,7 @@ func _add_property(object: Node, property_path: NodePath, send: int, recv: int, 
 	if not is_instance_valid(object):
 		return
 	REPCO.set_replicated_property(object, property_path, send, recv, reliable, interp)
-	if object not in _nodes_with_properties:
-		_nodes_with_properties[object] = null
-		_nodes_with_properties_updated()
+	_nodes_with_properties_updated()
 	EditorInterface.mark_scene_as_unsaved()
 	_add_property_to_tree(object, property_path)
 
@@ -160,9 +146,7 @@ func _remove_property(object: Node, property_path: NodePath):
 	if not is_instance_valid(object):
 		return
 	REPCO.remove_replicated_property(object, property_path)
-	if object in _nodes_with_properties and not REPCO.get_replicated_property_dict(object):
-		_nodes_with_properties.erase(object)
-		_nodes_with_properties_updated()
+	_nodes_with_properties_updated()
 	EditorInterface.mark_scene_as_unsaved()
 	_update_tree()
 
@@ -176,7 +160,7 @@ func _update_tree():
 	if not (object and object is Node):
 		return
 	for property_path in REPCO.get_replicated_property_dict(object):
-		_add_property_to_tree.call(object, property_path)
+		_add_property_to_tree(object, property_path)
 
 func _add_property_to_tree(object: Node, property_path: NodePath):
 	var value := object.get_indexed(property_path)

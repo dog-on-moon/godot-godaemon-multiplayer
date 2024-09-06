@@ -98,6 +98,7 @@ var peer_to_zones := {}
 func add_zone(node: Node) -> Zone:
 	assert(mp.is_server())
 	assert(node.scene_file_path, "Added zones must be from a PackedScene")
+	assert(ReplicationCacheManager.get_index(node.scene_file_path) != -1, "Zone must have scene replication enabled")
 	var zone := Zone.new()
 	zone.mp = mp
 	zone.zone_service = self
@@ -146,7 +147,7 @@ func add_interest(peer: int, zone: Zone) -> bool:
 	var _channel := mp.api.get_node_channel(self)
 	mp.api.set_node_channel(self, get_zone_channel(zone))
 	_target_add_interest.rpc_id(
-		peer, zone.scene.scene_file_path, zone_index, zone.interest,
+		peer, ReplicationCacheManager.get_index(zone.scene.scene_file_path), zone_index, zone.interest,
 		zone.get_replication_rpc_data(peer, zone.replication_nodes)
 	)
 	for each_peer_that_cares in zone.interest:
@@ -198,7 +199,7 @@ func clear_peer_interest(peer: int):
 
 ## Emitted on a target client to give them interest.
 @rpc()
-func _target_add_interest(scene_path: String, zone_index: int, current_interest: Dictionary, replication_rpc_data: Dictionary):
+func _target_add_interest(scene_path_index: int, zone_index: int, current_interest: Dictionary, replication_rpc_data: Dictionary):
 	assert(mp.is_client())
 	var zone := Zone.new()
 	zone.mp = mp
@@ -207,7 +208,7 @@ func _target_add_interest(scene_path: String, zone_index: int, current_interest:
 	zone.name = "Zone%s" % zone_index
 	zones[zone] = zone_index
 	zone_index_to_zone[zone_index] = zone
-	var node: Node = load(scene_path).instantiate()
+	var node: Node = load(ReplicationCacheManager.get_scene_file_path(scene_path_index)).instantiate()
 	zone.scene = node
 	zone.add_child(node)
 	svc.add_child(zone)

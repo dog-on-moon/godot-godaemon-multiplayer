@@ -31,7 +31,7 @@ func get_initial_channel(mp: MultiplayerRoot) -> int:
 ## Sends a message on this service.
 ## These are more efficient than RPCs.
 func send_message(args: Variant, peer := 0, mode := MultiplayerPeer.TRANSFER_MODE_RELIABLE, channel := 0):
-	mp.api.send_service_message(name, args, peer, mode, channel)
+	mp.api.send_service_message(self, args, peer, mode, channel)
 
 ## Receives a message on this service.
 func recv_message(args: Variant):

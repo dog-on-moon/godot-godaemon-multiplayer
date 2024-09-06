@@ -31,3 +31,9 @@ static func add_node_to_storage(node: Node) -> void:
 ## Removes a node from the cache storage and saves
 static func remove_node_from_storage(node: Node) -> void:
 	cache_storage.remove_node_from_cache(node)
+
+static func get_index(scene_file_path: String) -> int:
+	return cache_storage.cache_dict.get(scene_file_path, -1)
+
+static func get_scene_file_path(index: int) -> String:
+	return cache_storage.rep_id_to_scene_path.get(index, '')

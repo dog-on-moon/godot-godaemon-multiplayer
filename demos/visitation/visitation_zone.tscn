@@ -43,7 +43,9 @@ grow_horizontal = 2
 grow_vertical = 2
 metadata/_r = 0
 metadata/_mp = {
-NodePath(":modulate"): [0, 2, true, false]
+NodePath(":modulate"): [0, 2, true, false],
+NodePath("Button:press_count"): [0, 2, true, false],
+NodePath("Button:position"): [0, 2, true, false]
 }
 
 [node name="Button" type="Button" parent="."]
@@ -62,7 +64,3 @@ grow_horizontal = 2
 grow_vertical = 2
 text = "Presses: %s"
 script = SubResource("GDScript_xsbw1")
-metadata/_mp = {
-NodePath(":press_count"): [0, 2, true, false],
-NodePath(":position"): [0, 2, true, false]
-}
