@@ -84,6 +84,7 @@ func start_connection() -> bool:
 		api.peer_disconnected.connect(peer_disconnected.emit)
 	
 	api.multiplayer_peer = peer
+	api.connected()
 	connection_success.emit()
 	return true
 
@@ -94,8 +95,7 @@ func end_connection() -> bool:
 		return false
 	connection_state = ConnectionState.DISCONNECTED
 	var api: GodaemonMultiplayerAPI = multiplayer
-	api.multiplayer_peer.close()
-	api.mp = null
+	api.disconnected()
 	api.scene_multiplayer.auth_callback = Callable()
 	if api.scene_multiplayer.peer_authenticating.is_connected(authenticator.server_start_auth):
 		api.scene_multiplayer.peer_authenticating.disconnect(authenticator.server_start_auth)

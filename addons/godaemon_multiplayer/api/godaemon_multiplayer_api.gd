@@ -2,7 +2,10 @@ extends MultiplayerAPIExtension
 class_name GodaemonMultiplayerAPI
 ## An extension of SceneMultiplayer, re-implementing its base overrides.
 
+const RpcSerializer = preload("res://addons/godaemon_multiplayer/api/rpc_serializer.gd")
+
 var mp: MultiplayerRoot
+var rpc_serializer: RpcSerializer
 
 ## Use this instead of get_remote_sender_id().
 ## Can also do MultiplayerRoot.get_remote_sender_id()
@@ -15,6 +18,17 @@ static var network_profiler_peer := 1
 ## Cache for connected peers, mapping them to null.
 ## Does not include the server.
 var connected_peers := {}
+
+func connected():
+	rpc_serializer = RpcSerializer.new(mp)
+
+func disconnected():
+	mp = null
+	rpc_serializer.cleanup()
+	rpc_serializer = null
+	connected_peers = {}
+	scene_multiplayer.clear()
+	multiplayer_peer.close()
 
 #region SceneMultiplayer Overrides
 
@@ -136,13 +150,14 @@ static var test_idx := 0
 
 func _outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Error:
 	# Ensure there is a valid RPC config.
-	var config: Dictionary = node.get_node_rpc_config()
-	if method not in config:
-		if node.get_script():
-			config = node.get_script().get_rpc_config()
+	var config: Dictionary = {}
+	if node.get_script():
+		config.merge(node.get_script().get_rpc_config())
+	config.merge(node.get_node_rpc_config())
 	if method not in config:
 		push_error("GodaemonMultiplayerAPI._outbound_rpc could not find RPC config")
 		return ERR_UNCONFIGURED
+	var method_idx: int = config.keys().find(method)
 	config = config[method]
 	var rpc_mode: RPCMode = config.get("rpc_mode", RPC_MODE_AUTHORITY)
 	var transfer_mode: MultiplayerPeer.TransferMode = config.get("transfer_mode", MultiplayerPeer.TRANSFER_MODE_RELIABLE)
@@ -150,8 +165,8 @@ func _outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Er
 	var channel: int = config.get("channel", 0)
 	
 	# Validate node.
-	var path := mp.get_path_to(node)
-	if not path:
+	var node_path := mp.get_path_to(node)
+	if not node_path:
 		push_error("GodaemonMultiplayerAPI._outbound_rpc could not find path to node")
 		return ERR_UNAVAILABLE
 	if not node.has_method(method):
@@ -182,7 +197,8 @@ func _outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Er
 			continue
 		
 		# Filter RPC through MultiplayerRoot.
-		var bytes := var_to_bytes([int(from_peer), to_peer, path, method, args])
+		
+		var bytes := rpc_serializer.compress_rpc(from_peer, to_peer, node_path, method_idx, args)
 		var target_peer: int = 1 if mp.is_client() else to_peer
 		_profile_rpc(false, node.get_instance_id(), bytes.size() + 1)
 		_send_command(NetCommand.RPC, bytes, target_peer, transfer_mode, channel)
@@ -190,18 +206,27 @@ func _outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Er
 
 func _inbound_rpc(bytes: PackedByteArray):
 	# Read bytes.
-	var data := bytes_to_var(bytes)
-	var from_peer: int = data[0] if mp.is_client() else remote_sender
-	var to_peer: int = data[1]
-	var node_path: NodePath = data[2]
-	var method: StringName = data[3]
-	var args: Array = data[4]
+	var data := rpc_serializer.decompress_rpc(bytes)
+	var from_peer: int = data.get('from_peer')
+	var to_peer: int = data.get('to_peer')
+	var node_path: NodePath = data.get('node_path')
+	var method_idx: int = data.get('method_idx')
+	var args: Array = data.get('args')
 	
 	# Ensure node and callable can be found.
 	var node := mp.get_node_or_null(node_path)
 	if not node:
 		return
+	var config: Dictionary = {}
+	if node.get_script():
+		config.merge(node.get_script().get_rpc_config())
+	config.merge(node.get_node_rpc_config())
+	var method: StringName = config.keys()[method_idx]
 	if not node.has_method(method):
+		return
+	var rpc_mode: MultiplayerAPI.RPCMode = config[method].get("rpc_mode", RPC_MODE_AUTHORITY)
+	if mp.is_server() and rpc_mode != MultiplayerAPI.RPC_MODE_ANY_PEER:
+		push_warning("Client attempted to send RPC on blocked method: %s.%s" % [node_path, method])
 		return
 	var callable: Callable = node[method].bindv(args)
 	
@@ -277,14 +302,15 @@ func _profile_rpc(inbound: bool, instance_id: int, size: int):
 ## Sends a message for a given service.
 ## The service on target peers will be called with ServiceBase.recv_message(args).
 func send_service_message(service: ServiceBase, args: Variant, peer := 0, mode := MultiplayerPeer.TRANSFER_MODE_RELIABLE, channel := 0):
-	var service_name := service.name
-	var data := var_to_bytes([service_name, args, peer, mode, channel])
+	var service_idx := mp.get_children().find(service)
+	assert(service_idx != -1)
+	var data := var_to_bytes([service_idx, args, peer, mode, channel])
 	_profile_rpc(false, service.get_instance_id(), data.size())
 	_send_command(NetCommand.SERVICE, data, peer if mp.is_server() else 1, mode, channel)
 
 func _recv_service_message(data: Array):
-	var service_name: StringName = data[0]
-	var service: ServiceBase = mp.get_service_from_name(service_name)
+	var service_idx: int = data[0]
+	var service: ServiceBase = mp.get_children()[service_idx]
 	_profile_rpc(true, service.get_instance_id(), data.size())
 	if not service:
 		return

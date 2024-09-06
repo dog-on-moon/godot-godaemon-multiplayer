@@ -143,6 +143,7 @@ func start_connection() -> bool:
 				multiplayer.peer_connected.connect(peer_connected.emit)
 			if not multiplayer.peer_disconnected.is_connected(peer_disconnected.emit):
 				multiplayer.peer_disconnected.connect(peer_disconnected.emit)
+			api.connected()
 			connection_success.emit()
 			return true
 		_:
@@ -224,8 +225,7 @@ func end_connection() -> bool:
 		return false
 	connection_state = ConnectionState.DISCONNECTED
 	var api: GodaemonMultiplayerAPI = multiplayer
-	api.multiplayer_peer.close()
-	api.mp = null
+	api.disconnected()
 	if api.server_disconnected.is_connected(end_connection):
 		api.server_disconnected.disconnect(end_connection)
 	if api.peer_disconnected.is_connected(_on_client_peer_disconnect):

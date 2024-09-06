@@ -1,7 +1,7 @@
 [gd_resource type="Resource" script_class="MultiplayerConfig" load_steps=5 format=3 uid="uid://chrm3b4gumtyv"]
 
-[ext_resource type="Script" path="res://addons/godaemon_multiplayer/internal/peer_authenticator.gd" id="1_ph3c1"]
-[ext_resource type="Script" path="res://addons/godaemon_multiplayer/internal/multiplayer_config.gd" id="2_6t7ti"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/config/peer_authenticator.gd" id="1_ph3c1"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/config/multiplayer_config.gd" id="2_6t7ti"]
 [ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/zone/zone_service.gd" id="3_if4t1"]
 [ext_resource type="Script" path="res://demos/visitation/visitation_setup_service.gd" id="4_3s58h"]
 

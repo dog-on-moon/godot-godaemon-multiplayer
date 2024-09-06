@@ -4,7 +4,7 @@ class_name MultiplayerConfig
 ## Configuration data for MultiplayerRoots.
 ## This should be shared between connecting ClientRoots and ServerRoots.
 
-const DEFAULT_AUTHENTICATOR = preload("res://addons/godaemon_multiplayer/internal/peer_authenticator.gd")
+const DEFAULT_AUTHENTICATOR = preload("res://addons/godaemon_multiplayer/config/peer_authenticator.gd")
 
 # @export_group("Services")
 #region
