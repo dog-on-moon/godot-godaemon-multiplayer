@@ -73,6 +73,11 @@ func _toggle_scene_replication(mode: bool):
 	if value_exists != new_value_exists:
 		scene_root.set_meta(key, new_value)
 		EditorInterface.mark_scene_as_unsaved()
+		
+		if new_value == 0:
+			ReplicationCacheManager.add_node_to_storage(scene_root)
+		else:
+			ReplicationCacheManager.remove_node_from_storage(scene_root)
 
 func _on_scene_changed(n=null):
 	_nodes_with_properties = {}
@@ -91,6 +96,7 @@ func _nodes_with_properties_updated():
 			if not scene_root.has_meta(REPCO.META_REPLICATE_SCENE):
 				scene_root.set_meta(REPCO.META_REPLICATE_SCENE, null)
 				scene_replicate_button.button_pressed = true
+				ReplicationCacheManager.add_node_to_storage(scene_root)
 				EditorInterface.mark_scene_as_unsaved()
 		else:
 			scene_replicate_button.disabled = false

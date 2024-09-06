@@ -8,8 +8,8 @@ offset_bottom = 128.0
 scale = Vector2(0.305, 0.305)
 pivot_offset = Vector2(64, 64)
 texture = ExtResource("1_aixar")
+metadata/_r = 0
 metadata/_mp = {
 NodePath(":position"): [0, 2, true, false],
 NodePath(":rotation"): [0, 2, true, false]
 }
-metadata/_r = 0
