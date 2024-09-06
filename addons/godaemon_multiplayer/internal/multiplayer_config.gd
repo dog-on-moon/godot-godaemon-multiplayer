@@ -59,6 +59,11 @@ const DEFAULT_AUTHENTICATOR = preload("res://addons/godaemon_multiplayer/interna
 ## If set to a value greater than 0.0, the maximum amount of time peers can stay
 ## in the authenticating state, after which the authentication will automatically fail.
 @export_range(0.0, 15.0, 0.1, "or_greater") var authentication_timeout := 3.0
+
+## The version of the MultiplayerConfig.
+## The default authentication protocol will prevent a server from accepting a
+## client that provides a different version number.
+@export_range(0, 1, 1, "or_greater") var version: int = 1
 #endregion
 
 @export_group("Security")

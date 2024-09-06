@@ -15,6 +15,7 @@ out_bandwidth = 0
 connection_timeout = 5.0
 authenticator = ExtResource("1_ph3c1")
 authentication_timeout = 3.0
+version = 1
 allow_object_decoding = false
 use_dtls_encryption = false
 peer_timeout = 0.032

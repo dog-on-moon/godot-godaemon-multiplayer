@@ -21,12 +21,12 @@ var mp: MultiplayerRoot
 ## The default function for when client authentication begins.
 ## Can be set to implement a more refined authentication procedure.
 func client_start_auth():
-	send_auth(PackedByteArray([mp.local_peer]))
+	send_auth(PackedByteArray([mp.local_peer, mp.configuration.version]))
 
 ## The default authentication callback from the server after they use send_auth for us.
 ## Can be set to implement a more refined authentication procedure.
 func client_receive_auth(data: PackedByteArray):
-	if data == PackedByteArray([1]):
+	if data == PackedByteArray([1, mp.configuration.version]):
 		complete_auth()
 
 #endregion
@@ -36,12 +36,12 @@ func client_receive_auth(data: PackedByteArray):
 ## The default function for when client/server authentication begins.
 ## Can be set to implement a more refined authentication procedure.
 func server_start_auth(peer: int):
-	send_auth(PackedByteArray([1]), peer)
+	send_auth(PackedByteArray([1, mp.configuration.version]), peer)
 
 ## The default authentication callback from the client after they use send_auth for us.
 ## Can be set to implement a more refined authentication procedure.
 func server_receive_auth(peer: int, data: PackedByteArray):
-	if data == PackedByteArray([peer]):
+	if data == PackedByteArray([peer, mp.configuration.version]):
 		complete_auth(peer)
 
 #endregion
