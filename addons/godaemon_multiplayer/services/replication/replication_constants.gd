@@ -35,7 +35,6 @@ static func set_replicated_property(object: Node, property_path: NodePath, send:
 	var property_dict: Dictionary = object.get_meta(key_name)
 	property_dict[property_path] = [send, recv, reliable, interp]
 	ReplicationCacheManager.add_node_to_storage(object)
-	ReplicationCacheManager.add_prop_to_node_storage(object, property_path)
 	return true
 
 ## Gets the replicated property of a node.
@@ -49,8 +48,6 @@ static func remove_replicated_property(object: Node, property_path: NodePath):
 	property_dict.erase(property_path)
 	if not property_dict:
 		object.remove_meta(META_SYNC_PROPERTIES)
-
-	ReplicationCacheManager.remove_prop_from_node_storage(object, property_path)
 
 ## Returns the replicated property dict of a node.
 static func get_replicated_property_dict(object: Node) -> Dictionary:

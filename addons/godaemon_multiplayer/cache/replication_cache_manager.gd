@@ -13,18 +13,21 @@ static func _static_init() -> void:
 	else:
 		cache_storage = CACHE_STORAGE.new()
 
+	if Engine.is_editor_hint():
+		# Clean up any old lingering entries that may no longer be valid.
+		var any_changed: bool = false
+		for file_path: String in cache_storage.cache_dict.keys().duplicate():
+			if not FileAccess.file_exists(file_path):
+				cache_storage.cache_dict.erase(file_path)
+				any_changed = true
+
+		if any_changed:
+			cache_storage.save()
+
 ## Adds a node to the cache storage and saves
 static func add_node_to_storage(node: Node) -> void:
 	cache_storage.add_node_to_cache(node)
 
-## Adds a property to the given node cache and saves
-static func add_prop_to_node_storage(node: Node, property: String) -> void:
-	cache_storage.add_prop_to_node_cache(node, property)
-
 ## Removes a node from the cache storage and saves
 static func remove_node_from_storage(node: Node) -> void:
 	cache_storage.remove_node_from_cache(node)
-
-## Removes a property from the given node cache and saves
-static func remove_prop_from_node_storage(node: Node, property: String) -> void:
-	cache_storage.remove_prop_from_node_cache(node, property)
