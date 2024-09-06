@@ -15,15 +15,17 @@ const RESERVED_ZONE_CHANNELS_HALF := RESERVED_ZONE_CHANNELS / 2
 const ZoneSvc = preload("res://addons/godaemon_multiplayer/services/zone/zone_svc.gd")
 var svc: SubViewportContainer
 
+@onready var peer_service: PeerService = mp.get_service(PeerService)
+
 var _initial_channel := 0
 
 func _ready() -> void:
 	mp.peer_disconnected.connect(_peer_disconnected)
 	
 	if mp.is_server():
-		mp.api.outbound_rpc_target_modifiers.append(_outbound_rpc_target_modifier)
-		mp.api.outbound_rpc_filters.append(_rpc_filter)
-	mp.api.rpc_channel_modifiers.append(_zone_service_channel_modifier)
+		mp.api.rpc.target_peer_modifiers.append(_outbound_rpc_target_modifier)
+		mp.api.rpc.outbound_filters.append(_rpc_filter)
+	mp.api.rpc.channel_modifiers.append(_zone_service_channel_modifier)
 	_initial_channel = get_initial_channel(mp)
 	
 	svc = ZoneSvc.new()
@@ -144,8 +146,8 @@ func add_interest(peer: int, zone: Zone) -> bool:
 	
 	# Broadcast this information.
 	var zone_index: int = zones[zone]
-	var _channel := mp.api.get_node_channel(self)
-	mp.api.set_node_channel(self, get_zone_channel(zone))
+	var _channel := mp.api.rpc.get_node_channel_override(self)
+	mp.api.rpc.set_node_channel_override(self, get_zone_channel(zone))
 	_target_add_interest.rpc_id(
 		peer, ReplicationCacheManager.get_index(zone.scene.scene_file_path), zone_index, zone.interest,
 		zone.get_replication_rpc_data(peer, zone.replication_nodes)
@@ -154,7 +156,7 @@ func add_interest(peer: int, zone: Zone) -> bool:
 		if each_peer_that_cares == peer:
 			continue
 		_global_add_interest.rpc_id(each_peer_that_cares, peer, zone_index)
-	mp.api.set_node_channel(self, _channel)
+	mp.api.rpc.set_node_channel_override(self, _channel)
 	
 	zone.interest_added.emit(peer)
 	return true
@@ -174,13 +176,13 @@ func remove_interest(peer: int, zone: Zone) -> bool:
 	
 	# Broadcast this information.
 	var zone_index: int = zones[zone]
-	var _channel := mp.api.get_node_channel(self)
-	mp.api.set_node_channel(self, get_zone_channel(zone))
-	if peer in mp.api.connected_peers:
+	var _channel := mp.api.rpc.get_node_channel_override(self)
+	mp.api.rpc.set_node_channel_override(self, get_zone_channel(zone))
+	if peer in peer_service.get_peers():
 		_target_remove_interest.rpc_id(peer, zone_index)
 	for each_peer_that_cares in zone.interest:
 		_global_remove_interest.rpc_id(each_peer_that_cares, peer, zone_index)
-	mp.api.set_node_channel(self, _channel)
+	mp.api.rpc.set_node_channel_override(self, _channel)
 	
 	zone.interest_removed.emit(peer)
 	return true

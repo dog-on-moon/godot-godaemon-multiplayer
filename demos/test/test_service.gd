@@ -18,8 +18,8 @@ func _ready() -> void:
 			if peer == multiplayer.get_unique_id():
 				terminal.info("New username: %s" % username)
 				print('Hi! Im %s!' % username)
-				if username == &"Moondog":
-					send_message('Hi %s.' % username)
+				# if username == &"Moondog":
+				# 	send_message('Hi %s.' % username)
 	)
 	username_service.username_request_failed.connect(print.bind('Request failed :O'))
 	if mp.is_client():
@@ -52,7 +52,3 @@ func _ready() -> void:
 						zone_service.remove_interest(peer, z)
 						await get_tree().create_timer(BASE + randf() * RAND).timeout
 		)
-
-func recv_message(args: Variant):
-	terminal.info("New message: %s" % [args])
-	print('%s: %s' % [mp.name, args])

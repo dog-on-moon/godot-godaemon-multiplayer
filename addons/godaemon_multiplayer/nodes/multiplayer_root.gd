@@ -97,8 +97,8 @@ var api: GodaemonMultiplayerAPI:
 var local_peer: int:
 	get: return api.get_unique_id()
 
-func get_remote_sender_id() -> int:
-	return api.remote_sender
+var remote_peer: int:
+	get: return api.get_remote_sender_id()
 
 var authenticator: PeerAuthenticator
 
@@ -192,6 +192,9 @@ func _determine_service_channels():
 
 func _setup_services():
 	_cleanup_services()
+	
+	api.repository.add_node(self)
+	
 	var nodes_to_add: Array[ServiceBase] = []
 	for script: Script in configuration.services:
 		if not script.get_global_name():
@@ -205,6 +208,7 @@ func _setup_services():
 		service_cache[script] = n
 		service_name_cache[script.get_global_name()] = n
 		n.name = script.get_global_name()
+		api.repository.add_node(n)
 		nodes_to_add.append(n)
 	
 	# this add children shenanigans is a bit tragic,
@@ -230,12 +234,10 @@ func _cleanup_services():
 	service_name_cache = {}
 
 ## Returns a service by script reference.
-func get_service(t: Script) -> ServiceBase:
+func get_service(t: Script, required := true) -> ServiceBase:
+	if required:
+		assert(t in service_cache, "MultiplayerConfig missing dependent service: %s" % t.get_global_name())
 	return service_cache.get(t, null)
-
-## Returns a service by name reference.
-func get_service_from_name(service_name: StringName) -> ServiceBase:
-	return service_name_cache.get(service_name, null)
 
 ## Determines if a service exists on the MultiplayerRoot.
 func has_service(t: Script) -> bool:
@@ -254,16 +256,11 @@ func get_service_channel_start(service: ServiceBase) -> int:
 
 ## Returns true if the MultiplayerRoot is being ran as a client.
 func is_client() -> bool:
-	return multiplayer.get_unique_id() != 1
+	return api.is_client()
 
 ## Returns true if the MultiplayerRoot is being ran as a server.
 func is_server() -> bool:
-	return multiplayer.get_unique_id() == 1
-
-## Returns true if the Zone is being ran as a local scene.
-## This is useful for testing and developing areas.
-func is_local_dev() -> bool:
-	return self == get_tree().current_scene
+	return api.is_server()
 
 ## Finds the MultiplayerRoot associated with a given Node.
 static func fetch(node: Node) -> MultiplayerRoot:

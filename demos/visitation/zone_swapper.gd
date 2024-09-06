@@ -16,7 +16,7 @@ var server_zones: Array[Zone] = []
 @onready var zone_service: ZoneService = mp.get_service(ZoneService)
 
 func _ready() -> void:
-	mp.api.set_rpc_server_receive_only(self, &"_request_zone")
+	mp.api.rpc.set_rpc_server_receive_only(self, &"_request_zone")
 	
 	if mp.is_client():
 		for idx in zone_buttons:
@@ -26,7 +26,7 @@ func _ready() -> void:
 
 @rpc("any_peer")
 func _request_zone(idx: int):
-	var peer := mp.get_remote_sender_id()
+	var peer := multiplayer.get_remote_sender_id()
 	var zone: Zone = server_zones[idx]
 	if zone_service.has_interest(peer, zone):
 		zone_service.remove_interest(peer, zone)

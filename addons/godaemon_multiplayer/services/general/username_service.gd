@@ -25,9 +25,9 @@ func _ready() -> void:
 			if key == USERNAME_KEY:
 				username_updated.emit(peer, get_username(peer))
 	)
-	mp.api.set_rpc_ratelimit(self, &"_request_username", 2, 1.0)
-	mp.api.set_rpc_server_receive_only(self, &"_request_username")
-	mp.api.set_node_channel(self, peer_service.get_initial_channel(mp))
+	mp.api.rpc.set_rpc_ratelimit(self, &"_request_username", 2, 1.0)
+	mp.api.rpc.set_rpc_server_receive_only(self, &"_request_username")
+	mp.api.rpc.set_node_channel_override(self, peer_service.get_initial_channel(mp))
 
 func _setup_peer_name(peer: int):
 	if mp.is_server():
@@ -57,7 +57,7 @@ func request_username(username: StringName):
 
 @rpc("any_peer")
 func _request_username(username: StringName):
-	set_username_server(mp.get_remote_sender_id(), username)
+	set_username_server(multiplayer.get_remote_sender_id(), username)
 
 ## Sets the username on the server,
 func set_username_server(peer: int, username: StringName):

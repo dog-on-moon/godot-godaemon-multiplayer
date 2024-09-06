@@ -22,7 +22,7 @@ func _ready() -> void:
 	if mp.is_server():
 		var spawn_region := Vector2(get_parent().size.x, position.y) - size
 		position = Vector2(spawn_region.x * randf(), spawn_region.y * randf())
-		mp.api.set_rpc_server_receive_only(self, &\"_request_pressed\")
+		mp.api.rpc.set_rpc_server_receive_only(self, &\"_request_pressed\")
 
 @rpc(\"any_peer\")
 func _request_pressed():

@@ -38,17 +38,18 @@ var peer_local_data := {}
 func _ready() -> void:
 	mp.peer_connected.connect(_peer_connected)
 	mp.peer_disconnected.connect(_peer_disconnected)
-	mp.api.set_rpc_ratelimit(self, &"_request_sync", 1, 1.0)
-	mp.api.set_rpc_server_receive_only(self, &"_request_sync")
+	mp.api.rpc.set_rpc_ratelimit(self, &"_request_sync", 1, 1.0)
+	mp.api.rpc.set_rpc_server_receive_only(self, &"_request_sync")
 
 func get_reserved_channels() -> int:
 	return 1
 
 func _peer_connected(peer: int):
-	if peer == 1:
-		return
-	_sync.rpc_id(peer, peer_data)
+	peer_data[peer] = {}
+	if mp.is_server() and peer != 1:
+		_sync.rpc_id(peer, peer_data)
 
+@rpc
 func _peer_disconnected(peer: int):
 	# We're dropping all of this data -- emit it in case anyone cares
 	peer_data_dropped.emit(
@@ -57,13 +58,12 @@ func _peer_disconnected(peer: int):
 	)
 	peer_data.erase(peer)
 	peer_local_data.erase(peer)
+	if mp.is_server() and peer != 1:
+		_peer_disconnected.rpc(peer)
 
-func get_peers(include_server := false) -> Array[int]:
-	var peers: Array[int] = []
-	peers.assign(mp.api.get_peers())
-	if not include_server:
-		peers.erase(1)
-	return peers
+## Returns all peer IDs. Includes the server.
+func get_peers() -> Dictionary:
+	return peer_data
 
 #region Data Interface
 
@@ -164,7 +164,7 @@ func _sync(_peer_data: Dictionary):
 
 @rpc("any_peer")
 func _request_sync():
-	assert(mp.is_server() and mp.get_remote_sender_id() != 1)
-	_sync.rpc_id(mp.get_remote_sender_id(), peer_data)
+	assert(mp.is_server() and multiplayer.get_remote_sender_id() != 1)
+	_sync.rpc_id(multiplayer.get_remote_sender_id(), peer_data)
 
 #endregion

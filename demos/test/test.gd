@@ -31,7 +31,7 @@ func _unreliable_hello():
 	if mp.is_server():
 		return
 	var my_username := username_service.get_local_username()
-	var username := username_service.get_username(mp.get_remote_sender_id())
+	var username := username_service.get_username(multiplayer.get_remote_sender_id())
 	print('[%s]: %s says hi in %s! (unreliable)' % [my_username, username, scene_name])
 
 @rpc("reliable")
@@ -39,5 +39,5 @@ func _reliable_hello():
 	if mp.is_server():
 		return
 	var my_username := username_service.get_local_username()
-	var username := username_service.get_username(mp.get_remote_sender_id())
+	var username := username_service.get_username(multiplayer.get_remote_sender_id())
 	print('[%s]: %s says hi in %s! (reliable)' % [my_username, username, scene_name])
