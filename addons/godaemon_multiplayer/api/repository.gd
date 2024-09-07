@@ -2,12 +2,11 @@ extends RefCounted
 ## A repository of unique node IDs for the GodaemonMultiplayerAPI.
 ## Nodes must be registered here on client and server to use RPCs.
 
-## Returns the max bytes of the repository.
-## Turning this up will support more tracked nodes on the server/client.
-const MAX_BITS := 16
+## The max size of the node repository, in bits.
+## Turning this up will support more nodes on the server/client.
+const MAX_BITS := 32
+const MAX_BYTES := MAX_BITS / 8
 const MAX_ID := 2 ** MAX_BITS
-
-static var _current_id := 0
 
 var api: GodaemonMultiplayerAPI
 
@@ -24,16 +23,32 @@ var id_to_node := {}
 
 ## Adds a Node to the repository. Can specify a node_id. Returns the set id.
 func add_node(node: Node, node_id := -1) -> int:
+	assert(node not in node_to_id)
+	assert(node_to_id.size() < MAX_ID, "Repository overflow.")
 	if node_id == -1:
 		node_id = 0
-		while node_id in id_to_node and node_id < MAX_ID:
+		while node_id in id_to_node:
 			node_id += 1
+			if node_id >= MAX_ID:
+				node_id = 0
 	else:
 		assert(node_id not in node_to_id, "Node IDs are stomping.")
-	assert(node_id < MAX_ID, "Repository overflow.")
+	# print('[%s] adding %s with ID=%s' % [api.mp.name, node, node_id])
 	node_to_id[node] = node_id
 	id_to_node[node_id] = node
+	node.tree_exited.connect(remove_node_id.bind(node_id), CONNECT_ONE_SHOT + CONNECT_DEFERRED)
 	return node_id
+
+## Removes a Node from the repository.
+func remove_node(node: Node):
+	assert(node in node_to_id)
+	id_to_node.erase(node_to_id[node])
+	node_to_id.erase(node)
+
+func remove_node_id(id: int):
+	assert(id in id_to_node)
+	node_to_id.erase(id_to_node[id])
+	id_to_node.erase(id)
 
 ## Returns the node based on an ID in the repository. Returns null if not found.
 func get_node(id: int) -> Node:

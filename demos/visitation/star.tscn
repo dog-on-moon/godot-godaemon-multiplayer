@@ -3,10 +3,13 @@
 [ext_resource type="Texture2D" uid="uid://lnofiff3si8o" path="res://icon.svg" id="1_aixar"]
 
 [node name="Star" type="TextureRect"]
+z_index = -1
+z_as_relative = false
 offset_right = 128.0
 offset_bottom = 128.0
 scale = Vector2(0.305, 0.305)
 pivot_offset = Vector2(64, 64)
+mouse_filter = 2
 texture = ExtResource("1_aixar")
 metadata/_r = 0
 metadata/_mp = {

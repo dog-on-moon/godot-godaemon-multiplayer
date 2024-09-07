@@ -20,8 +20,7 @@ func _ready() -> void:
 	pressed.connect(_request_pressed.rpc)
 	
 	if mp.is_server():
-		var spawn_region := Vector2(get_parent().size.x, position.y) - size
-		position = Vector2(spawn_region.x * randf(), spawn_region.y * randf())
+		position = (get_parent().size - size) * Vector2(randf(), randf())
 		mp.api.rpc.set_rpc_server_receive_only(self, &\"_request_pressed\")
 
 @rpc(\"any_peer\")
@@ -29,9 +28,12 @@ func _request_pressed():
 	press_count += 1
 	
 	var star := STAR.instantiate()
-	star.position = Vector2(get_parent().size.x * randf(), get_parent().size.y * randf())
+	star.global_position = Vector2(get_parent().size.x * randf(), get_parent().size.y * randf())
 	star.rotation_degrees = randi_range(0, 360)
 	get_parent().add_child(star)
+	
+	var replication_service: ReplicationService = mp.get_service(ReplicationService)
+	replication_service.set_visibility(star, true)
 "
 
 [node name="VisitationZone" type="Control"]
@@ -49,18 +51,10 @@ NodePath("Button:position"): [0, 2, true, false]
 }
 
 [node name="Button" type="Button" parent="."]
+z_index = 1
 custom_minimum_size = Vector2(128, 48)
 layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -64.0
-offset_top = 100.0
-offset_right = 64.0
-offset_bottom = 148.0
-grow_horizontal = 2
-grow_vertical = 2
+offset_right = 128.0
+offset_bottom = 48.0
 text = "Presses: %s"
 script = SubResource("GDScript_xsbw1")

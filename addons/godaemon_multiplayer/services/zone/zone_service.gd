@@ -12,37 +12,46 @@ signal cl_removed_interest(zone: Zone)
 const RESERVED_ZONE_CHANNELS := 32
 const RESERVED_ZONE_CHANNELS_HALF := RESERVED_ZONE_CHANNELS / 2
 
+const ZONE = preload("res://addons/godaemon_multiplayer/services/zone/zone.tscn")
+const ZONE_SVC = preload("res://addons/godaemon_multiplayer/services/zone/zone_svc.tscn")
 const ZoneSvc = preload("res://addons/godaemon_multiplayer/services/zone/zone_svc.gd")
 var svc: SubViewportContainer
 
 @onready var peer_service: PeerService = mp.get_service(PeerService)
+@onready var replication_service: ReplicationService = mp.get_service(ReplicationService)
 
 var _initial_channel := 0
 
 func _ready() -> void:
-	mp.peer_disconnected.connect(_peer_disconnected)
+	assert(replication_service)
 	
-	if mp.is_server():
-		mp.api.rpc.target_peer_modifiers.append(_outbound_rpc_target_modifier)
-		mp.api.rpc.outbound_filters.append(_rpc_filter)
 	mp.api.rpc.channel_modifiers.append(_zone_service_channel_modifier)
 	_initial_channel = get_initial_channel(mp)
 	
-	svc = ZoneSvc.new()
-	svc.name = "SVC"
-	add_child(svc)
+	if mp.is_server():
+		mp.peer_disconnected.connect(_peer_disconnected)
+		mp.api.rpc.target_peer_modifiers.append(_outbound_rpc_target_modifier)
+		mp.api.rpc.outbound_filters.append(_rpc_filter)
+		
+		svc = ZONE_SVC.instantiate()
+		add_child(svc)
+		replication_service.set_visibility(svc, true)
 
 func _peer_disconnected(peer: int):
-	if mp.is_server():
-		clear_peer_interest(peer)
-	peer_to_zones.erase(peer)
+	clear_peer_interest(peer)
 
 #region Service internals
 
 func _zone_service_channel_modifier(channel: int, node: Node, transfer_mode: MultiplayerPeer.TransferMode):
-	var zone := get_node_zone(node)
-	if zone:
-		channel = get_zone_channel(zone, transfer_mode)
+	if node == replication_service:
+		for n in replication_service._rpc_added_nodes + replication_service._rpc_removed_nodes:
+			var zone := get_node_zone(n)
+			if zone:
+				return get_zone_channel(zone, transfer_mode)
+	else:
+		var zone := get_node_zone(node)
+		if zone:
+			return get_zone_channel(zone, transfer_mode)
 	return channel
 
 func _outbound_rpc_target_modifier(from_peer: int, target_peers: Array[int], node: Node, method: StringName, args: Array):
@@ -84,16 +93,10 @@ func get_zone_channel(zone: Zone, transfer_mode := MultiplayerPeer.TransferMode.
 
 #region Zone Management
 
-var CURRENT_ZONE_IDX := 0
+var zone_index := 0
 
 ## A dictionary mapping zones to a unique index.
 var zones := {}
-
-## A dictionary mapping a unique index to each zone.
-var zone_index_to_zone := {}
-
-## A dictionary mapping peers to the zones they have interest in.
-var peer_to_zones := {}
 
 ## Creates a new Zone. You can specify an instantiated scene to be added to it.
 ## Must be called on the server to function properly.
@@ -101,16 +104,13 @@ func add_zone(node: Node) -> Zone:
 	assert(mp.is_server())
 	assert(node.scene_file_path, "Added zones must be from a PackedScene")
 	assert(ReplicationCacheManager.get_index(node.scene_file_path) != -1, "Zone must have scene replication enabled")
-	var zone := Zone.new()
-	zone.mp = mp
-	zone.zone_service = self
+	var zone := ZONE.instantiate()
 	zone.scene = node
-	zones[zone] = CURRENT_ZONE_IDX
-	zone_index_to_zone[CURRENT_ZONE_IDX] = zone
-	zone.name = "Zone%s" % CURRENT_ZONE_IDX
-	CURRENT_ZONE_IDX += 1
+	zones[zone] = zone_index
+	zone_index += 1
 	zone.add_child(node)
 	svc.add_child(zone)
+	replication_service.set_visibility(zone.scene, true)
 	return zone
 
 ## Removes a Zone and frees it. Returns true on successful removal.
@@ -123,7 +123,6 @@ func remove_scene(zone: Zone) -> bool:
 		remove_interest(peer, zone)
 	
 	# Remove zone.
-	zone_index_to_zone.erase(zones[zone])
 	zones.erase(zone)
 	svc.remove_child(zone)
 	zone.queue_free()
@@ -140,24 +139,8 @@ func add_interest(peer: int, zone: Zone) -> bool:
 		push_warning("ZoneService.add_interest peer %s already had interest with %s" % [peer, zone.get_path_to(mp)])
 		return false
 	
-	# Update interest state.
-	peer_to_zones.get_or_add(peer, {})[zone] = null
 	zone.interest[peer] = null
-	
-	# Broadcast this information.
-	var zone_index: int = zones[zone]
-	var _channel := mp.api.rpc.get_node_channel_override(self)
-	mp.api.rpc.set_node_channel_override(self, get_zone_channel(zone))
-	_target_add_interest.rpc_id(
-		peer, ReplicationCacheManager.get_index(zone.scene.scene_file_path), zone_index, zone.interest,
-		zone.get_replication_rpc_data(peer, zone.replication_nodes)
-	)
-	for each_peer_that_cares in zone.interest:
-		if each_peer_that_cares == peer:
-			continue
-		_global_add_interest.rpc_id(each_peer_that_cares, peer, zone_index)
-	mp.api.rpc.set_node_channel_override(self, _channel)
-	
+	replication_service.set_peer_visibility(zone, peer, true)
 	zone.interest_added.emit(peer)
 	return true
 
@@ -169,21 +152,8 @@ func remove_interest(peer: int, zone: Zone) -> bool:
 		return false
 	
 	# Update interest state.
-	peer_to_zones.get_or_add(peer, {}).erase(zone)
-	if peer not in peer_to_zones:
-		peer_to_zones.erase(peer)
 	zone.interest.erase(peer)
-	
-	# Broadcast this information.
-	var zone_index: int = zones[zone]
-	var _channel := mp.api.rpc.get_node_channel_override(self)
-	mp.api.rpc.set_node_channel_override(self, get_zone_channel(zone))
-	if peer in peer_service.get_peers():
-		_target_remove_interest.rpc_id(peer, zone_index)
-	for each_peer_that_cares in zone.interest:
-		_global_remove_interest.rpc_id(each_peer_that_cares, peer, zone_index)
-	mp.api.rpc.set_node_channel_override(self, _channel)
-	
+	replication_service.set_peer_visibility(zone, peer, false)
 	zone.interest_removed.emit(peer)
 	return true
 
@@ -191,82 +161,14 @@ func remove_interest(peer: int, zone: Zone) -> bool:
 ## (NOTE: When calling on the client, this will only check for zones
 ## that the client peer shares with the target peer.)
 func has_interest(peer: int, zone: Zone) -> bool:
-	return zone in peer_to_zones.get(peer, {})
+	return peer in zone.interest
 
 ## Clears all interest from a peer, preventing them from viewing any Zone.
 func clear_peer_interest(peer: int):
 	assert(mp.is_server())
-	for zone: Zone in peer_to_zones.get(peer, {}).duplicate():
-		remove_interest(peer, zone)
-
-## Emitted on a target client to give them interest.
-@rpc()
-func _target_add_interest(scene_path_index: int, zone_index: int, current_interest: Dictionary, replication_rpc_data: Dictionary):
-	assert(mp.is_client())
-	var zone := Zone.new()
-	zone.mp = mp
-	zone.zone_service = self
-	zone.interest = current_interest
-	zone.name = "Zone%s" % zone_index
-	zones[zone] = zone_index
-	zone_index_to_zone[zone_index] = zone
-	var node: Node = load(ReplicationCacheManager.get_scene_file_path(scene_path_index)).instantiate()
-	zone.scene = node
-	zone.add_child(node)
-	svc.add_child(zone)
-	for peer in zone.interest:
-		peer_to_zones.get_or_add(peer, {})[zone] = null
-		zone.interest_added.emit(peer)
-	zone.set_replication_rpc_data(replication_rpc_data)
-	cl_added_interest.emit(zone)
-	return zone
-
-## Emitted for all clients (not including the target) to inform them of interest.
-@rpc()
-func _global_add_interest(peer: int, zone_index: int):
-	assert(mp.is_client())
-	if zone_index not in zone_index_to_zone:
-		push_warning("ZoneService._global_add_interest did not have zone index, bug?")
-		return
-	var zone: Zone = zone_index_to_zone[zone_index]
-	peer_to_zones.get_or_add(peer, {})[zone] = null
-	zone.interest[peer] = null
-	zone.interest_added.emit(peer)
-
-## Emitted on a target client to remove their interest.
-@rpc()
-func _target_remove_interest(zone_index: int):
-	assert(mp.is_client())
-	if zone_index not in zone_index_to_zone:
-		push_warning("ZoneService._target_remove_interest did not have zone index, bug?")
-		return
-	var peer: int = mp.local_peer
-	var zone: Zone = zone_index_to_zone[zone_index]
-	peer_to_zones.get_or_add(peer, {}).erase(zone)
-	if not peer_to_zones[peer]:
-		peer_to_zones.erase(peer)
-	zone.interest.erase(peer)
-	zone.interest_removed.emit(peer)
-	cl_removed_interest.emit(zone)
-	
-	zones.erase(zone)
-	zone_index_to_zone.erase(zone_index)
-	svc.remove_child(zone)
-	zone.queue_free()
-
-## Emitted for all other clients (not including the target) to inform them of lost interest.
-@rpc()
-func _global_remove_interest(peer: int, zone_index: int):
-	assert(mp.is_client())
-	if zone_index not in zone_index_to_zone:
-		push_warning("ZoneService._global_remove_interest did not have zone index, bug?")
-		return
-	var zone: Zone = zone_index_to_zone[zone_index]
-	peer_to_zones.get_or_add(peer, {}).erase(zone)
-	if not peer_to_zones[peer]:
-		peer_to_zones.erase(peer)
-	zone.interest.erase(peer)
-	zone.interest_removed.emit(peer)
+	for zone: Zone in zones:
+		if has_interest(peer, zone):
+			remove_interest(peer, zone)
 
 #endregion
 

@@ -5,6 +5,8 @@
 [resource]
 script = ExtResource("1_cf2jc")
 cache_dict = {
+"res://addons/godaemon_multiplayer/services/zone/zone.tscn": 3,
+"res://addons/godaemon_multiplayer/services/zone/zone_svc.tscn": 4,
 "res://demos/visitation/star.tscn": 0,
 "res://demos/visitation/visitation_zone.tscn": 1,
 "res://demos/visitation/zone_swapper.tscn": 2

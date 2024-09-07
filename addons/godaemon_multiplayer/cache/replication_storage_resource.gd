@@ -2,6 +2,12 @@
 extends Resource
 ## Global storage of cache data for replication
 
+## The max size of the scene repository, in bits.
+## Turning this up will support more scenes that can be replicated.
+const MAX_BITS := 16
+const MAX_BYTES := MAX_BITS / 8
+const MAX_ID := 2 ** MAX_BITS
+
 const UTIL := preload("res://addons/godaemon_multiplayer/util/util.gd")
 const SAVE_PATH: String = "res://addons/godaemon_multiplayer/cache/replication_storage.tres"
 
@@ -17,6 +23,8 @@ func add_node_to_cache(node: Node) -> void:
 	var node_path: String = get_node_scene_file_path(node)
 	if node_path not in cache_dict:
 		var next_rep_id: int = get_next_rep_id()
+		if next_rep_id >= MAX_ID:
+			push_error("ReplicationStorageResource is full. Please turn up ReplicationStorageResource.MAX_BITS to %s" % (MAX_BITS * 2))
 		cache_dict[node_path] = next_rep_id
 		rep_id_to_scene_path[next_rep_id] = node_path
 		save()

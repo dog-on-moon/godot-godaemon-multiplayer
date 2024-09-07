@@ -4,6 +4,7 @@ extends RefCounted
 ## The max number of bits reserved for RPC methods.
 ## Turning this up will allow you to add more RPCs on a given node.
 const MAX_RPC_METHOD_BITS := 8
+const MAX_RPC_METHOD_BYTES := MAX_RPC_METHOD_BITS / 8
 const MAX_RPC_METHODS := 2 ** MAX_RPC_METHOD_BITS
 
 var api: GodaemonMultiplayerAPI
@@ -105,8 +106,9 @@ func outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Err
 			continue
 		
 		# Filter RPC through MultiplayerRoot.
-		
 		var bytes := compress_rpc(from_peer, to_peer, node, method_idx, args)
+		if not bytes:
+			continue
 		var target_peer: int = 1 if api.is_client() else to_peer
 		api.profiler.rpc(false, node.get_instance_id(), bytes.size() + 1)
 		api.send_command(GodaemonMultiplayerAPI.NetCommand.RPC, bytes, target_peer, transfer_mode, channel)
@@ -188,126 +190,77 @@ func inbound_rpc(id: int, bytes: PackedByteArray):
 #region RPC Serializer
 
 func compress_rpc(from_peer: int, to_peer: int, node: Node, method_idx: int, args: Array) -> PackedByteArray:
-	var data := PackedByteArray()
-	var s := 0
+	var stream := PackedByteStream.new()
+	stream.setup_write(
+		1  # header
+		+ (4 if api.is_server() else 0)  # from_peer
+		+ 4  # to_peer
+		+ api.repository.MAX_BYTES  # node id
+		+ MAX_RPC_METHOD_BYTES  # method id
+	)
 	
-	# Encode from_peer.
+	# Determine header flags.
+	var header_data := 0b00000000
+	var packing_args := args.size() != 0
+	if packing_args:
+		header_data ^= 1
+	var dense_args := args and args[0] is PackedByteArray
+	if dense_args:
+		header_data ^= 2
+	stream.write_u8(header_data)
+	
+	# Writeout RPC properties.
 	if api.is_server():
-		s = data.size()
-		data.resize(s + 4)
-		data.encode_u32(s, from_peer)
+		stream.write_u32(from_peer)
+	stream.write_u32(to_peer)
 	
-	# Encode to_peer.
-	s = data.size()
-	data.resize(s + 4)
-	data.encode_u32(s, to_peer)
-	
-	# Encode node.
 	var id := api.repository.get_id(node)
-	assert(id != -1)
-	match api.repository.MAX_BITS:
-		8:
-			s = data.size()
-			data.resize(s + 1)
-			data.encode_u8(s, id)
-		16:
-			s = data.size()
-			data.resize(s + 2)
-			data.encode_u16(s, id)
-		32:
-			s = data.size()
-			data.resize(s + 4)
-			data.encode_u32(s, id)
-		64:
-			s = data.size()
-			data.resize(s + 8)
-			data.encode_s64(s, id)
-		_:
-			assert(false)
+	if id == -1:
+		push_warning("Attempted to send RPC on node without id: %s" % node)
+		return PackedByteArray()
+	stream.write_unsigned(id, api.repository.MAX_BYTES)
 	
 	# Encode method idx.
-	assert(method_idx < MAX_RPC_METHODS)
-	match MAX_RPC_METHOD_BITS:
-		8:
-			s = data.size()
-			data.resize(s + 1)
-			data.encode_u8(s, method_idx)
-		16:
-			s = data.size()
-			data.resize(s + 2)
-			data.encode_u16(s, method_idx)
-		32:
-			s = data.size()
-			data.resize(s + 4)
-			data.encode_u32(s, method_idx)
-		64:
-			s = data.size()
-			data.resize(s + 8)
-			data.encode_s64(s, method_idx)
-		_:
-			assert(false)
+	if method_idx >= MAX_RPC_METHODS:
+		push_warning("Attempted to send RPC on mode %s exceeding max methods: %s" % [node, MAX_RPC_METHODS])
+		return PackedByteArray()
+	stream.write_unsigned(method_idx, MAX_RPC_METHOD_BYTES)
 	
 	# Encode args.
-	if args:
-		var args_data := var_to_bytes(args) if not api.mp.configuration.allow_object_decoding else var_to_bytes_with_objects(args)
-		data.append_array(args_data)
+	var data := stream.data
+	if packing_args:
+		if dense_args:
+			data.append_array(args[0])
+		else:
+			var args_data := var_to_bytes(args) if not api.mp.configuration.allow_object_decoding else var_to_bytes_with_objects(args)
+			data.append_array(args_data)
 	
 	return data
 
 func decompress_rpc(data: PackedByteArray) -> Dictionary:
-	var s := 0
+	var stream := PackedByteStream.new()
+	stream.setup_read(data)
 	
-	# Decode from_peer.
+	# Decode header.
+	var header := stream.read_u8()
+	var packing_args := header & 1
+	var dense_args := header & 2
+	
+	# Decode RPC properties.
 	var from_peer := api.get_remote_sender_id()
 	if api.is_client():
-		from_peer = data.decode_u32(s)
-		s += 4
-	
-	# Decode to_peer.
-	var to_peer := data.decode_u32(s)
-	s += 4
-	
-	# Decode node id.
-	var node_id := 0
-	match api.repository.MAX_BITS:
-		8:
-			node_id = data.decode_u8(s)
-			s += 1
-		16:
-			node_id = data.decode_u16(s)
-			s += 2
-		32:
-			node_id = data.decode_u32(s)
-			s += 4
-		64:
-			node_id = data.decode_s64(s)
-			s += 8
-		_:
-			assert(false)
-	
-	# Decode method idx.
-	var method_idx := 0
-	assert(method_idx < MAX_RPC_METHODS)
-	match MAX_RPC_METHOD_BITS:
-		8:
-			method_idx = data.decode_u8(s)
-			s += 1
-		16:
-			method_idx = data.decode_u16(s)
-			s += 2
-		32:
-			method_idx = data.decode_u32(s)
-			s += 4
-		64:
-			method_idx = data.decode_s64(s)
-			s += 8
-		_:
-			assert(false)
+		from_peer = stream.read_u32()
+	var to_peer := stream.read_u32()
+	var node_id := stream.read_unsigned(api.repository.MAX_BYTES)
+	var method_idx := stream.read_unsigned(MAX_RPC_METHOD_BYTES)
 	
 	# Decode args, if present.
 	var args := []
-	if s < data.size():
-		args = data.decode_var(s, api.mp.configuration.allow_object_decoding)
+	if packing_args:
+		if dense_args:
+			args = [stream.data.slice(stream.c)]
+		else:
+			args = stream.read_variant(api.mp.configuration.allow_object_decoding)
 	
 	return {
 		'from_peer': from_peer,

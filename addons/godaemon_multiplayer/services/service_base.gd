@@ -11,7 +11,7 @@ class_name ServiceBase
 ## making them useful for implementing high-level multiplayer functionality.
 
 ## A reference to the MultiplayerRoot.
-@onready var mp: MultiplayerRoot = get_parent()
+var mp: MultiplayerRoot
 
 ## Internal setup function. Called after [method Node._ready].
 func _setup():
