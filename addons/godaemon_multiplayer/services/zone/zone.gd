@@ -53,8 +53,20 @@ var use_window_render_settings := true
 @onready var mp: MultiplayerRoot = MultiplayerRoot.fetch(self)
 @onready var zone_service: ZoneService = mp.get_service(ZoneService)
 
+var old_interest := {}
+
 ## A dictionary mapping peers to null.
-@export var interest := {}
+@export var interest := {}:
+	set(x):
+		interest = x
+		if mp:
+			for peer in interest:
+				if peer not in old_interest:
+					interest_added.emit(peer)
+			for peer in old_interest:
+				if peer not in interest:
+					interest_removed.emit(peer)
+			old_interest = x
 
 ## The scene we're in charge of.
 var scene: Node
@@ -124,9 +136,14 @@ func _ready() -> void:
 	if mp.is_client():
 		child_entered_tree.connect(
 			func (s: Node):
-				scene = s,
+				scene = s
+				zone_service.cl_added_interest.emit(self),
 		CONNECT_ONE_SHOT
 		)
+
+func _exit_tree() -> void:
+	if mp.is_client():
+		zone_service.cl_removed_interest.emit(self)
 
 ## Finds the Zone associated with a given Node.
 static func fetch(node: Node, mp: MultiplayerRoot = null) -> Zone:

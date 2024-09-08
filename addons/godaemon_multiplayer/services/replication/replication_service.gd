@@ -1,7 +1,8 @@
 extends ServiceBase
 class_name ReplicationService
-## Tracks the creation of replicated scenes, which are passed to clients upon creation.
-## This also tracks added nodes for RPCs and communicates their IDs to clients.
+## Tracks the creation of replicated scenes, whose existence can be
+## replicated to clients and controlled using visibility.
+## This also tracks added nodes for RPCs and replicates their IDs to clients.
 
 const REPCO = preload("res://addons/godaemon_multiplayer/services/replication/replication_constants.gd")
 
@@ -87,6 +88,7 @@ func _replicated_scene_search(node: Node):
 func _node_tree_exited(node: Node):
 	if node in replicated_scenes:
 		replicated_scenes.erase(node)
+	if node in _visibility_cache:
 		_visibility_cache.erase(node)
 	node.child_entered_tree.disconnect(_node_child_entered_tree)
 
@@ -102,7 +104,6 @@ var _visibility_cache := {}
 ## Returns true if a node is absolutely visible for a peer, false if not.
 func get_true_visibility(node: Node, peer: int) -> bool:
 	assert(mp.is_server())
-	assert(node in replicated_scenes)
 	if peer in _visibility_cache.get(node, {}):
 		return _visibility_cache[node][peer]
 	var visible := true
@@ -156,7 +157,8 @@ func get_observing_peers(node: Node) -> Dictionary:
 	return peers
 
 func _get_replicated_scene_ancestors(node: Node) -> Dictionary:
-	var ancestors := {}
+	var ancestors := {node: null}
+	node = node.get_parent()
 	while node != mp:
 		if node in replicated_scenes:
 			ancestors[node] = null
@@ -164,9 +166,9 @@ func _get_replicated_scene_ancestors(node: Node) -> Dictionary:
 	return ancestors
 
 func _get_replicated_scene_descendants(node: Node) -> Dictionary:
-	var descendants := {}
+	var descendants := {node: null}
 	for n in replicated_scenes:
-		if node == n or node.is_ancestor_of(n):
+		if node.is_ancestor_of(n):
 			descendants[n] = null
 	return descendants
 
@@ -178,7 +180,6 @@ func _get_replicated_scene_descendants(node: Node) -> Dictionary:
 func set_visibility(node: Node, visibility: bool):
 	assert(mp.is_server())
 	assert(node in replicated_scenes, "Node was not registered as a replicated scene.")
-	_clear_visibility_cache(node)
 	var old_visibility := get_visible_nodes(node)
 	replicated_scenes[node][1] = visibility
 	_clear_visibility_cache(node)
@@ -189,7 +190,6 @@ func set_visibility(node: Node, visibility: bool):
 func set_peer_visibility(node: Node, peer: int, visibility: bool):
 	assert(mp.is_server())
 	assert(node in replicated_scenes, "Node was not registered as a replicated scene.")
-	_clear_visibility_cache(node, peer)
 	var old_peer_visibility := get_visible_nodes_for_peer(peer, node)
 	replicated_scenes[node][peer] = visibility
 	_clear_visibility_cache(node, peer)
@@ -200,7 +200,6 @@ func set_peer_visibility(node: Node, peer: int, visibility: bool):
 func clear_peer_visibility(node: Node, peer: int):
 	assert(mp.is_server())
 	assert(node in replicated_scenes, "Node was not registered as a replicated scene.")
-	_clear_visibility_cache(node, peer)
 	var old_peer_visibility := get_visible_nodes_for_peer(peer, node)
 	replicated_scenes[node].erase(peer)
 	_clear_visibility_cache(node, peer)

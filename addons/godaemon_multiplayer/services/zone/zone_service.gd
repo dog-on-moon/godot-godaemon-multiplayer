@@ -109,8 +109,8 @@ func add_interest(peer: int, zone: Zone) -> bool:
 		return false
 	
 	zone.interest[peer] = null
+	zone.interest = zone.interest
 	replication_service.set_peer_visibility(zone, peer, true)
-	zone.interest_added.emit(peer)
 	return true
 
 ## Removes interest on a peer to be able to view a Zone.
@@ -122,8 +122,8 @@ func remove_interest(peer: int, zone: Zone) -> bool:
 	
 	# Update interest state.
 	zone.interest.erase(peer)
+	zone.interest = zone.interest
 	replication_service.set_peer_visibility(zone, peer, false)
-	zone.interest_removed.emit(peer)
 	return true
 
 ## Determines if a peer has interest.

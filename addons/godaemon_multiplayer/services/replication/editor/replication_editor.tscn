@@ -66,7 +66,7 @@ alignment = 2
 unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "When active, this scene is marked as a replicated scene.
-A replicated scene on the server can be automatically created on the client using the ReplicationService.
+A replicated scene on the server can be automatically instantiated for clients via the ReplicationService.
 
 Replication filtering is done via the sender/receiver configurations:
 - Client + Server: Property is replicated from or sent to all clients and server.
