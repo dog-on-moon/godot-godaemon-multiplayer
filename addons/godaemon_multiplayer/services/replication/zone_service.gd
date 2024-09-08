@@ -1,6 +1,11 @@
 extends ServiceBase
 class_name ZoneService
-## The root node containing Zones in a ClientRoot/ServerRoot.
+## The ZoneService provides a simple interface for instantiating high-level game scenes.
+##
+## Zones provide their own functionality on top of being a replicated scene:
+## - Each Zone is contained within a separate Viewport, which separate 2D/3D physics and navigation.
+## - Zones use exclusive ENet chnanels for themselves and their children, used for RPCs/replication/synchronization.
+## - Peer interest state is replicated to clients within a Zone, so they know who else is present.
 
 ## Emitted on a client whenever they've received interest for a zone.
 signal cl_added_interest(zone: Zone)
@@ -12,9 +17,9 @@ signal cl_removed_interest(zone: Zone)
 const RESERVED_ZONE_CHANNELS := 32
 const RESERVED_ZONE_CHANNELS_HALF := RESERVED_ZONE_CHANNELS / 2
 
-const ZONE = preload("res://addons/godaemon_multiplayer/services/zone/zone.tscn")
-const ZONE_SVC = preload("res://addons/godaemon_multiplayer/services/zone/zone_svc.tscn")
-const ZoneSvc = preload("res://addons/godaemon_multiplayer/services/zone/zone_svc.gd")
+const ZONE = preload("res://addons/godaemon_multiplayer/services/replication/zone/zone.tscn")
+const ZONE_SVC = preload("res://addons/godaemon_multiplayer/services/replication/zone/zone_svc.tscn")
+const ZoneSvc = preload("res://addons/godaemon_multiplayer/services/replication/zone/zone_svc.gd")
 var svc: SubViewportContainer
 
 @onready var peer_service: PeerService = mp.get_service(PeerService)
@@ -53,7 +58,7 @@ func get_reserved_channels() -> int:
 
 ## Returns the ENet channel ID associated with a Zone.
 func get_zone_channel(zone: Zone, transfer_mode := MultiplayerPeer.TransferMode.TRANSFER_MODE_RELIABLE) -> int:
-	var channel: int = 1 + _initial_channel + (zones.get(zone, 0) % RESERVED_ZONE_CHANNELS_HALF)
+	var channel: int = 1 + _initial_channel + (zone.zone_index % RESERVED_ZONE_CHANNELS_HALF)
 	if transfer_mode == MultiplayerPeer.TransferMode.TRANSFER_MODE_RELIABLE:
 		channel += RESERVED_ZONE_CHANNELS_HALF
 	return channel
@@ -64,7 +69,8 @@ func get_zone_channel(zone: Zone, transfer_mode := MultiplayerPeer.TransferMode.
 
 var zone_index := 0
 
-## A dictionary mapping zones to a unique index.
+## A set of active zones.
+## Set on the server and client.
 var zones := {}
 
 ## Creates a new Zone. You can specify an instantiated scene to be added to it.
@@ -75,8 +81,9 @@ func add_zone(node: Node) -> Zone:
 	assert(ReplicationCacheManager.get_index(node.scene_file_path) != -1, "Zone must have scene replication enabled")
 	var zone := ZONE.instantiate()
 	zone.scene = node
-	zones[zone] = zone_index
+	zone.zone_index = zone_index
 	zone_index += 1
+	zones[zone] = null
 	zone.add_child(node)
 	svc.add_child(zone)
 	replication_service.set_visibility(zone.scene, true)
@@ -138,6 +145,14 @@ func clear_peer_interest(peer: int):
 	for zone: Zone in zones:
 		if has_interest(peer, zone):
 			remove_interest(peer, zone)
+
+func local_client_add_interest(zone: Zone):
+	zones[zone] = null
+	cl_added_interest.emit(zone)
+
+func local_client_remove_interest(zone: Zone):
+	zones.erase(zone)
+	cl_added_interest.emit(zone)
 
 #endregion
 

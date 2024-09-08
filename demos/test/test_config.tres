@@ -1,12 +1,12 @@
 [gd_resource type="Resource" script_class="MultiplayerConfig" load_steps=8 format=3 uid="uid://b2qso0xh85c76"]
 
 [ext_resource type="Script" path="res://addons/godaemon_multiplayer/config/peer_authenticator.gd" id="1_1w6pl"]
-[ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/zone/zone_service.gd" id="2_2vi7k"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/replication/zone_service.gd" id="2_2vi7k"]
 [ext_resource type="Script" path="res://addons/godaemon_multiplayer/config/multiplayer_config.gd" id="2_20dqm"]
-[ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/general/chat_service.gd" id="3_ma52y"]
-[ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/general/peer_service.gd" id="4_xvgbh"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/chat/chat_service.gd" id="3_ma52y"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/peer/peer_service.gd" id="4_xvgbh"]
 [ext_resource type="Script" path="res://demos/test/test_service.gd" id="5_dtl3b"]
-[ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/general/username_service.gd" id="5_uwcq7"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/services/peer/username_service.gd" id="5_uwcq7"]
 
 [resource]
 script = ExtResource("2_20dqm")

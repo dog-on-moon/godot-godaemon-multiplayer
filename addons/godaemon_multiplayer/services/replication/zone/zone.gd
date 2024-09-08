@@ -68,6 +68,8 @@ var old_interest := {}
 					interest_removed.emit(peer)
 			old_interest = x
 
+@export var zone_index := 0
+
 ## The scene we're in charge of.
 var scene: Node
 
@@ -137,13 +139,13 @@ func _ready() -> void:
 		child_entered_tree.connect(
 			func (s: Node):
 				scene = s
-				zone_service.cl_added_interest.emit(self),
-		CONNECT_ONE_SHOT
+				zone_service.local_client_add_interest(self)
+		, CONNECT_ONE_SHOT
 		)
 
 func _exit_tree() -> void:
 	if mp.is_client():
-		zone_service.cl_removed_interest.emit(self)
+		zone_service.local_client_remove_interest(self)
 
 ## Finds the Zone associated with a given Node.
 static func fetch(node: Node, mp: MultiplayerRoot = null) -> Zone:

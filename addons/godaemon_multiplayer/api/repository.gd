@@ -18,6 +18,8 @@ func cleanup():
 	id_to_node = {}
 	api = null
 
+var _current_id := 0
+
 var node_to_id := {}
 var id_to_node := {}
 
@@ -26,11 +28,11 @@ func add_node(node: Node, node_id := -1) -> int:
 	assert(node not in node_to_id)
 	assert(node_to_id.size() < MAX_ID, "Repository overflow.")
 	if node_id == -1:
-		node_id = 0
-		while node_id in id_to_node:
-			node_id += 1
-			if node_id >= MAX_ID:
-				node_id = 0
+		while _current_id in id_to_node:
+			_current_id += 1
+			if _current_id >= MAX_ID:
+				_current_id = 0
+		node_id = _current_id
 	else:
 		assert(node_id not in node_to_id, "Node IDs are stomping.")
 	# print('[%s] adding %s with ID=%s' % [api.mp.name, node, node_id])

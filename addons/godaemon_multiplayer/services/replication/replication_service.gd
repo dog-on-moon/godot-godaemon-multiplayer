@@ -4,7 +4,7 @@ class_name ReplicationService
 ## replicated to clients and controlled using visibility.
 ## This also tracks added nodes for RPCs and replicates their IDs to clients.
 
-const REPCO = preload("res://addons/godaemon_multiplayer/services/replication/replication_constants.gd")
+const REPCO = preload("res://addons/godaemon_multiplayer/services/replication/constants.gd")
 
 ## A dictionary map of replicated scenes to their peer visibility states.
 var replicated_scenes := {}
@@ -305,7 +305,7 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 			continue
 		var scene_idx := ReplicationCacheManager.get_index(node.scene_file_path)
 		if scene_idx == -1:
-			push_warning("Could not replicate node %s to peer (scene is not replicatable) % scene_idx")
+			push_warning("Could not replicate node %s to peer (scene '%s' is not replicatable)" % [scene_idx, node.scene_file_path])
 			continue
 		
 		var property_values := []
