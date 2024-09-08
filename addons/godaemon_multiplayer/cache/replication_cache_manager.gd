@@ -2,27 +2,50 @@
 extends Object
 class_name ReplicationCacheManager
 
+const REPCO = preload("res://addons/godaemon_multiplayer/services/replication/constants.gd")
 const CACHE_PATH: String = "res://addons/godaemon_multiplayer/cache/replication_storage.tres"
 const CACHE_STORAGE := preload("res://addons/godaemon_multiplayer/cache/replication_storage_resource.gd")
+const PATH_LOADER = preload("res://addons/godaemon_multiplayer/util/path_loader.gd")
 
 static var cache_storage: CACHE_STORAGE = null
 
-static func _static_init() -> void:
-	if FileAccess.file_exists(CACHE_PATH):
-		cache_storage = ResourceLoader.load(CACHE_PATH)
-	else:
-		cache_storage = CACHE_STORAGE.new()
-
-	if Engine.is_editor_hint():
-		# Clean up any old lingering entries that may no longer be valid.
-		var any_changed: bool = false
-		for file_path: String in cache_storage.cache_dict.keys().duplicate():
-			if not FileAccess.file_exists(file_path):
-				cache_storage.cache_dict.erase(file_path)
-				any_changed = true
-
-		if any_changed:
-			cache_storage.save()
+static func update_cache(initial := false):
+	if initial:
+		# Load cache storage resource.
+		if FileAccess.file_exists(CACHE_PATH):
+			cache_storage = ResourceLoader.load(CACHE_PATH)
+		else:
+			cache_storage = CACHE_STORAGE.new()
+	
+	var any_changed: bool = false
+	
+	# Clean up old IDs that don't exist anymore.
+	for file_path: String in cache_storage.cache_dict.keys():
+		if not FileAccess.file_exists(file_path):
+			cache_storage.remove_scene_from_cache(file_path)
+			any_changed = true
+			# print('Removed %s from cache' % file_path)
+	
+	# If there's been any changes, rescan scenes for IDs and save.
+	if any_changed or initial:
+		var project_scene_paths := PATH_LOADER.load_filepaths('res://', '.tscn')
+		for scene_file_path in project_scene_paths:
+			if scene_file_path in cache_storage.cache_dict:
+				continue
+			var scene: PackedScene = load(scene_file_path)
+			var scene_state := scene.get_state()
+			for prop_idx in scene_state.get_node_property_count(0):
+				var prop_name := scene_state.get_node_property_name(0, prop_idx)
+				var prop_value := scene_state.get_node_property_value(0, prop_idx)
+				if prop_name == StringName("metadata/%s" % REPCO.META_REPLICATE_SCENE):
+					cache_storage.add_scene_to_cache(scene_file_path)
+					# print('Added %s to cache' % scene_file_path)
+					break
+		
+		cache_storage.save()
+	
+	if initial:
+		EditorInterface.get_resource_filesystem().scan.call_deferred()
 
 ## Adds a node to the cache storage and saves
 static func add_node_to_storage(node: Node) -> void:
