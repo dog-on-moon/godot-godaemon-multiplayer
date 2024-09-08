@@ -45,9 +45,9 @@ grow_horizontal = 2
 grow_vertical = 2
 metadata/_r = 0
 metadata/_mp = {
-NodePath(":modulate"): [0, 2, true, false],
+NodePath(":modulate"): [0, 2, 0, true],
 NodePath("Button:press_count"): [0, 2, 1, true],
-NodePath("Button:position"): [0, 2, true, true]
+NodePath("Button:position"): [0, 2, 0, true]
 }
 
 [node name="Button" type="Button" parent="."]

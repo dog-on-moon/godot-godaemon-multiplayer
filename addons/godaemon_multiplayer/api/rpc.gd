@@ -235,6 +235,9 @@ func compress_rpc(from_peer: int, to_peer: int, node: Node, method_idx: int, arg
 			var args_data := var_to_bytes(args) if not api.mp.configuration.allow_object_decoding else var_to_bytes_with_objects(args)
 			data.append_array(args_data)
 	
+	if not stream.valid:
+		push_warning("Compressed RPC stream is invalid")
+		return PackedByteArray()
 	return data
 
 func decompress_rpc(data: PackedByteArray) -> Dictionary:
@@ -262,6 +265,10 @@ func decompress_rpc(data: PackedByteArray) -> Dictionary:
 		else:
 			args = stream.read_variant(api.mp.configuration.allow_object_decoding)
 	
+	if not stream.valid:
+		if OS.has_feature("debug"):
+			push_warning("Decompressed RPC stream is invalid")
+		return {}
 	return {
 		'from_peer': from_peer,
 		'to_peer': to_peer,
@@ -326,8 +333,10 @@ var _node_rpc_server_receive_only := {}
 ## Sets an RPC to only allow being received by the server.
 ## This will prevent clients from being able to send the RPC to other clients.
 func set_rpc_server_receive_only(node: Node, method: StringName):
-	_node_rpc_server_receive_only.get_or_add(node, {})[method] = null
-	node.tree_exited.connect(_clear_node_rpc_server_receive_only.bind(node), CONNECT_ONE_SHOT)
+	if node not in _node_rpc_server_receive_only:
+		_node_rpc_server_receive_only[node] = {}
+		node.tree_exited.connect(_clear_node_rpc_server_receive_only.bind(node), CONNECT_ONE_SHOT)
+	_node_rpc_server_receive_only[node][method] = null
 
 func _clear_node_rpc_server_receive_only(node: Node):
 	_node_rpc_server_receive_only.erase(node)

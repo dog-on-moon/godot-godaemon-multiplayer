@@ -9,6 +9,10 @@ const PATH_LOADER = preload("res://addons/godaemon_multiplayer/util/path_loader.
 
 static var cache_storage: CACHE_STORAGE = null
 
+static func _static_init() -> void:
+	if not Engine.is_editor_hint():
+		cache_storage = ResourceLoader.load(CACHE_PATH)
+
 static func update_cache(initial := false):
 	if initial:
 		# Load cache storage resource.

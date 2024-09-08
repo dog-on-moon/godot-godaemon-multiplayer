@@ -4,6 +4,9 @@ class_name ReplicationService
 ## replicated to clients and controlled using visibility.
 ## This also tracks added nodes for RPCs and replicates their IDs to clients.
 
+signal enter_replicated_scene(scene: Node)
+signal exit_replicated_scene(scene: Node)
+
 const REPCO = preload("res://addons/godaemon_multiplayer/services/replication/constants.gd")
 
 ## A dictionary map of replicated scenes to their peer visibility states.
@@ -67,14 +70,15 @@ func _replicated_scene_search(node: Node):
 	if node.child_entered_tree.is_connected(_node_child_entered_tree):
 		return
 	
+	# Setup RPC index.
+	if mp.api.repository.get_id(node) == -1:
+		mp.api.repository.add_node(node)
+	
 	# Does this node have replicated properties?
 	const key := REPCO.META_REPLICATE_SCENE
 	if node.has_meta(key):
 		replicated_scenes[node] = {1: false}
-	
-	# Setup RPC index.
-	if mp.api.repository.get_id(node) == -1:
-		mp.api.repository.add_node(node)
+		enter_replicated_scene.emit(node)
 	
 	# Setup signals on this node.
 	node.child_entered_tree.connect(_node_child_entered_tree)
@@ -88,6 +92,7 @@ func _replicated_scene_search(node: Node):
 func _node_tree_exited(node: Node):
 	if node in replicated_scenes:
 		replicated_scenes.erase(node)
+		exit_replicated_scene.emit(node)
 	if node in _visibility_cache:
 		_visibility_cache.erase(node)
 	node.child_entered_tree.disconnect(_node_child_entered_tree)

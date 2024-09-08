@@ -24,6 +24,7 @@ var svc: SubViewportContainer
 
 @onready var peer_service: PeerService = mp.get_service(PeerService)
 @onready var replication_service: ReplicationService = mp.get_service(ReplicationService)
+@onready var sync_service: SyncService = mp.get_service(SyncService, false)
 @onready var _initial_channel := get_initial_channel(mp)
 
 func _ready() -> void:
@@ -42,11 +43,18 @@ func _peer_disconnected(peer: int):
 
 func _channel_modifier(channel: int, node: Node, transfer_mode: MultiplayerPeer.TransferMode):
 	if node == replication_service:
+		# Newly replicated scenes on the ReplicationService are filtered by the first added node's zone's channel.
 		for n in replication_service._rpc_added_nodes + replication_service._rpc_removed_nodes:
 			var zone := get_node_zone(n)
 			if zone:
 				return get_zone_channel(zone, transfer_mode)
+	elif sync_service and node == sync_service and sync_service._rpc_scene:
+		# Sync RPCs from the SyncService are filtered by their scene's zone's channel.
+		var zone := get_node_zone(sync_service._rpc_scene)
+		if zone:
+			return get_zone_channel(zone, transfer_mode)
 	else:
+		# RPCs for any node are set to their zone's channel.
 		var zone := get_node_zone(node)
 		if zone:
 			return get_zone_channel(zone, transfer_mode)
