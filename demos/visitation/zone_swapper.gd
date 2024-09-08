@@ -17,6 +17,7 @@ var server_zones: Array[Zone] = []
 
 func _ready() -> void:
 	mp.api.rpc.set_rpc_server_receive_only(self, &"_request_zone")
+	mp.api.rpc.set_rpc_ratelimit(self, &"_request_zone", 1, 0.1)
 	
 	if mp.is_client():
 		for idx in zone_buttons:

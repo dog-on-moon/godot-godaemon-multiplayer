@@ -13,6 +13,6 @@ mouse_filter = 2
 texture = ExtResource("1_aixar")
 metadata/_r = 0
 metadata/_mp = {
-NodePath(":position"): [0, 2, true, false],
-NodePath(":rotation"): [0, 2, true, false]
+NodePath(":position"): [0, 2, 0, true],
+NodePath(":rotation"): [0, 2, 0, true]
 }

@@ -5,15 +5,17 @@ class_name ReplicationService
 
 const REPCO = preload("res://addons/godaemon_multiplayer/services/replication/replication_constants.gd")
 
-
 ## A dictionary map of replicated scenes to their peer visibility states.
 var replicated_scenes := {}
 
 func _enter_tree() -> void:
+	# Look for existing replicated scenes, setup initial signals.
+	_replicated_scene_search(mp)
 	if mp.is_server():
-		# Look for existing replicated scenes, setup initial signals.
-		_replicated_scene_search(mp)
 		mp.peer_connected.connect(_peer_connected)
+		mp.peer_disconnected.connect(_peer_disconnected)
+		mp.api.rpc.target_peer_modifiers.append(_target_peer_modifier)
+		mp.api.rpc.outbound_filters.append(_rpc_filter)
 
 func _peer_connected(peer: int):
 	# Peers need to know what initial scenes must be replicated to them.
@@ -21,6 +23,40 @@ func _peer_connected(peer: int):
 	for node in get_visible_nodes_for_peer(peer):
 		added_nodes.append(node)
 	_update_visibility(peer, added_nodes, [])
+
+func _peer_disconnected(peer: int):
+	for visibility_dict in replicated_scenes.values():
+		visibility_dict.erase(peer)
+	for visibility_dict in _visibility_cache.values():
+		visibility_dict.erase(peer)
+
+#region Service Internals
+
+func _target_peer_modifier(from_peer: int, target_peers: Array[int], node: Node, method: StringName, args: Array):
+	if node in replicated_scenes:
+		var valid_peers := get_observing_peers(node)
+		if target_peers == [0]:
+			target_peers.clear()
+			for p in valid_peers:
+				target_peers.append(p)
+		elif not target_peers:
+			return
+		elif target_peers[0] > 0:
+			target_peers.assign(target_peers.filter(func (p: int): return p in valid_peers))
+		else:
+			var skip_peer: int = -target_peers[0]
+			target_peers.assign(target_peers.filter(func (p: int): return p in valid_peers and p != skip_peer))
+
+func _rpc_filter(from_peer: int, to_peer: int, node: Node, method: StringName, args: Array):
+	if node in replicated_scenes:
+		var valid_peers := get_observing_peers(node)
+		if from_peer != 1 and from_peer not in valid_peers:
+			return false
+		if to_peer != 1 and to_peer not in valid_peers:
+			return false
+	return true
+
+#endregion
 
 #region Replication Setup
 
@@ -41,7 +77,7 @@ func _replicated_scene_search(node: Node):
 	
 	# Setup signals on this node.
 	node.child_entered_tree.connect(_node_child_entered_tree)
-	node.tree_exited.connect(_node_tree_exited, CONNECT_ONE_SHOT)
+	node.tree_exited.connect(_node_tree_exited.bind(node), CONNECT_ONE_SHOT)
 	
 	# Continue iteration.
 	if node.is_node_ready():
@@ -51,10 +87,73 @@ func _replicated_scene_search(node: Node):
 func _node_tree_exited(node: Node):
 	if node in replicated_scenes:
 		replicated_scenes.erase(node)
+		_visibility_cache.erase(node)
 	node.child_entered_tree.disconnect(_node_child_entered_tree)
 
 func _node_child_entered_tree(node: Node):
 	_replicated_scene_search(node)
+
+#endregion
+
+#region Replication Getters
+
+var _visibility_cache := {}
+
+## Returns true if a node is absolutely visible for a peer, false if not.
+func get_true_visibility(node: Node, peer: int) -> bool:
+	assert(mp.is_server())
+	assert(node in replicated_scenes)
+	if peer in _visibility_cache.get(node, {}):
+		return _visibility_cache[node][peer]
+	var visible := true
+	var ancestry := _get_replicated_scene_ancestors(node)
+	for n in ancestry:
+		# Check the visibility settings for the current node.
+		var default_visibility: bool = replicated_scenes[n][1]
+		var visibility: bool = replicated_scenes[n].get(peer, default_visibility)
+		
+		# If not visible, then the base node is certainly not visible.
+		if not visibility:
+			visible = false
+			break
+	_visibility_cache.get_or_add(node, {})[peer] = visible
+	return visible
+
+func _clear_visibility_cache(node: Node, peer := 1):
+	if node in _visibility_cache:
+		for n in _get_replicated_scene_descendants(node):
+			if peer == 1:
+				_visibility_cache.erase(n)
+			elif peer in _visibility_cache[n]:
+				_visibility_cache[n].erase(peer)
+
+## Returns a set of all nodes visible for this peer.
+func get_visible_nodes_for_peer(peer: int, root: Node = null) -> Dictionary:
+	var dict := {}
+	var search := replicated_scenes if not root else _get_replicated_scene_descendants(root)
+	for node in search:
+		if get_true_visibility(node, peer):
+			dict[node] = null
+	return dict
+
+## Returns a dict of visible nodes for all peers.
+func get_visible_nodes(root: Node = null) -> Dictionary:
+	var visible_nodes := {}
+	for peer in mp.api.get_peers():
+		if peer == 1:
+			continue
+		visible_nodes[peer] = get_visible_nodes_for_peer(peer, root)
+	return visible_nodes
+
+## Return the set of peers who can see this Node.
+func get_observing_peers(node: Node) -> Dictionary:
+	var peers := {}
+	for peer in mp.api.get_peers():
+		if peer == 1:
+			continue
+		if get_true_visibility(node, peer):
+			peers[peer] = null
+	return peers
 
 func _get_replicated_scene_ancestors(node: Node) -> Dictionary:
 	var ancestors := {}
@@ -79,8 +178,10 @@ func _get_replicated_scene_descendants(node: Node) -> Dictionary:
 func set_visibility(node: Node, visibility: bool):
 	assert(mp.is_server())
 	assert(node in replicated_scenes, "Node was not registered as a replicated scene.")
+	_clear_visibility_cache(node)
 	var old_visibility := get_visible_nodes(node)
 	replicated_scenes[node][1] = visibility
+	_clear_visibility_cache(node)
 	var new_visibility := get_visible_nodes(node)
 	_update_nodes(old_visibility, new_visibility)
 
@@ -88,8 +189,10 @@ func set_visibility(node: Node, visibility: bool):
 func set_peer_visibility(node: Node, peer: int, visibility: bool):
 	assert(mp.is_server())
 	assert(node in replicated_scenes, "Node was not registered as a replicated scene.")
+	_clear_visibility_cache(node, peer)
 	var old_peer_visibility := get_visible_nodes_for_peer(peer, node)
 	replicated_scenes[node][peer] = visibility
+	_clear_visibility_cache(node, peer)
 	var new_peer_visibility := get_visible_nodes_for_peer(peer, node)
 	_update_peer_nodes(peer, old_peer_visibility, new_peer_visibility)
 
@@ -97,46 +200,46 @@ func set_peer_visibility(node: Node, peer: int, visibility: bool):
 func clear_peer_visibility(node: Node, peer: int):
 	assert(mp.is_server())
 	assert(node in replicated_scenes, "Node was not registered as a replicated scene.")
+	_clear_visibility_cache(node, peer)
 	var old_peer_visibility := get_visible_nodes_for_peer(peer, node)
 	replicated_scenes[node].erase(peer)
+	_clear_visibility_cache(node, peer)
 	var new_peer_visibility := get_visible_nodes_for_peer(peer, node)
 	_update_peer_nodes(peer, old_peer_visibility, new_peer_visibility)
 
-## Returns true if a node is absolutely visible for a peer, false if not.
-func get_true_visibility(node: Node, peer: int) -> bool:
-	assert(mp.is_server())
-	assert(node in replicated_scenes)
-	var visible := true
-	var ancestry := _get_replicated_scene_ancestors(node)
-	for n in ancestry:
-		# Check the visibility settings for the current node.
-		var default_visibility: bool = replicated_scenes[n][1]
-		var visibility: bool = replicated_scenes[n].get(peer, default_visibility)
-		
-		# If not visible, then the base node is certainly not visible.
-		if not visibility:
-			visible = false
-			break
-	return visible
+#endregion
 
-## Returns a set of all nodes visible for this peer.
-func get_visible_nodes_for_peer(peer: int, root: Node = null) -> Dictionary:
-	assert(mp.is_server())
-	var dict := {}
-	var search := replicated_scenes if not root else _get_replicated_scene_descendants(root)
-	for node in search:
-		if get_true_visibility(node, peer):
-			dict[node] = null
-	return dict
+#region Node Ownership
 
-## Returns a dict of visible nodes for all peers.
-func get_visible_nodes(root: Node = null) -> Dictionary:
-	var visible_nodes := {}
-	for peer in mp.api.get_peers():
-		if peer == 1:
-			continue
-		visible_nodes[peer] = get_visible_nodes_for_peer(peer, root)
-	return visible_nodes
+## Sets the owner of a node.
+## This is a special peer ID that is replicated across clients.
+func set_node_owner(node: Node, peer: int = 1):
+	assert(mp.is_server())
+	node.set_meta(REPCO.META_OWNER, peer)
+	
+	# Tell each observing peer who the new owner is.
+	var stream := PackedByteStream.new()
+	stream.setup_write(4 + mp.api.repository.MAX_BYTES)
+	stream.write_unsigned(mp.api.repository.get_id(node), mp.api.repository.MAX_BYTES)
+	stream.write_u32(peer)
+	for observer in get_observing_peers(node):
+		_set_node_owner.rpc_id(observer, stream.data)
+
+## Gets the owner of a node.
+func get_node_owner(node: Node) -> int:
+	return REPCO.get_node_owner(node)
+
+@rpc
+func _set_node_owner(bytes: PackedByteArray):
+	var stream := PackedByteStream.new()
+	stream.setup_read(bytes)
+	var node_id := stream.read_unsigned(mp.api.repository.MAX_BYTES)
+	var peer := stream.read_u32()
+	var node := mp.api.repository.get_node(node_id)
+	if not node_id:
+		push_warning("ReplicationService._set_node_owner could not find node ID %s" % node_id)
+		return
+	node.set_meta(REPCO.META_OWNER, peer)
 
 #endregion
 
@@ -278,6 +381,7 @@ func update_visibility(data: PackedByteArray):
 		if not node:
 			push_warning("Visibility asked to remove node that didn't exist")
 			continue
+		node.get_parent().remove_child(node)
 		node.queue_free()
 	
 	# Add nodes.

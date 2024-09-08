@@ -19,20 +19,13 @@ var svc: SubViewportContainer
 
 @onready var peer_service: PeerService = mp.get_service(PeerService)
 @onready var replication_service: ReplicationService = mp.get_service(ReplicationService)
-
-var _initial_channel := 0
+@onready var _initial_channel := get_initial_channel(mp)
 
 func _ready() -> void:
 	assert(replication_service)
-	
-	mp.api.rpc.channel_modifiers.append(_zone_service_channel_modifier)
-	_initial_channel = get_initial_channel(mp)
-	
+	mp.api.rpc.channel_modifiers.append(_channel_modifier)
 	if mp.is_server():
 		mp.peer_disconnected.connect(_peer_disconnected)
-		mp.api.rpc.target_peer_modifiers.append(_outbound_rpc_target_modifier)
-		mp.api.rpc.outbound_filters.append(_rpc_filter)
-		
 		svc = ZONE_SVC.instantiate()
 		add_child(svc)
 		replication_service.set_visibility(svc, true)
@@ -42,7 +35,7 @@ func _peer_disconnected(peer: int):
 
 #region Service internals
 
-func _zone_service_channel_modifier(channel: int, node: Node, transfer_mode: MultiplayerPeer.TransferMode):
+func _channel_modifier(channel: int, node: Node, transfer_mode: MultiplayerPeer.TransferMode):
 	if node == replication_service:
 		for n in replication_service._rpc_added_nodes + replication_service._rpc_removed_nodes:
 			var zone := get_node_zone(n)
@@ -53,30 +46,6 @@ func _zone_service_channel_modifier(channel: int, node: Node, transfer_mode: Mul
 		if zone:
 			return get_zone_channel(zone, transfer_mode)
 	return channel
-
-func _outbound_rpc_target_modifier(from_peer: int, target_peers: Array[int], node: Node, method: StringName, args: Array):
-	var zone := get_node_zone(node)
-	if zone:
-		if target_peers == [0]:
-			target_peers.clear()
-			for p in zone.interest:
-				target_peers.append(p)
-		elif not target_peers:
-			return
-		elif target_peers[0] > 0:
-			target_peers.assign(target_peers.filter(func (p: int): return p in zone.interest))
-		else:
-			var skip_peer: int = -target_peers[0]
-			target_peers.assign(target_peers.filter(func (p: int): return p in zone.interest and p != skip_peer))
-
-func _rpc_filter(from_peer: int, to_peer: int, node: Node, method: StringName, args: Array):
-	var zone := get_node_zone(node)
-	if zone:
-		if from_peer != 1 and from_peer not in zone.interest:
-			return false
-		if to_peer != 1 and to_peer not in zone.interest:
-			return false
-	return true
 
 ## We filter each RPC in a zone to use a dedicated channel.
 func get_reserved_channels() -> int:

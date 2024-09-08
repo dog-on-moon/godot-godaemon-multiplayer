@@ -12,32 +12,44 @@ enum PeerFilter {
 	CLIENTS_SERVER = 2
 }
 
-const PeerFilterBitfieldToName := {
+const PeerFilterNames := {
 	PeerFilter.SERVER: "Server Only",
 	PeerFilter.OWNER_SERVER: "Owner + Server",
 	PeerFilter.CLIENTS_SERVER: "Clients + Server",
 }
 
+enum SyncMode {
+	ON_GENERATE = 0,
+	ON_CHANGE = 1,
+	INTERPOLATE_ON_CHANGE = 2,
+}
+
+const SyncModeNames := {
+	SyncMode.ON_GENERATE: "Once",
+	SyncMode.ON_CHANGE: "Always",
+	SyncMode.INTERPOLATE_ON_CHANGE: "Smooth",
+}
+
 const DEFAULT_SEND_FILTER := PeerFilter.SERVER
 const DEFAULT_RECV_FILTER := PeerFilter.CLIENTS_SERVER
-const DEFAULT_SYNC_INTERP := false
+const DEFAULT_SYNC_MODE := SyncMode.ON_GENERATE
 const DEFAULT_SYNC_RELIABLE := true
 
 static func editor_filter_to_real_filter(editor: int) -> int:
-	return PeerFilterBitfieldToName.keys()[editor]
+	return PeerFilterNames.keys()[editor]
 
 static func real_filter_to_editor_filter(real: int) -> int:
-	return PeerFilterBitfieldToName.keys().find(real)
+	return PeerFilterNames.keys().find(real)
 
 ## Sets the replicated property of a node.
-static func set_replicated_property(object: Node, property_path: NodePath, send: int, recv: int, reliable: bool, interp: bool):
+static func set_replicated_property(object: Node, property_path: NodePath, send: int, recv: int, mode: SyncMode, reliable: bool):
 	const key_name := META_SYNC_PROPERTIES
 	var root := object if object.scene_file_path else object.owner
 	var true_path := Util.owner_property_path(object, property_path)
 	if not root.has_meta(key_name):
 		root.set_meta(key_name, {})
 	var property_dict: Dictionary = root.get_meta(key_name)
-	property_dict[true_path] = [send, recv, reliable, interp]
+	property_dict[true_path] = [send, recv, mode, reliable]
 	ReplicationCacheManager.add_node_to_storage(root)
 	return true
 

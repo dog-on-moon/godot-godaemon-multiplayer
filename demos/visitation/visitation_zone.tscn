@@ -17,11 +17,11 @@ const STAR = preload(\"res://demos/visitation/star.tscn\")
 
 func _ready() -> void:
 	press_count = press_count
-	pressed.connect(_request_pressed.rpc)
-	
 	if mp.is_server():
 		position = (get_parent().size - size) * Vector2(randf(), randf())
 		mp.api.rpc.set_rpc_server_receive_only(self, &\"_request_pressed\")
+	else:
+		pressed.connect(_request_pressed.rpc)
 
 @rpc(\"any_peer\")
 func _request_pressed():
@@ -46,8 +46,8 @@ grow_vertical = 2
 metadata/_r = 0
 metadata/_mp = {
 NodePath(":modulate"): [0, 2, true, false],
-NodePath("Button:press_count"): [0, 2, true, false],
-NodePath("Button:position"): [0, 2, true, false]
+NodePath("Button:press_count"): [0, 2, 1, true],
+NodePath("Button:position"): [0, 2, true, true]
 }
 
 [node name="Button" type="Button" parent="."]

@@ -56,9 +56,10 @@ func _finish_themes():
 	tree.set_column_title(2, "Receivers")
 	tree.set_column_custom_minimum_width(2, 120)
 	tree.set_column_expand(2, false)
-	tree.set_column_title(3, "Reliable")
+	tree.set_column_title(3, "Sync")
+	tree.set_column_custom_minimum_width(3, 70)
 	tree.set_column_expand(3, false)
-	tree.set_column_title(4, "Interpolated")
+	tree.set_column_title(4, "Reliable")
 	tree.set_column_expand(4, false)
 	tree.set_column_expand(5, false)
 
@@ -128,16 +129,16 @@ func _on_property_selected(property_path):
 		self, &"_add_property", object, property_path,
 		REPCO.DEFAULT_SEND_FILTER,
 		REPCO.DEFAULT_RECV_FILTER,
+		REPCO.DEFAULT_SYNC_MODE,
 		REPCO.DEFAULT_SYNC_RELIABLE,
-		REPCO.DEFAULT_SYNC_INTERP,
 	)
 	undo_redo.add_undo_method(self, &"_remove_property", object, property_path)
 	undo_redo.commit_action()
 
-func _add_property(object: Node, property_path: NodePath, send: int, recv: int, reliable: bool, interp: bool):
+func _add_property(object: Node, property_path: NodePath, send: int, recv: int, mode: REPCO.SyncMode, reliable: bool):
 	if not is_instance_valid(object):
 		return
-	REPCO.set_replicated_property(object, property_path, send, recv, reliable, interp)
+	REPCO.set_replicated_property(object, property_path, send, recv, mode, reliable)
 	_nodes_with_properties_updated()
 	EditorInterface.mark_scene_as_unsaved()
 	_add_property_to_tree(object, property_path)
@@ -169,8 +170,8 @@ func _add_property_to_tree(object: Node, property_path: NodePath):
 	var property_data := REPCO.get_replicated_property(object, property_path)
 	var send: int = property_data[0]
 	var recv: int = property_data[1]
-	var reliable: bool = property_data[2]
-	var interp: bool = property_data[3]
+	var mode: REPCO.SyncMode = property_data[2]
+	var reliable: bool = property_data[3]
 	
 	var item := tree.create_item()
 	item.set_selectable(0, false)
@@ -186,24 +187,27 @@ func _add_property_to_tree(object: Node, property_path: NodePath):
 	
 	item.set_text_alignment(1, HORIZONTAL_ALIGNMENT_CENTER)
 	item.set_cell_mode(1, TreeItem.CELL_MODE_RANGE)
-	item.set_range_config(1, 0, REPCO.PeerFilterBitfieldToName.size(), 1)
-	item.set_text(1, ",".join(REPCO.PeerFilterBitfieldToName.values()))
+	item.set_range_config(1, 0, REPCO.PeerFilterNames.size(), 1)
+	item.set_text(1, ",".join(REPCO.PeerFilterNames.values()))
 	item.set_range(1, REPCO.real_filter_to_editor_filter(send))
 	item.set_editable(1, true)
 	
 	item.set_text_alignment(2, HORIZONTAL_ALIGNMENT_CENTER)
 	item.set_cell_mode(2, TreeItem.CELL_MODE_RANGE)
-	item.set_range_config(2, 0, REPCO.PeerFilterBitfieldToName.size(), 1)
-	item.set_text(2, ",".join(REPCO.PeerFilterBitfieldToName.values()))
+	item.set_range_config(2, 0, REPCO.PeerFilterNames.size(), 1)
+	item.set_text(2, ",".join(REPCO.PeerFilterNames.values()))
 	item.set_range(2, REPCO.real_filter_to_editor_filter(recv))
 	item.set_editable(2, true)
 	
-	item.set_cell_mode(3, TreeItem.CELL_MODE_CHECK)
-	item.set_checked(3, reliable)
+	item.set_text_alignment(3, HORIZONTAL_ALIGNMENT_CENTER)
+	item.set_cell_mode(3, TreeItem.CELL_MODE_RANGE)
+	item.set_range_config(3, 0, REPCO.SyncModeNames.size(), 1)
+	item.set_text(3, ",".join(REPCO.SyncModeNames.values()))
+	item.set_range(3, mode)
 	item.set_editable(3, true)
 	
 	item.set_cell_mode(4, TreeItem.CELL_MODE_CHECK)
-	item.set_checked(4, interp)
+	item.set_checked(4, reliable)
 	item.set_editable(4, true)
 
 static func get_type_name(type: int):
@@ -315,8 +319,8 @@ func _tree_item_edited():
 	if data:
 		var send: int = data[0]
 		var recv: int = data[1]
-		var reliable: bool = data[2]
-		var interp: bool = data[3]
+		var mode: REPCO.SyncMode = data[2]
+		var reliable: bool = data[3]
 		
 		var undo_redo := plugin.get_undo_redo()
 		var column := tree.get_edited_column()
@@ -334,16 +338,16 @@ func _tree_item_edited():
 				undo_redo.add_undo_method(self, &"_set_receiver", item, object, property_path, REPCO.real_filter_to_editor_filter(recv))
 				undo_redo.commit_action()
 			3:
-				# Setting reliable
-				undo_redo.create_action("Set reliable mode")
-				undo_redo.add_do_method(self, &"_set_reliable", item, object, property_path, item.is_checked(3))
-				undo_redo.add_undo_method(self, &"_set_reliable", item, object, property_path, reliable)
+				# Setting sync mode
+				undo_redo.create_action("Set sync mode mode")
+				undo_redo.add_do_method(self, &"_set_sync_mode", item, object, property_path, int(item.get_range(column)))
+				undo_redo.add_undo_method(self, &"_set_sync_mode", item, object, property_path, mode)
 				undo_redo.commit_action()
 			4:
-				# Setting interp
-				undo_redo.create_action("Set interp mode")
-				undo_redo.add_do_method(self, &"_set_interp", item, object, property_path, item.is_checked(4))
-				undo_redo.add_undo_method(self, &"_set_interp", item, object, property_path, interp)
+				# Setting reliable
+				undo_redo.create_action("Set reliable mode")
+				undo_redo.add_do_method(self, &"_set_reliable", item, object, property_path, item.is_checked(column))
+				undo_redo.add_undo_method(self, &"_set_reliable", item, object, property_path, reliable)
 				undo_redo.commit_action()
 		return
 
@@ -361,16 +365,16 @@ func _set_receiver(item: TreeItem, object: Node, property_path: NodePath, recv: 
 	item.set_range(2, recv)
 	EditorInterface.mark_scene_as_unsaved()
 
+func _set_sync_mode(item: TreeItem, object: Node, property_path: NodePath, mode: REPCO.SyncMode):
+	if not is_instance_valid(object):
+		return
+	REPCO.get_replicated_property(object, property_path)[2] = mode
+	item.set_range(3, mode)
+	EditorInterface.mark_scene_as_unsaved()
+
 func _set_reliable(item: TreeItem, object: Node, property_path: NodePath, reliable: bool):
 	if not is_instance_valid(object):
 		return
-	REPCO.get_replicated_property(object, property_path)[2] = reliable
-	item.set_checked(3, reliable)
-	EditorInterface.mark_scene_as_unsaved()
-
-func _set_interp(item: TreeItem, object: Node, property_path: NodePath, interp: bool):
-	if not is_instance_valid(object):
-		return
-	REPCO.get_replicated_property(object, property_path)[3] = interp
-	item.set_checked(4, interp)
+	REPCO.get_replicated_property(object, property_path)[3] = reliable
+	item.set_checked(4, reliable)
 	EditorInterface.mark_scene_as_unsaved()

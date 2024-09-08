@@ -324,7 +324,7 @@ func _clear_rpc_ratelimit(node: Node):
 var _node_rpc_server_receive_only := {}
 
 ## Sets an RPC to only allow being received by the server.
-## This will prevent the server from routing blocked RPCs back out to clients.
+## This will prevent clients from being able to send the RPC to other clients.
 func set_rpc_server_receive_only(node: Node, method: StringName):
 	_node_rpc_server_receive_only.get_or_add(node, {})[method] = null
 	node.tree_exited.connect(_clear_node_rpc_server_receive_only.bind(node), CONNECT_ONE_SHOT)

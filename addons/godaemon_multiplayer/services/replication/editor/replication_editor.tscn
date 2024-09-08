@@ -65,14 +65,19 @@ alignment = 2
 [node name="SceneReplicateButton" type="CheckBox" parent="Header/Right"]
 unique_name_in_owner = true
 layout_mode = 2
-tooltip_text = "When checked, the ZoneService will watch for the currently edited scene being added on the server.
-The scene and its replicated properties will be given to clients with interest.
+tooltip_text = "When active, this scene is marked as a replicated scene.
+A replicated scene on the server can be automatically created on the client using the ReplicationService.
 
-Replication filtering is done via the receiver setting:
-- Client + Server: Property is replicated to all clients.
-- Owner + Server: Property is replicated to owner only.
-- Server Only: Property is not replicated to any client."
-text = "Replicate Scene in Zone"
+Replication filtering is done via the sender/receiver configurations:
+- Client + Server: Property is replicated from or sent to all clients and server.
+- Owner + Server: Property is replicated from or sent to the owner and the server.
+- Server Only: Property is replicated from or sent to the server only.
+
+Additionally, the SyncService will sync properties according to the sync setting:
+- Once: Property is only replicated on scene creation.
+- Always: Whenever a sender updates the property, it is communicated to other receivers.
+- Smooth: Same as above, but receivers interpolate the received value at a fixed tickrate."
+text = "Replicated Scene"
 
 [node name="ReloadButton" type="Button" parent="Header/Right"]
 unique_name_in_owner = true
