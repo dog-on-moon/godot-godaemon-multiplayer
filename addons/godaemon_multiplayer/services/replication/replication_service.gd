@@ -93,7 +93,11 @@ func _replicated_scene_search(node: Node):
 
 func _node_tree_exited(node: Node):
 	if node in replicated_scenes:
+		var old_visibility := get_visible_nodes(node)
 		replicated_scenes.erase(node)
+		_clear_visibility_cache(node)
+		var new_visibility := get_visible_nodes(node)
+		_update_nodes(old_visibility, new_visibility)
 		exit_replicated_scene.emit(node)
 	if node in _visibility_cache:
 		_visibility_cache.erase(node)
