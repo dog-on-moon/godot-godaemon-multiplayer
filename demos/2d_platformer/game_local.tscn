@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3 uid="uid://dsu3bgeabh1oa"]
+
+[ext_resource type="PackedScene" uid="uid://dd5cv6d0t044y" path="res://addons/godaemon_multiplayer/util/testing/multiplayer_test_frame.tscn" id="1_e2t5p"]
+[ext_resource type="Resource" uid="uid://bcip4bpi7o72h" path="res://demos/2d_platformer/2d_platformer_config.tres" id="2_b6ds0"]
+
+[node name="Game" type="Node"]
+
+[node name="MultiplayerTestFrame" parent="." instance=ExtResource("1_e2t5p")]
+clients = 3
+configuration = ExtResource("2_b6ds0")

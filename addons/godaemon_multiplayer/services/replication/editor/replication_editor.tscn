@@ -68,10 +68,12 @@ layout_mode = 2
 tooltip_text = "When active, this scene is marked as a replicated scene.
 A replicated scene on the server can be automatically instantiated for clients via the ReplicationService.
 
-Replication filtering is done via the sender/receiver configurations:
-- Client + Server: Property is replicated from or sent to all clients and server.
-- Owner + Server: Property is replicated from or sent to the owner and the server.
+Replication/synchronization filtering is done via the sender/receiver configurations:
 - Server Only: Property is replicated from or sent to the server only.
+- Owner + Server: Property is replicated from or sent to the owner and the server.
+- Client + Server: Property is replicated from or sent to all clients and server.
+- Not Owner: Property is replicated from or sent to all clients and server, except the owner.
+- Not Owner (Replicated): Same as above, except the property is replicated to the owner once.
 
 Additionally, the SyncService will sync properties according to the sync setting:
 - Once: Property is only replicated on scene creation.

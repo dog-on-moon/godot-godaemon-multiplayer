@@ -2,6 +2,7 @@ extends MultiplayerAPIExtension
 class_name GodaemonMultiplayerAPI
 ## An extension of SceneMultiplayer, re-implementing its base overrides.
 
+
 const Profiler = preload("res://addons/godaemon_multiplayer/api/profiler.gd")
 const Repository = preload("res://addons/godaemon_multiplayer/api/repository.gd")
 const Rpc = preload("res://addons/godaemon_multiplayer/api/rpc.gd")
@@ -113,5 +114,13 @@ func is_client() -> bool:
 ## Returns true if this is a server API.
 func is_server() -> bool:
 	return get_unique_id() == 1
+
+## Gets the owner ID of this node.
+func get_node_owner(node: Node) -> int:
+	return mp.get_node_owner(node)
+
+## Returns true if the local peer owns this node.
+func is_local_owner(node: Node) -> bool:
+	return get_node_owner(node) == get_unique_id()
 
 #endregion

@@ -5,9 +5,10 @@ class_name SyncService
 const REPCO = preload("res://addons/godaemon_multiplayer/services/replication/constants.gd")
 
 ## The ticks-per-second for updating interpolation fields.
-const INTERPOLATE_TPS := 10.0
+const INTERPOLATE_TPS := 20.0
 const INTERPOLATE_MSPT := (1.0 / INTERPOLATE_TPS) * 1000.0
-const INTERPOLATE_DURATION := (1.0 / INTERPOLATE_TPS) * 1.1
+const INTERPOLATE_DURATION := (1.0 / INTERPOLATE_TPS) * 1.4
+const INTERPOLATE_MAX_PREDICTION := 1.0
 
 var replication_service: ReplicationService
 
@@ -28,30 +29,23 @@ func _enter_tree() -> void:
 #region Caches
 
 func enter_replicated_scene(scene: Node):
-	update_value_cache(scene)
+	for sync in HARVEST_SYNCS:
+		update_value_cache(scene, sync)
 
 func exit_replicated_scene(scene: Node):
 	_scene_replication_data_cache.erase(scene)
-	_scene_sender_data_cache.erase(scene)
-	_scene_receiver_data_cache.erase(scene)
-	_scene_reliable_data_cache.erase(scene)
 	_replication_data_value_cache.erase(scene)
 
 var _scene_replication_data_cache := {}
 
 ## Given a scene, returns an Array[[node, property path]].
-func get_scene_replication_data(scene: Node, sync: REPCO.SyncMode) -> Array:
-	if scene in _scene_replication_data_cache and sync in _scene_replication_data_cache[scene]:
-		return _scene_replication_data_cache[scene][sync]
+func get_scene_replication_data(scene: Node) -> Array:
+	if scene in _scene_replication_data_cache:
+		return _scene_replication_data_cache[scene]
 		
 	var replication_data := []
 	var replication_dict: Dictionary = scene.get_meta(REPCO.META_SYNC_PROPERTIES, {})
 	for property_path: NodePath in replication_dict:
-		var property_data: Array = replication_dict[property_path]
-		var property_mode: REPCO.SyncMode = property_data[2]
-		if sync != property_mode:
-			continue
-		
 		# Find the node.
 		var node_path := NodePath(property_path.get_concatenated_names())
 		var node := scene.get_node(node_path) if node_path else scene
@@ -61,50 +55,12 @@ func get_scene_replication_data(scene: Node, sync: REPCO.SyncMode) -> Array:
 		
 		# Add to replication data.
 		var prop_path := NodePath(property_path.get_concatenated_subnames())
-		replication_data.append([node, prop_path])
+		replication_data.append([node, prop_path, replication_dict[property_path]])
 	
 	# Return cached value.
-	_scene_replication_data_cache.get_or_add(scene, {})[sync] = replication_data
+	_scene_replication_data_cache[scene] = replication_data
 	return replication_data
 
-var _scene_sender_data_cache := {}
-
-## Returns an array of the sender data for each property.
-func get_scene_sender_data(scene: Node) -> Array[REPCO.PeerFilter]:
-	if scene in _scene_sender_data_cache:
-		return _scene_sender_data_cache[scene]
-	var sender_data: Array[REPCO.PeerFilter] = []
-	var replication_dict: Dictionary = scene.get_meta(REPCO.META_SYNC_PROPERTIES, {})
-	for property_path: NodePath in replication_dict:
-		sender_data.append(replication_dict[property_path][0])
-	_scene_sender_data_cache[scene] = sender_data
-	return sender_data
-
-var _scene_receiver_data_cache := {}
-
-## Returns an array of the receiver data for each property.
-func get_scene_receiver_data(scene: Node) -> Array[REPCO.PeerFilter]:
-	if scene in _scene_receiver_data_cache:
-		return _scene_receiver_data_cache[scene]
-	var sender_data: Array[REPCO.PeerFilter] = []
-	var replication_dict: Dictionary = scene.get_meta(REPCO.META_SYNC_PROPERTIES, {})
-	for property_path: NodePath in replication_dict:
-		sender_data.append(replication_dict[property_path][1])
-	_scene_receiver_data_cache[scene] = sender_data
-	return sender_data
-
-var _scene_reliable_data_cache := {}
-
-## Returns an array of the reliable data for each property.
-func get_scene_reliable_data(scene: Node) -> Array[bool]:
-	if scene in _scene_reliable_data_cache:
-		return _scene_reliable_data_cache[scene]
-	var reliable_data: Array[bool] = []
-	var replication_dict: Dictionary = scene.get_meta(REPCO.META_SYNC_PROPERTIES, {})
-	for property_path: NodePath in replication_dict:
-		reliable_data.append(replication_dict[property_path][3])
-	_scene_reliable_data_cache[scene] = reliable_data
-	return reliable_data
 
 #endregion
 
@@ -151,15 +107,15 @@ func _process(delta: float) -> void:
 					if not data:
 						continue
 					
-					# var username_service: UsernameService = mp.get_service(UsernameService)
-					# print('(%s, %s) updating %s properties with %s (=> %s)' % [sync, reliable, scene, values, username_service.get_username(to_peer)])
-					# replication_service.get_observing_peers(scene)
+					#var username_service: UsernameService = mp.get_service(UsernameService)
+					#print('[%s => %s] (%s, %s) updating %s properties with %s' % [username_service.get_username(mp.local_peer), username_service.get_username(to_peer), sync, reliable, scene, values])
+					#replication_service.get_observing_peers(scene)
 					
 					var rpc := _get_receive_rpc(reliable)
 					rpc.rpc_id(to_peer, data)
 		
-		if changed:
-			update_value_cache(scene)
+			if changed:
+				update_value_cache(scene, sync)
 	_rpc_scene = null
 
 ## A map between scene to array of property value.
@@ -176,17 +132,19 @@ func _get_replication_data_value_cache(scene: Node) -> Array:
 ## Given a whole bunch of area, harvest the current property values for replication.
 ## If a value should not be replicated, its index will be null.
 func get_replication_data_values(scene: Node, sync: REPCO.SyncMode, to_peer: int, reliable: bool) -> Dictionary:
-	var replication_data := get_scene_replication_data(scene, sync)
+	if scene is CharacterBody2D and not reliable and mp.is_client():
+		pass
+	var replication_data := get_scene_replication_data(scene)
 	var values := {}
 	if not replication_data:
 		return values
-	var sender_data := get_scene_sender_data(scene)
-	var receiver_data := get_scene_receiver_data(scene)
-	var reliable_data := get_scene_reliable_data(scene)
 	var value_cache := _get_replication_data_value_cache(scene)
 	for idx in replication_data.size():
-		# Skip if this isn't the right reliable mode.
-		if reliable != reliable_data[idx]:
+		# Skip if this isn't the right reliable/sync mode.
+		var replication_fields: Array = replication_data[idx][2]
+		if sync != replication_fields[2]:
+			continue
+		if reliable != replication_fields[3]:
 			continue
 		
 		var result: Variant = null
@@ -196,24 +154,18 @@ func get_replication_data_values(scene: Node, sync: REPCO.SyncMode, to_peer: int
 		if not (node and is_instance_valid(node)):
 			continue
 		
-		# If we're on client, avoid sending certain values.
-		if mp.is_client():
-			var send: REPCO.PeerFilter = sender_data[idx]
-			if send == REPCO.PeerFilter.SERVER:
+		# If we're on client/server, avoid sending certain values.
+		var filter: REPCO.PeerFilter = replication_fields[0] if mp.is_client() else replication_fields[1]
+		match filter:
+			REPCO.PeerFilter.SERVER:
 				continue
-			elif send == REPCO.PeerFilter.OWNER_SERVER:
+			REPCO.PeerFilter.OWNER_SERVER:
 				var node_owner := REPCO.get_node_owner(node)
-				if node_owner != mp.local_peer:
+				if node_owner != (mp.local_peer if mp.is_client() else to_peer):
 					continue
-		
-		# If we're on server, avoid sending certain values.
-		elif mp.is_server():
-			var recv: REPCO.PeerFilter = receiver_data[idx]
-			if recv == REPCO.PeerFilter.SERVER:
-				continue
-			elif recv == REPCO.PeerFilter.OWNER_SERVER:
+			REPCO.PeerFilter.NOT_OWNER, REPCO.PeerFilter.OWNER_ONCE:
 				var node_owner := REPCO.get_node_owner(node)
-				if node_owner != to_peer:
+				if node_owner == (mp.local_peer if mp.is_client() else to_peer):
 					continue
 		
 		# If there's property interpolation active on this value,
@@ -223,22 +175,22 @@ func get_replication_data_values(scene: Node, sync: REPCO.SyncMode, to_peer: int
 			continue
 		
 		# Add result, only if it differs from cache.
+		var cached_result: Variant = value_cache[idx]
 		result = node.get_indexed(property_path)
-		if value_cache[idx] != result:
-			values[idx] = _compress_property_change(value_cache[idx], result)
+		if cached_result != result:
+			values[idx] = _compress_property_change(cached_result, result)
 	return values
 
 ## Updates values in the value cache for replication data.
-func update_value_cache(scene: Node):
+func update_value_cache(scene: Node, sync: REPCO.SyncMode):
 	var value_cache := _get_replication_data_value_cache(scene)
-	for sync in HARVEST_SYNCS:
-		var replication_data := get_scene_replication_data(scene, sync)
-		if not replication_data:
-			continue
-		for idx in replication_data.size():
-			var node: Node = replication_data[idx][0]
-			if node and is_instance_valid(node):
-				var property_path: NodePath = replication_data[idx][1]
+	var replication_data := get_scene_replication_data(scene)
+	for idx in replication_data.size():
+		var node: Node = replication_data[idx][0]
+		if node and is_instance_valid(node):
+			var property_path: NodePath = replication_data[idx][1]
+			var replication_fields: Array = replication_data[idx][2]
+			if replication_fields[2] == sync:
 				value_cache[idx] = node.get_indexed(property_path)
 
 #endregion
@@ -248,7 +200,7 @@ func update_value_cache(scene: Node):
 #region RPC Funnel
 
 func _get_receive_rpc(reliable: bool) -> Callable:
-	if mp.is_client():
+	if mp.is_server():
 		if reliable:
 			return _cl_receive_reliable_properties
 		else:
@@ -290,15 +242,15 @@ func _receive_properties(data: PackedByteArray):
 	var reliable: bool = properties[2]
 	var values: Dictionary = properties[3]
 	
-	var replication_data := get_scene_replication_data(scene, sync)
+	var replication_data := get_scene_replication_data(scene)
 	var value_cache := _get_replication_data_value_cache(scene)
-	var sender_data := get_scene_sender_data(scene)
-	var receiver_data := get_scene_receiver_data(scene)
-	var reliable_data := get_scene_reliable_data(scene)
 	var updated_values := {}
 	for idx in values:
-		# Skip if this isn't the right reliable mode.
-		if reliable != reliable_data[idx]:
+		# Skip if this isn't the right reliable/sync mode.
+		var replication_fields: Array = replication_data[idx][2]
+		if sync != replication_fields[2]:
+			continue
+		if reliable != replication_fields[3]:
 			continue
 		
 		# Check for a valid node.
@@ -308,16 +260,19 @@ func _receive_properties(data: PackedByteArray):
 		
 		# If we're reading from the server, skip client-blocked values.
 		var value: Variant = values[idx]
-		if mp.is_server():
-			var send: REPCO.PeerFilter = sender_data[idx]
-			if send == REPCO.PeerFilter.SERVER:
+		var filter: REPCO.PeerFilter = replication_fields[0] if mp.is_server() else replication_fields[1]
+		match filter:
+			REPCO.PeerFilter.SERVER:
 				continue
-			elif send == REPCO.PeerFilter.OWNER_SERVER:
+			REPCO.PeerFilter.OWNER_SERVER:
 				var node_owner := REPCO.get_node_owner(node)
 				if node_owner != mp.remote_peer:
 					continue
-			else:
-				updated_values[idx] = value
+			REPCO.PeerFilter.NOT_OWNER, REPCO.PeerFilter.OWNER_ONCE:
+				var node_owner := REPCO.get_node_owner(node)
+				if node_owner == mp.remote_peer:
+					continue
+		updated_values[idx] = value
 		
 		# Get and set property value.
 		var property_path: NodePath = replication_data[idx][1]
@@ -339,9 +294,9 @@ func _receive_properties(data: PackedByteArray):
 			if peer == mp.remote_peer:
 				continue
 			
-			# var username_service: UsernameService = mp.get_service(UsernameService)
-			# print('(%s, %s) forwarding %s properties with %s (=> %s)' % [sync, reliable, scene, values, username_service.get_username(peer)])
-			# replication_service.get_observing_peers(scene)
+			#var username_service: UsernameService = mp.get_service(UsernameService)
+			#print('[%s => %s] (%s, %s) FORWARDING %s properties with %s' % [username_service.get_username(mp.local_peer), username_service.get_username(peer), sync, reliable, scene, values])
+			#replication_service.get_observing_peers(scene)
 			
 			rpc.rpc_id(peer, forward_data)
 
@@ -424,17 +379,31 @@ var _property_interpolation_cache := {}
 func _start_property_interpolation(node: Node, property_path: NodePath, value: Variant):
 	_end_property_interpolation(node, property_path)
 	var tween := node.create_tween()
-	tween.tween_property(node, property_path, value, INTERPOLATE_DURATION)
+	tween.tween_method(
+		_tween_property.bind(node, property_path, node.get_indexed(property_path), value),
+		0.0, INTERPOLATE_MAX_PREDICTION,
+		INTERPOLATE_DURATION * INTERPOLATE_MAX_PREDICTION
+	)
 	tween.tween_callback(_end_property_interpolation.bind(node, property_path))
 	_property_interpolation_cache.get_or_add(node, {})[property_path] = tween
 	node.tree_exited.connect(_node_exit_in_property_callback.bind(node), CONNECT_ONE_SHOT)
 
+func _tween_property(x: float, node: Node, property_path: NodePath, start_value: Variant, end_value: Variant):
+	#if mp.local_peer == 1:
+	#	print(lerp(start_value, end_value, x).x)
+	node.set_indexed(property_path, lerp(start_value, end_value, x))
+
 ## Kills a property interpolation tween.
 func _end_property_interpolation(node: Node, property_path: NodePath):
 	if _has_property_interpolation(node, property_path):
-		_property_interpolation_cache[node][property_path].kill()
+		var tween: Tween = _property_interpolation_cache[node][property_path]
+		tween.pause()
+		tween.kill()
 	_property_interpolation_cache.get_or_add(node, {}).erase(property_path)
-	node.tree_exited.disconnect(_node_exit_in_property_callback.bind(node))
+	
+	var cleanup_callback := _node_exit_in_property_callback.bind(node)
+	if node.tree_exited.is_connected(cleanup_callback):
+		node.tree_exited.disconnect(cleanup_callback)
 
 func _node_exit_in_property_callback(node: Node):
 	_property_interpolation_cache.erase(node)

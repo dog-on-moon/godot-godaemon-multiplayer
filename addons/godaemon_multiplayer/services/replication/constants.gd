@@ -9,13 +9,24 @@ const META_OWNER := &"_o"
 enum PeerFilter {
 	SERVER = 0,
 	OWNER_SERVER = 1,
-	CLIENTS_SERVER = 2
+	CLIENTS_SERVER = 2,
+	NOT_OWNER = 3,
+	OWNER_ONCE = 4,
 }
 
-const PeerFilterNames := {
+const PeerFilterSendNames := {
 	PeerFilter.SERVER: "Server Only",
 	PeerFilter.OWNER_SERVER: "Owner + Server",
 	PeerFilter.CLIENTS_SERVER: "Clients + Server",
+	PeerFilter.NOT_OWNER: "Not Owner",
+}
+
+const PeerFilterRecvNames := {
+	PeerFilter.SERVER: "Server Only",
+	PeerFilter.OWNER_SERVER: "Owner + Server",
+	PeerFilter.CLIENTS_SERVER: "Clients + Server",
+	PeerFilter.NOT_OWNER: "Not Owner",
+	PeerFilter.OWNER_ONCE: "Not Owner (Replicated)",
 }
 
 enum SyncMode {
@@ -35,21 +46,15 @@ const DEFAULT_RECV_FILTER := PeerFilter.CLIENTS_SERVER
 const DEFAULT_SYNC_MODE := SyncMode.ON_GENERATE
 const DEFAULT_SYNC_RELIABLE := true
 
-static func editor_filter_to_real_filter(editor: int) -> int:
-	return PeerFilterNames.keys()[editor]
-
-static func real_filter_to_editor_filter(real: int) -> int:
-	return PeerFilterNames.keys().find(real)
-
 ## Sets the replicated property of a node.
-static func set_replicated_property(object: Node, property_path: NodePath, send: int, recv: int, mode: SyncMode, reliable: bool):
+static func set_replicated_property(object: Node, property_path: NodePath, send: int, recv: int, sync: SyncMode, reliable: bool):
 	const key_name := META_SYNC_PROPERTIES
 	var root := object if object.scene_file_path else object.owner
 	var true_path := Util.owner_property_path(object, property_path)
 	if not root.has_meta(key_name):
 		root.set_meta(key_name, {})
 	var property_dict: Dictionary = root.get_meta(key_name)
-	property_dict[true_path] = [send, recv, mode, reliable]
+	property_dict[true_path] = [send, recv, sync, reliable]
 	ReplicationCacheManager.add_node_to_storage(root)
 	return true
 
@@ -94,4 +99,6 @@ static func _harvest_replicated_nodes(root: Node, nodes: Array[Node]):
 
 ## Returns the owner of a Node.
 static func get_node_owner(node: Node) -> int:
+	while node is not MultiplayerRoot and not node.has_meta(META_OWNER):
+		node = node.get_parent()
 	return node.get_meta(META_OWNER, 1)

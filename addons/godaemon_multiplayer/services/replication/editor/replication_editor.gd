@@ -187,16 +187,16 @@ func _add_property_to_tree(object: Node, property_path: NodePath):
 	
 	item.set_text_alignment(1, HORIZONTAL_ALIGNMENT_CENTER)
 	item.set_cell_mode(1, TreeItem.CELL_MODE_RANGE)
-	item.set_range_config(1, 0, REPCO.PeerFilterNames.size(), 1)
-	item.set_text(1, ",".join(REPCO.PeerFilterNames.values()))
-	item.set_range(1, REPCO.real_filter_to_editor_filter(send))
+	item.set_range_config(1, 0, REPCO.PeerFilterSendNames.size(), 1)
+	item.set_text(1, ",".join(REPCO.PeerFilterSendNames.values()))
+	item.set_range(1, send)
 	item.set_editable(1, true)
 	
 	item.set_text_alignment(2, HORIZONTAL_ALIGNMENT_CENTER)
 	item.set_cell_mode(2, TreeItem.CELL_MODE_RANGE)
-	item.set_range_config(2, 0, REPCO.PeerFilterNames.size(), 1)
-	item.set_text(2, ",".join(REPCO.PeerFilterNames.values()))
-	item.set_range(2, REPCO.real_filter_to_editor_filter(recv))
+	item.set_range_config(2, 0, REPCO.PeerFilterRecvNames.size(), 1)
+	item.set_text(2, ",".join(REPCO.PeerFilterRecvNames.values()))
+	item.set_range(2, recv)
 	item.set_editable(2, true)
 	
 	item.set_text_alignment(3, HORIZONTAL_ALIGNMENT_CENTER)
@@ -329,13 +329,13 @@ func _tree_item_edited():
 				# Setting sender
 				undo_redo.create_action("Set sender mode")
 				undo_redo.add_do_method(self, &"_set_sender", item, object, property_path, int(item.get_range(column)))
-				undo_redo.add_undo_method(self, &"_set_sender", item, object, property_path, REPCO.real_filter_to_editor_filter(send))
+				undo_redo.add_undo_method(self, &"_set_sender", item, object, property_path, send)
 				undo_redo.commit_action()
 			2:
 				# Setting receiver
 				undo_redo.create_action("Set receiver mode")
 				undo_redo.add_do_method(self, &"_set_receiver", item, object, property_path, int(item.get_range(column)))
-				undo_redo.add_undo_method(self, &"_set_receiver", item, object, property_path, REPCO.real_filter_to_editor_filter(recv))
+				undo_redo.add_undo_method(self, &"_set_receiver", item, object, property_path, recv)
 				undo_redo.commit_action()
 			3:
 				# Setting sync mode
@@ -354,14 +354,14 @@ func _tree_item_edited():
 func _set_sender(item: TreeItem, object: Node, property_path: NodePath, send: int):
 	if not is_instance_valid(object):
 		return
-	REPCO.get_replicated_property(object, property_path)[0] = REPCO.editor_filter_to_real_filter(send)
+	REPCO.get_replicated_property(object, property_path)[0] = send
 	item.set_range(1, send)
 	EditorInterface.mark_scene_as_unsaved()
 
 func _set_receiver(item: TreeItem, object: Node, property_path: NodePath, recv: int):
 	if not is_instance_valid(object):
 		return
-	REPCO.get_replicated_property(object, property_path)[1] = REPCO.editor_filter_to_real_filter(recv)
+	REPCO.get_replicated_property(object, property_path)[1] = recv
 	item.set_range(2, recv)
 	EditorInterface.mark_scene_as_unsaved()
 

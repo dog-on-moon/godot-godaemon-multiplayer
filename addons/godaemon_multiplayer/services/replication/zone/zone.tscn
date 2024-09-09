@@ -6,6 +6,6 @@
 script = ExtResource("1_lo517")
 metadata/_r = 0
 metadata/_mp = {
-NodePath(":interest"): [0, 2, true, true],
+NodePath(":interest"): [0, 2, 1, true],
 NodePath(":zone_index"): [0, 2, 0, true]
 }

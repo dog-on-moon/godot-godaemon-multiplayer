@@ -154,3 +154,15 @@ static func fetch(node: Node, mp: MultiplayerRoot = null) -> Zone:
 	if not mp:
 		return null
 	return mp.get_service(ZoneService).get_node_zone(node)
+
+## Shorthand for ZoneService.add_interest
+func add_interest(peer: int):
+	return zone_service.add_interest(peer, self)
+
+## Shorthand for ZoneService.remove_interest
+func remove_interest(peer: int) -> bool:
+	return zone_service.remove_interest(peer, self)
+
+## Shorthand for ZoneService.has_interest
+func has_interest(peer: int) -> bool:
+	return zone_service.has_interest(peer, self)

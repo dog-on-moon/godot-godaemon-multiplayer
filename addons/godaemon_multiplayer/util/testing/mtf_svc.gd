@@ -44,6 +44,11 @@ func _ready() -> void:
 	stretch = true
 	sub_viewport = SubViewport.new()
 	sub_viewport.name = "SubViewport"
+	sub_viewport.size_2d_override = Vector2(
+		ProjectSettings.get_setting("display/window/size/viewport_width"),
+		ProjectSettings.get_setting("display/window/size/viewport_height")
+	)
+	sub_viewport.size_2d_override_stretch = true
 	mp = ClientRoot.new() if client else ServerRoot.new()
 	mp.name = "ClientRoot" if client else "ServerRoot"
 	mp.multiconnect_on_ready = false

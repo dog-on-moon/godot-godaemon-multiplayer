@@ -1,0 +1,31 @@
+[gd_scene load_steps=4 format=3 uid="uid://dchsmd8mvxqqa"]
+
+[ext_resource type="Script" path="res://demos/2d_platformer/player/player.gd" id="1_4nifv"]
+[ext_resource type="Texture2D" uid="uid://lnofiff3si8o" path="res://icon.svg" id="1_mrye0"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_7kneo"]
+size = Vector2(64, 64)
+
+[node name="Player" type="CharacterBody2D"]
+collision_layer = 2
+script = ExtResource("1_4nifv")
+metadata/_r = 0
+metadata/_mp = {
+NodePath(":position"): [1, 4, 2, true],
+NodePath(":modulate"): [0, 2, 0, true]
+}
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+scale = Vector2(0.5, 0.5)
+texture = ExtResource("1_mrye0")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_7kneo")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+enabled = false
+process_callback = 0
+position_smoothing_enabled = true
+rotation_smoothing_enabled = true
+drag_horizontal_enabled = true
+drag_vertical_enabled = true

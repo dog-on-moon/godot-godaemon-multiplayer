@@ -1,0 +1,19 @@
+[gd_scene load_steps=3 format=3 uid="uid://c3g7m5vw5jvt1"]
+
+[ext_resource type="Script" path="res://demos/2d_platformer/area/terrain.gd" id="1_m84mt"]
+[ext_resource type="Script" path="res://demos/2d_platformer/area/server_camera.gd" id="2_j0467"]
+
+[node name="ExtZone" type="Node2D"]
+metadata/_r = 0
+
+[node name="StaticBody2D" type="StaticBody2D" parent="."]
+script = ExtResource("1_m84mt")
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="StaticBody2D"]
+polygon = PackedVector2Array(-512, 512, 512, 512, 448, 640, -448, 640)
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(0, 352)
+enabled = false
+zoom = Vector2(1.075, 1.075)
+script = ExtResource("2_j0467")

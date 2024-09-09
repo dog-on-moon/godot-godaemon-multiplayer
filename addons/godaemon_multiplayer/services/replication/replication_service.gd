@@ -4,6 +4,8 @@ class_name ReplicationService
 ## replicated to clients and controlled using visibility.
 ## This also tracks added nodes for RPCs and replicates their IDs to clients.
 
+signal node_owner_updated(node: Node)
+
 signal enter_replicated_scene(scene: Node)
 signal exit_replicated_scene(scene: Node)
 
@@ -184,6 +186,7 @@ func _get_replicated_scene_descendants(node: Node) -> Dictionary:
 ## Sets the networked visibility of a scene.
 func set_visibility(node: Node, visibility: bool):
 	assert(mp.is_server())
+	assert(node.is_node_ready())
 	assert(node in replicated_scenes, "Node was not registered as a replicated scene.")
 	var old_visibility := get_visible_nodes(node)
 	replicated_scenes[node][1] = visibility
@@ -222,12 +225,15 @@ func set_node_owner(node: Node, peer: int = 1):
 	node.set_meta(REPCO.META_OWNER, peer)
 	
 	# Tell each observing peer who the new owner is.
-	var stream := PackedByteStream.new()
-	stream.setup_write(4 + mp.api.repository.MAX_BYTES)
-	stream.write_unsigned(mp.api.repository.get_id(node), mp.api.repository.MAX_BYTES)
-	stream.write_u32(peer)
-	for observer in get_observing_peers(node):
-		_set_node_owner.rpc_id(observer, stream.data)
+	if node.is_node_ready():
+		assert(node in replicated_scenes)
+		var stream := PackedByteStream.new()
+		stream.setup_write(4 + mp.api.repository.MAX_BYTES)
+		stream.write_unsigned(mp.api.repository.get_id(node), mp.api.repository.MAX_BYTES)
+		stream.write_u32(peer)
+		for observer in get_observing_peers(node):
+			_set_node_owner.rpc_id(observer, stream.data)
+		node_owner_updated.emit(node)
 
 ## Gets the owner of a node.
 func get_node_owner(node: Node) -> int:
@@ -244,6 +250,7 @@ func _set_node_owner(bytes: PackedByteArray):
 		push_warning("ReplicationService._set_node_owner could not find node ID %s" % node_id)
 		return
 	node.set_meta(REPCO.META_OWNER, peer)
+	node_owner_updated.emit(node)
 
 #endregion
 
@@ -325,6 +332,9 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 				REPCO.PeerFilter.OWNER_SERVER:
 					if peer != node_owner:
 						continue
+				REPCO.PeerFilter.NOT_OWNER:
+					if peer == node_owner:
+						continue
 			var node_path := NodePath(property_path.get_concatenated_names())
 			var prop_path := NodePath(property_path.get_concatenated_subnames())
 			var target_node := node.get_node(node_path) if node_path else node
@@ -335,25 +345,21 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 		var scene_state := packed_scene.get_state()
 		
 		var node_ids := []
-		var node_owners := []
 		for node_idx in scene_state.get_node_count():
 			var node_path := scene_state.get_node_path(node_idx)
 			var subnode := node.get_node_or_null(node_path)
 			if subnode:
 				var subnode_id := mp.api.repository.get_id(subnode)
-				var subnode_owner := REPCO.get_node_owner(subnode)
 				node_ids.append(subnode_id if subnode_id != -1 else 0)
-				node_owners.append(subnode_owner)
 			else:
 				node_ids.append(0)
-				node_owners.append(0)
 		
 		var add_data := [
 			parent_id,
+			node_owner,
 			scene_idx,
 			property_values,
 			node_ids,
-			node_owners,
 		]
 		added_node_data.append(add_data)
 	
@@ -392,10 +398,10 @@ func update_visibility(data: PackedByteArray):
 	var added_node_data: Array = visibility_data[0]
 	for add_data in added_node_data:
 		var parent_id: int = add_data[0]
-		var scene_idx: int = add_data[1]
-		var property_values: Array = add_data[2]
-		var node_ids: Array = add_data[3]
-		var node_owners: Array = add_data[4]
+		var node_owner: int = add_data[1]
+		var scene_idx: int = add_data[2]
+		var property_values: Array = add_data[3]
+		var node_ids: Array = add_data[4]
 		
 		# Create scene.
 		var sfp := ReplicationCacheManager.get_scene_file_path(scene_idx)
@@ -413,22 +419,21 @@ func update_visibility(data: PackedByteArray):
 		var packed_scene: PackedScene = load(sfp)
 		var scene_state := packed_scene.get_state()
 		var scene: Node = packed_scene.instantiate()
+		scene.set_meta(REPCO.META_OWNER, node_owner)
 		
 		# Load owners/IDs first.
 		for node_idx in scene_state.get_node_count():
-			if node_idx >= node_ids.size() or node_idx >= node_owners.size():
+			if node_idx >= node_ids.size():
 				push_warning("Received out of bounds node ids on scene.")
 				break
 			var node_path := scene_state.get_node_path(node_idx)
 			var subnode := scene.get_node_or_null(node_path)
 			if subnode:
 				var node_id: int = node_ids[node_idx]
-				var node_owner: int = node_owners[node_idx]
-				if node_owner == 0:
+				if node_id == 0:
 					subnode.queue_free()
 				else:
 					mp.api.repository.add_node(subnode, node_id)
-					subnode.set_meta(REPCO.META_OWNER, node_owner)
 			else:
 				push_warning("Could not find subnode om received scene. Weird")
 				break
@@ -446,6 +451,9 @@ func update_visibility(data: PackedByteArray):
 					continue
 				REPCO.PeerFilter.OWNER_SERVER:
 					if mp.local_peer != scene_owner:
+						continue
+				REPCO.PeerFilter.NOT_OWNER:
+					if mp.local_peer == scene_owner:
 						continue
 			true_idx += 1
 			
@@ -477,34 +485,32 @@ func _compress_visibility_data(added_node_data: Array, removed_node_data: Array)
 	# Encode added node data.
 	for added_data in added_node_data:
 		var parent_idx: int = added_data[0]
-		var scene_idx: int = added_data[1]
-		var node_properties: Array = added_data[2]
-		var node_ids: Array = added_data[3]
-		var node_owners: Array = added_data[4]
+		var node_owner: int = added_data[1]
+		var scene_idx: int = added_data[2]
+		var node_properties: Array = added_data[3]
+		var node_ids: Array = added_data[4]
 		
 		assert(scene_idx < (2 ** (MAX_SCENE_BYTES * 8)))
 		assert(node_ids.size() < (2 ** (MAX_NODE_ID_BYTES * 8)))
-		assert(node_owners.size() < (2 ** (MAX_NODE_OWNER_BYTES * 8)))
 		
 		var property_variant := var_to_bytes(node_properties) if not mp.configuration.allow_object_decoding else var_to_bytes_with_objects(node_properties)
 		
 		stream.allocate(
 			MAX_NODE_ID_BYTES
+			+ MAX_NODE_OWNER_BYTES
 			+ MAX_SCENE_BYTES
 			+ property_variant.size()
 			+ MAX_NODE_ID_BYTES
 			+ (MAX_NODE_ID_BYTES * node_ids.size())
-			+ (MAX_NODE_OWNER_BYTES * node_owners.size())
 		)
 		
 		stream.write_unsigned(parent_idx, MAX_NODE_ID_BYTES)
+		stream.write_unsigned(node_owner, MAX_NODE_OWNER_BYTES)
 		stream.write_unsigned(scene_idx, MAX_SCENE_BYTES)
 		stream.write_bytes(property_variant)
 		stream.write_unsigned(node_ids.size(), MAX_NODE_ID_BYTES)
 		for node_id in node_ids:
 			stream.write_unsigned(node_id, MAX_NODE_ID_BYTES)
-		for node_owner in node_owners:
-			stream.write_unsigned(node_owner, MAX_NODE_OWNER_BYTES)
 	
 	# Encode removed node data.
 	stream.allocate(removed_node_count * MAX_NODE_ID_BYTES)
@@ -533,18 +539,16 @@ func _decompress_visibility_data(data: PackedByteArray) -> Array:
 	var added_node_data: Array = []
 	for added_data_idx in added_node_count:
 		var parent_idx := stream.read_unsigned(MAX_NODE_ID_BYTES)
+		var node_owner := stream.read_unsigned(MAX_NODE_OWNER_BYTES)
 		var scene_idx := stream.read_unsigned(MAX_SCENE_BYTES)
 		var node_properties := stream.read_variant(mp.configuration.allow_object_decoding)
 		
 		var node_id_count := stream.read_unsigned(MAX_NODE_ID_BYTES)
 		var node_ids := []
-		var node_owners := []
 		for _i in node_id_count:
 			node_ids.append(stream.read_unsigned(MAX_NODE_ID_BYTES))
-		for _o in node_id_count:
-			node_owners.append(stream.read_unsigned(MAX_NODE_OWNER_BYTES))
 		
-		added_node_data.append([parent_idx, scene_idx, node_properties, node_ids, node_owners])
+		added_node_data.append([parent_idx, node_owner, scene_idx, node_properties, node_ids])
 	
 	# Decode removed node data.
 	var removed_node_data: Array = []
