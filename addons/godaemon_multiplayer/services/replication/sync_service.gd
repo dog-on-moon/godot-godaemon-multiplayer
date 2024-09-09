@@ -72,8 +72,8 @@ const HARVEST_RELIABLES: Array[bool] = [true, false]
 var _rpc_scene: Node
 
 func _process(delta: float) -> void:
-	if mp.is_server():
-		pass
+	if is_queued_for_deletion():
+		return
 	
 	# Check if we are communicating interpolation on this frame.
 	var msec := Time.get_ticks_msec()
@@ -87,9 +87,6 @@ func _process(delta: float) -> void:
 		if node_id == -1:
 			push_warning("Could not sync values for node %s: id missing" % scene)
 			continue
-		
-		if scene is not Zone and mp.is_server() and scene.get_child_count() == 1 and 'press_count' in scene.get_child(0):
-			pass
 		
 		# Harvest each sync and reliable mode.
 		var changed := false
@@ -132,8 +129,6 @@ func _get_replication_data_value_cache(scene: Node) -> Array:
 ## Given a whole bunch of area, harvest the current property values for replication.
 ## If a value should not be replicated, its index will be null.
 func get_replication_data_values(scene: Node, sync: REPCO.SyncMode, to_peer: int, reliable: bool) -> Dictionary:
-	if scene is CharacterBody2D and not reliable and mp.is_client():
-		pass
 	var replication_data := get_scene_replication_data(scene)
 	var values := {}
 	if not replication_data:

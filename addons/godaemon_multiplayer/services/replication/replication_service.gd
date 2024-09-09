@@ -84,20 +84,19 @@ func _replicated_scene_search(node: Node):
 	
 	# Setup signals on this node.
 	node.child_entered_tree.connect(_node_child_entered_tree)
-	node.tree_exited.connect(_node_tree_exited.bind(node), CONNECT_ONE_SHOT)
+	node.tree_exiting.connect(_node_tree_exiting.bind(node), CONNECT_ONE_SHOT)
 	
 	# Continue iteration.
 	if node.is_node_ready():
 		for child in node.get_children():
 			_replicated_scene_search(child)
 
-func _node_tree_exited(node: Node):
+func _node_tree_exiting(node: Node):
 	if node in replicated_scenes:
-		var old_visibility := get_visible_nodes(node)
+		if mp.api:
+			for peer in get_observing_peers(node):
+				_update_visibility(peer, [], [node])
 		replicated_scenes.erase(node)
-		_clear_visibility_cache(node)
-		var new_visibility := get_visible_nodes(node)
-		_update_nodes(old_visibility, new_visibility)
 		exit_replicated_scene.emit(node)
 	if node in _visibility_cache:
 		_visibility_cache.erase(node)

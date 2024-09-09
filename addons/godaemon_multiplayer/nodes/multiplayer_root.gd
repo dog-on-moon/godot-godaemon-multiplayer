@@ -229,6 +229,7 @@ func _add_services(nodes: Array[ServiceBase]):
 
 func _cleanup_services():
 	for service in services:
+		remove_child(service)
 		service.queue_free()
 	services = []
 	service_cache = {}

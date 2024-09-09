@@ -63,6 +63,8 @@ func _get_multiplayer_peer() -> MultiplayerPeer:
 	return scene_multiplayer.multiplayer_peer
 
 func _get_unique_id() -> int:
+	if scene_multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.ConnectionStatus.CONNECTION_CONNECTED:
+		return 0
 	return scene_multiplayer.get_unique_id()
 
 func _get_peer_ids() -> PackedInt32Array:
