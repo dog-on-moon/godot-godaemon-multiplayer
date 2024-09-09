@@ -288,3 +288,7 @@ func is_local_owner(node: Node) -> bool:
 	return get_node_owner(node) == local_peer
 
 #endregion
+
+func _exit_tree() -> void:
+	if not Engine.is_editor_hint():
+		end_connection()
