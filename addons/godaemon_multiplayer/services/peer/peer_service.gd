@@ -30,10 +30,10 @@ signal peer_data_dropped(peer: int, data: Dictionary, local_data: Dictionary)
 
 ## A dictionary from peer IDs to their data {}.
 ## This is replicated to all clients.
-var peer_data := {}
+var peer_data: Dictionary[int, Dictionary] = {}
 
 ## A dictionary from peer IDs to their local data {}.
-var peer_local_data := {}
+var peer_local_data: Dictionary[int, Dictionary] = {}
 
 func _ready() -> void:
 	mp.peer_connected.connect(_peer_connected)
@@ -158,7 +158,7 @@ func _sync_remove_data(peer: int, key: Variant, hash: int):
 @rpc("authority")
 func _sync(_peer_data: Dictionary):
 	assert(mp.is_client())
-	peer_data = _peer_data
+	peer_data.assign(_peer_data)
 	updated.emit()
 	full_updated.emit()
 

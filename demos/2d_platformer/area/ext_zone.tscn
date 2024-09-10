@@ -16,4 +16,5 @@ polygon = PackedVector2Array(-512, 512, 512, 512, 448, 640, -448, 640)
 position = Vector2(0, 352)
 enabled = false
 zoom = Vector2(1.075, 1.075)
+process_callback = 0
 script = ExtResource("2_j0467")

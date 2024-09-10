@@ -282,7 +282,7 @@ func decompress_rpc(data: PackedByteArray) -> Dictionary:
 #region Override Node Channels
 
 ## Mapping of node to override channel.
-var node_channels := {}
+var node_channels: Dictionary[Node, int] = {}
 
 ## Overrides the RPC channels on a given Node.
 func set_node_channel_override(node: Node, channel: int):
@@ -302,7 +302,7 @@ func get_node_channel_override(node: Node, default_channel: int = 0) -> int:
 
 #region RPC Ratelimits
 
-var _node_rpc_ratelimits := {}
+var _node_rpc_ratelimits: Dictionary[Node, Dictionary]= {}
 
 ## Sets the ratelimit on a given RPC for a Node.
 func set_rpc_ratelimit(node: Node, method: StringName, count: int, duration: float):
@@ -328,7 +328,7 @@ func _clear_rpc_ratelimit(node: Node):
 
 #region RPC Security
 
-var _node_rpc_server_receive_only := {}
+var _node_rpc_server_receive_only: Dictionary[Node, Dictionary] = {}
 
 ## Sets an RPC to only allow being received by the server.
 ## This will prevent clients from being able to send the RPC to other clients.

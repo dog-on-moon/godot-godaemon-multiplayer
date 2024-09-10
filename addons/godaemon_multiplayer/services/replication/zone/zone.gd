@@ -53,10 +53,10 @@ var use_window_render_settings := true
 @onready var mp: MultiplayerRoot = MultiplayerRoot.fetch(self)
 @onready var zone_service: ZoneService = mp.get_service(ZoneService)
 
-var old_interest := {}
+var old_interest: Dictionary[int, Node] = {}
 
 ## A dictionary mapping peers to null.
-@export var interest := {}:
+@export var interest: Dictionary[int, Node] = {}:
 	set(x):
 		interest = x
 		if mp:

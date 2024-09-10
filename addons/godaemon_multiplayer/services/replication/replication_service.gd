@@ -12,7 +12,7 @@ signal exit_replicated_scene(scene: Node)
 const REPCO = preload("res://addons/godaemon_multiplayer/services/replication/constants.gd")
 
 ## A dictionary map of replicated scenes to their peer visibility states.
-var replicated_scenes := {}
+var replicated_scenes: Dictionary[Node, Dictionary] = {}
 
 func _enter_tree() -> void:
 	# Look for existing replicated scenes, setup initial signals.
@@ -109,7 +109,7 @@ func _node_child_entered_tree(node: Node):
 
 #region Replication Getters
 
-var _visibility_cache := {}
+var _visibility_cache: Dictionary[Node, Dictionary] = {}
 
 ## Returns true if a node is absolutely visible for a peer, false if not.
 func get_true_visibility(node: Node, peer: int) -> bool:
@@ -139,8 +139,8 @@ func _clear_visibility_cache(node: Node, peer := 1):
 				_visibility_cache[n].erase(peer)
 
 ## Returns a set of all nodes visible for this peer.
-func get_visible_nodes_for_peer(peer: int, root: Node = null) -> Dictionary:
-	var dict := {}
+func get_visible_nodes_for_peer(peer: int, root: Node = null) -> Dictionary[Node, Object]:
+	var dict: Dictionary[Node, Object] = {}
 	var search := replicated_scenes if not root else _get_replicated_scene_descendants(root)
 	for node in search:
 		if get_true_visibility(node, peer):
@@ -148,8 +148,8 @@ func get_visible_nodes_for_peer(peer: int, root: Node = null) -> Dictionary:
 	return dict
 
 ## Returns a dict of visible nodes for all peers.
-func get_visible_nodes(root: Node = null) -> Dictionary:
-	var visible_nodes := {}
+func get_visible_nodes(root: Node = null) -> Dictionary[int, Dictionary]:
+	var visible_nodes: Dictionary[int, Dictionary] = {}
 	for peer in mp.api.get_peers():
 		if peer == 1:
 			continue
@@ -157,8 +157,8 @@ func get_visible_nodes(root: Node = null) -> Dictionary:
 	return visible_nodes
 
 ## Return the set of peers who can see this Node.
-func get_observing_peers(node: Node) -> Dictionary:
-	var peers := {}
+func get_observing_peers(node: Node) -> Dictionary[int, Object]:
+	var peers: Dictionary[int, Object] = {}
 	for peer in mp.api.get_peers():
 		if peer == 1:
 			continue
@@ -166,8 +166,8 @@ func get_observing_peers(node: Node) -> Dictionary:
 			peers[peer] = null
 	return peers
 
-func _get_replicated_scene_ancestors(node: Node) -> Dictionary:
-	var ancestors := {node: null}
+func _get_replicated_scene_ancestors(node: Node) -> Dictionary[Node, Object]:
+	var ancestors: Dictionary[Node, Object] = {node: null}
 	node = node.get_parent()
 	while node != mp:
 		if node in replicated_scenes:
@@ -175,8 +175,8 @@ func _get_replicated_scene_ancestors(node: Node) -> Dictionary:
 		node = node.get_parent()
 	return ancestors
 
-func _get_replicated_scene_descendants(node: Node) -> Dictionary:
-	var descendants := {node: null}
+func _get_replicated_scene_descendants(node: Node) -> Dictionary[Node, Object]:
+	var descendants: Dictionary[Node, Object] = {node: null}
 	for n in replicated_scenes:
 		if node.is_ancestor_of(n):
 			descendants[n] = null

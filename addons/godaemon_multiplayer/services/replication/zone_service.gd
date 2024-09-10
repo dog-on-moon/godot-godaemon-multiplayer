@@ -79,7 +79,7 @@ var zone_index := 0
 
 ## A set of active zones.
 ## Set on the server and client.
-var zones := {}
+var zones: Dictionary[Zone, Object] = {}
 
 ## Creates a new Zone. You can specify an instantiated scene to be added to it.
 ## Must be called on the server to function properly.
@@ -87,7 +87,7 @@ func add_zone(node: Node) -> Zone:
 	assert(mp.is_server())
 	assert(node.scene_file_path, "Added zones must be from a PackedScene")
 	assert(ReplicationCacheManager.get_index(node.scene_file_path) != -1, "Zone must have scene replication enabled")
-	var zone := ZONE.instantiate()
+	var zone: Zone = ZONE.instantiate()
 	zone.scene = node
 	zone.zone_index = zone_index
 	zone_index += 1
@@ -178,7 +178,7 @@ func update_render_properties():
 #region Getters
 
 ## Dictionary between a node and what zone they are in.
-var _zone_node_cache := {}
+var _zone_node_cache: Dictionary[Node, Zone] = {}
 
 ## Gets the Zone that a node is in.
 func get_node_zone(node: Node) -> Zone:

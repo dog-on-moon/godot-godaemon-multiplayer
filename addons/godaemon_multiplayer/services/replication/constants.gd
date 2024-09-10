@@ -14,14 +14,14 @@ enum PeerFilter {
 	OWNER_ONCE = 4,
 }
 
-const PeerFilterSendNames := {
+const PeerFilterSendNames: Dictionary[PeerFilter, String] = {
 	PeerFilter.SERVER: "Server Only",
 	PeerFilter.OWNER_SERVER: "Owner + Server",
 	PeerFilter.CLIENTS_SERVER: "Clients + Server",
 	PeerFilter.NOT_OWNER: "Not Owner",
 }
 
-const PeerFilterRecvNames := {
+const PeerFilterRecvNames: Dictionary[PeerFilter, String] = {
 	PeerFilter.SERVER: "Server Only",
 	PeerFilter.OWNER_SERVER: "Owner + Server",
 	PeerFilter.CLIENTS_SERVER: "Clients + Server",
@@ -35,7 +35,7 @@ enum SyncMode {
 	INTERPOLATE_ON_CHANGE = 2,
 }
 
-const SyncModeNames := {
+const SyncModeNames: Dictionary[SyncMode, String] = {
 	SyncMode.ON_GENERATE: "Once",
 	SyncMode.ON_CHANGE: "Always",
 	SyncMode.INTERPOLATE_ON_CHANGE: "Smooth",
@@ -75,11 +75,11 @@ static func remove_replicated_property(object: Node, property_path: NodePath):
 		root.remove_meta(META_SYNC_PROPERTIES)
 
 ## Returns the replicated property dict of a node.
-static func get_replicated_property_dict(object: Node) -> Dictionary:
+static func get_replicated_property_dict(object: Node) -> Dictionary[NodePath, Array]:
 	var root := object if object.scene_file_path else object.owner
 	var properties: Dictionary = root.get_meta(META_SYNC_PROPERTIES, {})
 	var base_path := StringName(Util.owner_path(object))
-	var ret_properties := {}
+	var ret_properties: Dictionary[NodePath, Array] = {}
 	for property: NodePath in properties:
 		if property.get_concatenated_names() == base_path:
 			ret_properties[NodePath(':' + property.get_concatenated_subnames())] = properties[property]

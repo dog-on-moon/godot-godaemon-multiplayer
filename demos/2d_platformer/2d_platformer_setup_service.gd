@@ -13,7 +13,7 @@ func _ready() -> void:
 		var ext_zone_node: Node2D = EXT_ZONE.instantiate()
 		var ext_zone := zone_service.add_zone(ext_zone_node)
 		
-		var peer_to_player := {}
+		var peer_to_player: Dictionary[int, Node] = {}
 		
 		mp.peer_connected.connect(
 			func (peer: int):

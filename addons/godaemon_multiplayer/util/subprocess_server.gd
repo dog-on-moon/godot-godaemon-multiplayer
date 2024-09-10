@@ -10,7 +10,7 @@ signal subprocess_closed(pid: int)
 var subprocesses: Array[int] = []
 
 ## Kwargs passed in via cmdline user arguments.
-var kwargs := {}
+var kwargs: Dictionary[String, String] = {}
 
 ## Returns the parent pid, if there is one defined.
 var parent_pid: int:
@@ -34,14 +34,14 @@ func _enter_tree():
 		if '=' in arg:
 			kwargs[arg.get_slice('=', 0).trim_prefix('--')] = arg.split('=', true, 1)[1]
 		else:
-			kwargs[arg.trim_prefix('--')] = null
+			kwargs[arg.trim_prefix('--')] = ''
 
 func _exit_tree() -> void:
 	kill_all_subprocesses()
 
 ## Creates a subprocess running a packed scene.
 ## Returns the process id on success, -1 on failure.
-func create_subprocess(scene_path: String, user_kwargs := {}, headless := true, child_processes_can_fork := false) -> int:
+func create_subprocess(scene_path: String, user_kwargs: Dictionary[String, String] = {}, headless := true, child_processes_can_fork := false) -> int:
 	# Validate user_kwargs.
 	assert(KW_PARENT_PID not in user_kwargs)
 	

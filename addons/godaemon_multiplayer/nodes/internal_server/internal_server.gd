@@ -14,13 +14,13 @@ func _ready() -> void:
 	if SubprocessServer.parent_pid == -1:
 		# ran as a standalone scene, so testing in editor
 		SubprocessServer.kwargs = {
-			KW_INTERNAL_SERVER_PORT: 27027,
+			KW_INTERNAL_SERVER_PORT: str(27027),
 			KW_INTERNAL_SERVER_CONFIG_PATH: "res://demos/test/test_config.tres",
 		}
 	
 	terminal.info('Process kwargs: %s' % SubprocessServer.kwargs)
 	
-	var port := SubprocessServer.kwargs.get(KW_INTERNAL_SERVER_PORT, 0)
+	var port := int(SubprocessServer.kwargs.get(KW_INTERNAL_SERVER_PORT, 0))
 	if not port:
 		terminal.error("kwarg %s undefined" % KW_INTERNAL_SERVER_PORT)
 		return shutdown()
@@ -56,8 +56,8 @@ static func start_internal_server(port: int, configuration: MultiplayerConfig, h
 	if KW_INTERNAL_SERVER_PORT in SubprocessServer.kwargs:
 		# Realistically speaking, we should avoid a fork bomb
 		return false
-	var kwargs := {
-		KW_INTERNAL_SERVER_PORT: port,
+	var kwargs: Dictionary[String, String] = {
+		KW_INTERNAL_SERVER_PORT: str(port),
 		KW_INTERNAL_SERVER_CONFIG_PATH: configuration.resource_path
 	}
 	return SubprocessServer.create_subprocess(

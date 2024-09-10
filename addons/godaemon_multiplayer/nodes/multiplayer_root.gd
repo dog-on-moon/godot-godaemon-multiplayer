@@ -162,10 +162,9 @@ func end_connection() -> bool:
 #region Services
 
 var services: Array[ServiceBase] = []
-var service_cache := {}
-var service_name_cache := {}
+var service_cache: Dictionary[Script, ServiceBase] = {}
 
-var service_channel_start := {}
+var service_channel_start: Dictionary[StringName, int] = {}
 var service_channel_count := 0
 
 @onready var __setup_service_signals = _setup_service_signals.call()
@@ -206,7 +205,6 @@ func _setup_services():
 			continue
 		services.append(n)
 		service_cache[script] = n
-		service_name_cache[script.get_global_name()] = n
 		n.name = script.get_global_name()
 		n.mp = self
 		api.repository.add_node(n)
@@ -233,7 +231,6 @@ func _cleanup_services():
 		service.queue_free()
 	services = []
 	service_cache = {}
-	service_name_cache = {}
 
 ## Returns a service by script reference.
 func get_service(t: Script, required := true) -> ServiceBase:

@@ -36,7 +36,7 @@ func exit_replicated_scene(scene: Node):
 	_scene_replication_data_cache.erase(scene)
 	_replication_data_value_cache.erase(scene)
 
-var _scene_replication_data_cache := {}
+var _scene_replication_data_cache: Dictionary[Node, Array] = {}
 
 ## Given a scene, returns an Array[[node, property path]].
 func get_scene_replication_data(scene: Node) -> Array:
@@ -116,7 +116,7 @@ func _process(delta: float) -> void:
 	_rpc_scene = null
 
 ## A map between scene to array of property value.
-var _replication_data_value_cache := {}
+var _replication_data_value_cache: Dictionary[Node, Array] = {}
 
 func _get_replication_data_value_cache(scene: Node) -> Array:
 	var value_cache: Array = _replication_data_value_cache.get_or_add(scene, [])
@@ -128,9 +128,9 @@ func _get_replication_data_value_cache(scene: Node) -> Array:
 
 ## Given a whole bunch of area, harvest the current property values for replication.
 ## If a value should not be replicated, its index will be null.
-func get_replication_data_values(scene: Node, sync: REPCO.SyncMode, to_peer: int, reliable: bool) -> Dictionary:
+func get_replication_data_values(scene: Node, sync: REPCO.SyncMode, to_peer: int, reliable: bool) -> Dictionary[int, Variant]:
 	var replication_data := get_scene_replication_data(scene)
-	var values := {}
+	var values: Dictionary[int, Variant] = {}
 	if not replication_data:
 		return values
 	var value_cache := _get_replication_data_value_cache(scene)
@@ -239,7 +239,7 @@ func _receive_properties(data: PackedByteArray):
 	
 	var replication_data := get_scene_replication_data(scene)
 	var value_cache := _get_replication_data_value_cache(scene)
-	var updated_values := {}
+	var updated_values: Dictionary[int, Variant] = {}
 	for idx in values:
 		# Skip if this isn't the right reliable/sync mode.
 		var replication_fields: Array = replication_data[idx][2]
@@ -322,7 +322,7 @@ func _decompress_values(data: PackedByteArray) -> Array:
 	results.append(stream.read_u8())
 	results.append(stream.read_u8())
 	var values_size := stream.read_u8()
-	var values := {}
+	var values: Dictionary[int, Variant] = {}
 	for _i in values_size:
 		var idx := stream.read_u8()
 		var value := stream.read_variant(mp.configuration.allow_object_decoding)
@@ -337,7 +337,7 @@ func _compress_property_change(old_value: Variant, new_value: Variant) -> Varian
 	var type := typeof(new_value)
 	match type:
 		TYPE_DICTIONARY:
-			var added_values := {}
+			var added_values: Dictionary[Variant, Variant] = {}
 			var removed_keys := []
 			for new in new_value:
 				if new not in old_value:
@@ -368,7 +368,7 @@ func _decompress_property_change(variant: Variant, node: Node, property_path: No
 
 #region Interpolation
 
-var _property_interpolation_cache := {}
+var _property_interpolation_cache: Dictionary[Node, Dictionary] = {}
 
 ## Begins a property interpolation tween.
 func _start_property_interpolation(node: Node, property_path: NodePath, value: Variant):

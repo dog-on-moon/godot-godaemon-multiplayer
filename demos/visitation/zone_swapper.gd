@@ -4,7 +4,7 @@ extends Control
 @onready var zone_2: Button = $Panel/HBoxContainer/Zone2
 @onready var zone_3: Button = $Panel/HBoxContainer/Zone3
 
-@onready var zone_buttons := {
+@onready var zone_buttons: Dictionary[int, Button] = {
 	0: zone_1,
 	1: zone_2,
 	2: zone_3
