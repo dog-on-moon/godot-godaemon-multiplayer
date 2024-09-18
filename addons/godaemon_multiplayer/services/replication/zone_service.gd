@@ -7,6 +7,12 @@ class_name ZoneService
 ## - Zones use exclusive ENet chnanels for themselves and their children, used for RPCs/replication/synchronization.
 ## - Peer interest state is replicated to clients within a Zone, so they know who else is present.
 
+## When true, all created Zones will share a singular World3D.
+const ZONES_SHARE_WORLD := true
+
+@onready var base_world_2d := World2D.new()
+@onready var base_world_3d := World3D.new()
+
 ## Emitted on a client whenever they've received interest for a zone.
 signal cl_added_interest(zone: Zone)
 
@@ -79,7 +85,7 @@ var zone_index := 0
 
 ## A set of active zones.
 ## Set on the server and client.
-var zones: Dictionary[Zone, Object] = {}
+var zones := {}
 
 ## Creates a new Zone. You can specify an instantiated scene to be added to it.
 ## Must be called on the server to function properly.
@@ -87,7 +93,7 @@ func add_zone(node: Node) -> Zone:
 	assert(mp.is_server())
 	assert(node.scene_file_path, "Added zones must be from a PackedScene")
 	assert(ReplicationCacheManager.get_index(node.scene_file_path) != -1, "Zone must have scene replication enabled")
-	var zone: Zone = ZONE.instantiate()
+	var zone := ZONE.instantiate()
 	zone.scene = node
 	zone.zone_index = zone_index
 	zone_index += 1
@@ -98,7 +104,7 @@ func add_zone(node: Node) -> Zone:
 	return zone
 
 ## Removes a Zone and frees it. Returns true on successful removal.
-func remove_scene(zone: Zone) -> bool:
+func remove_zone(zone: Zone) -> bool:
 	assert(mp.is_server())
 	if zone not in zones:
 		return false
@@ -178,7 +184,7 @@ func update_render_properties():
 #region Getters
 
 ## Dictionary between a node and what zone they are in.
-var _zone_node_cache: Dictionary[Node, Zone] = {}
+var _zone_node_cache := {}
 
 ## Gets the Zone that a node is in.
 func get_node_zone(node: Node) -> Zone:

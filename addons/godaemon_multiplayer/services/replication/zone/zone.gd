@@ -20,10 +20,8 @@ signal interest_removed(peer: int)
 ## The World2D used to encapsulate this Zone's canvas, physics, and navigation.
 ## This keeps physics and navigation exclusive to this Zone.
 ## It can be overridden to share a World2D with another Zone.
-@export var _world_2d := World2D.new():
+@export var _world_2d: World2D = null:
 	set(x):
-		if x == null:
-			x = World2D.new()
 		_world_2d = x
 		if not Engine.is_editor_hint():
 			world_2d = x
@@ -31,10 +29,8 @@ signal interest_removed(peer: int)
 ## The World3D used to encapsulate this Zone's camera, environment, physics, and navigation.
 ## This keeps physics and navigation exclusive to this Zone.
 ## It can be overridden to share a World3D with another Zone.
-@export var _world_3d := World3D.new():
+@export var _world_3d: World3D = null:
 	set(x):
-		if x == null:
-			x = World3D.new()
 		_world_3d = x
 		if not Engine.is_editor_hint():
 			world_3d = x
@@ -53,10 +49,10 @@ var use_window_render_settings := true
 @onready var mp: MultiplayerRoot = MultiplayerRoot.fetch(self)
 @onready var zone_service: ZoneService = mp.get_service(ZoneService)
 
-var old_interest: Dictionary[int, Node] = {}
+var old_interest := {}
 
 ## A dictionary mapping peers to null.
-@export var interest: Dictionary[int, Node] = {}:
+@export var interest := {}:
 	set(x):
 		interest = x
 		if mp:
@@ -142,6 +138,15 @@ func _ready() -> void:
 				zone_service.local_client_add_interest(self)
 		, CONNECT_ONE_SHOT
 		)
+
+	if not Engine.is_editor_hint():
+		# Setup World2D and World3D.
+		if mp.is_client() and zone_service.ZONES_SHARE_WORLD:
+			_world_2d = zone_service.base_world_2d
+			_world_3d = zone_service.base_world_3d
+		else:
+			_world_2d = World2D.new()
+			_world_3d = World3D.new()
 
 func _exit_tree() -> void:
 	if mp.is_client():

@@ -12,7 +12,7 @@ signal exit_replicated_scene(scene: Node)
 const REPCO = preload("res://addons/godaemon_multiplayer/services/replication/constants.gd")
 
 ## A dictionary map of replicated scenes to their peer visibility states.
-var replicated_scenes: Dictionary[Node, Dictionary] = {}
+var replicated_scenes := {}
 
 func _enter_tree() -> void:
 	# Look for existing replicated scenes, setup initial signals.
@@ -78,7 +78,7 @@ func _replicated_scene_search(node: Node):
 	
 	# Does this node have replicated properties?
 	const key := REPCO.META_REPLICATE_SCENE
-	if node.has_meta(key):
+	if node.has_meta(key) and node not in replicated_scenes:
 		replicated_scenes[node] = {1: false}
 		enter_replicated_scene.emit(node)
 	
@@ -101,6 +101,8 @@ func _node_tree_exiting(node: Node):
 	if node in _visibility_cache:
 		_visibility_cache.erase(node)
 	node.child_entered_tree.disconnect(_node_child_entered_tree)
+	if mp.api and mp.api.repository:
+		mp.api.repository.remove_node(node)
 
 func _node_child_entered_tree(node: Node):
 	_replicated_scene_search(node)
@@ -109,7 +111,7 @@ func _node_child_entered_tree(node: Node):
 
 #region Replication Getters
 
-var _visibility_cache: Dictionary[Node, Dictionary] = {}
+var _visibility_cache := {}
 
 ## Returns true if a node is absolutely visible for a peer, false if not.
 func get_true_visibility(node: Node, peer: int) -> bool:
@@ -139,8 +141,8 @@ func _clear_visibility_cache(node: Node, peer := 1):
 				_visibility_cache[n].erase(peer)
 
 ## Returns a set of all nodes visible for this peer.
-func get_visible_nodes_for_peer(peer: int, root: Node = null) -> Dictionary[Node, Object]:
-	var dict: Dictionary[Node, Object] = {}
+func get_visible_nodes_for_peer(peer: int, root: Node = null) -> Dictionary:
+	var dict := {}
 	var search := replicated_scenes if not root else _get_replicated_scene_descendants(root)
 	for node in search:
 		if get_true_visibility(node, peer):
@@ -148,8 +150,8 @@ func get_visible_nodes_for_peer(peer: int, root: Node = null) -> Dictionary[Node
 	return dict
 
 ## Returns a dict of visible nodes for all peers.
-func get_visible_nodes(root: Node = null) -> Dictionary[int, Dictionary]:
-	var visible_nodes: Dictionary[int, Dictionary] = {}
+func get_visible_nodes(root: Node = null) -> Dictionary:
+	var visible_nodes := {}
 	for peer in mp.api.get_peers():
 		if peer == 1:
 			continue
@@ -157,8 +159,8 @@ func get_visible_nodes(root: Node = null) -> Dictionary[int, Dictionary]:
 	return visible_nodes
 
 ## Return the set of peers who can see this Node.
-func get_observing_peers(node: Node) -> Dictionary[int, Object]:
-	var peers: Dictionary[int, Object] = {}
+func get_observing_peers(node: Node) -> Dictionary:
+	var peers := {}
 	for peer in mp.api.get_peers():
 		if peer == 1:
 			continue
@@ -166,8 +168,8 @@ func get_observing_peers(node: Node) -> Dictionary[int, Object]:
 			peers[peer] = null
 	return peers
 
-func _get_replicated_scene_ancestors(node: Node) -> Dictionary[Node, Object]:
-	var ancestors: Dictionary[Node, Object] = {node: null}
+func _get_replicated_scene_ancestors(node: Node) -> Dictionary:
+	var ancestors := {node: null}
 	node = node.get_parent()
 	while node != mp:
 		if node in replicated_scenes:
@@ -175,8 +177,8 @@ func _get_replicated_scene_ancestors(node: Node) -> Dictionary[Node, Object]:
 		node = node.get_parent()
 	return ancestors
 
-func _get_replicated_scene_descendants(node: Node) -> Dictionary[Node, Object]:
-	var descendants: Dictionary[Node, Object] = {node: null}
+func _get_replicated_scene_descendants(node: Node) -> Dictionary:
+	var descendants := {node: null}
 	for n in replicated_scenes:
 		if node.is_ancestor_of(n):
 			descendants[n] = null
@@ -257,6 +259,24 @@ func _set_node_owner(bytes: PackedByteArray):
 
 #endregion
 
+#region Node Operations
+
+## Reparents a replicated scene to a target parent, keeping visibility information persistent.
+func reparent_scene(node: Node, parent: Node):
+	assert(mp.is_server())
+	assert(node in replicated_scenes)
+	assert(mp.api.repository.get_id(parent))
+	var visibility_dict: Dictionary = replicated_scenes[node].duplicate()
+	var global_visible: bool = visibility_dict[1]
+	visibility_dict.erase(1)
+	node.get_parent().remove_child(node)
+	parent.add_child(node)
+	set_visibility(node, global_visible)
+	for peer in visibility_dict:
+		set_peer_visibility(node, peer, visibility_dict[peer])
+
+#endregion
+
 #region Visibility Internal
 
 func _update_nodes(old_visibility: Dictionary, new_visibility: Dictionary):
@@ -285,6 +305,12 @@ var _rpc_added_nodes: Array[Node] = []
 var _rpc_removed_nodes: Array[Node] = []
 
 func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Array[Node]):
+	if peer not in mp.api.get_peers() or not is_inside_tree():
+		return
+	# Ensure nodes are inside tree.
+	added_nodes.assign(added_nodes.filter(func (n: Node): return n.is_inside_tree()))
+	removed_nodes.assign(removed_nodes.filter(func (n: Node): return n.is_inside_tree()))
+	
 	# Cull removed nodes that are the child of other removed nodes.
 	var culled_removed_nodes: Array[Node] = []
 	for node in removed_nodes:

@@ -143,12 +143,12 @@ func inbound_rpc(id: int, bytes: PackedByteArray):
 	var callable: Callable = node[method].bindv(args)
 	
 	# Test ratelimit.
-	if not _check_rpc_ratelimit(from_peer, node, method):
+	if not _check_rpc_ratelimit(id, node, method):
 		return
 	
 	# Test filters.
 	for filter: Callable in inbound_filters:
-		if not filter.call(from_peer, to_peer, node, method, args):
+		if not filter.call(id, to_peer, node, method, args):
 			return
 	
 	api.profiler.rpc(true, node.get_instance_id(), bytes.size())
@@ -282,7 +282,7 @@ func decompress_rpc(data: PackedByteArray) -> Dictionary:
 #region Override Node Channels
 
 ## Mapping of node to override channel.
-var node_channels: Dictionary[Node, int] = {}
+var node_channels := {}
 
 ## Overrides the RPC channels on a given Node.
 func set_node_channel_override(node: Node, channel: int):
@@ -302,12 +302,14 @@ func get_node_channel_override(node: Node, default_channel: int = 0) -> int:
 
 #region RPC Ratelimits
 
-var _node_rpc_ratelimits: Dictionary[Node, Dictionary]= {}
+var _node_rpc_ratelimits := {}
 
 ## Sets the ratelimit on a given RPC for a Node.
 func set_rpc_ratelimit(node: Node, method: StringName, count: int, duration: float):
+	var node_in_dict: bool = node in _node_rpc_ratelimits
 	_node_rpc_ratelimits.get_or_add(node, {})[method] = RateLimiter.new(api.mp, count, duration)
-	node.tree_exited.connect(_clear_rpc_ratelimit.bind(node), CONNECT_ONE_SHOT)
+	if not node_in_dict:
+		node.tree_exited.connect(_clear_rpc_ratelimit.bind(node), CONNECT_ONE_SHOT)
 
 ## Tests the ratelimit on a given RPC for a Node.
 func _check_rpc_ratelimit(peer: int, node: Node, method: StringName) -> bool:
@@ -318,7 +320,7 @@ func _check_rpc_ratelimit(peer: int, node: Node, method: StringName) -> bool:
 	var rl: RateLimiter = _node_rpc_ratelimits[node][method]
 	var result := rl.check(peer)
 	if not result and OS.has_feature("editor"):
-		push_warning("GodaemonMultiplayerAPI: ratelimited RPC %s.%s()" % [node.name, method])
+		push_warning("GodaemonMultiplayerAPI: ratelimited RPC %s.%s() for peer %s" % [node.name, method, peer])
 	return result
 
 func _clear_rpc_ratelimit(node: Node):
@@ -328,7 +330,7 @@ func _clear_rpc_ratelimit(node: Node):
 
 #region RPC Security
 
-var _node_rpc_server_receive_only: Dictionary[Node, Dictionary] = {}
+var _node_rpc_server_receive_only := {}
 
 ## Sets an RPC to only allow being received by the server.
 ## This will prevent clients from being able to send the RPC to other clients.

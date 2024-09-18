@@ -119,7 +119,7 @@ func is_server() -> bool:
 
 ## Gets the owner ID of this node.
 func get_node_owner(node: Node) -> int:
-	return mp.get_node_owner(node)
+	return mp.get_node_owner(node) if mp else 1
 
 ## Returns true if the local peer owns this node.
 func is_local_owner(node: Node) -> bool:

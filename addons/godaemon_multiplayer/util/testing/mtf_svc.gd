@@ -25,7 +25,7 @@ var config: MultiplayerConfig:
 func _ready() -> void:
 	const COLOR := Color(1, 1, 1, 1)
 	const PADDING := 1
-	const BORDER_PARAMS: Dictionary[Control.LayoutPreset, Array] = {
+	const BORDER_PARAMS := {
 		Control.PRESET_TOP_WIDE: [Vector2(0, PADDING), Vector2.ZERO],
 		Control.PRESET_LEFT_WIDE: [Vector2(PADDING, 0), Vector2.ZERO],
 		Control.PRESET_BOTTOM_WIDE: [Vector2(0, PADDING), Vector2(0, -PADDING)],

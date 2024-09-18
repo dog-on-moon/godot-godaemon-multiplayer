@@ -20,8 +20,8 @@ func cleanup():
 
 var _current_id := 0
 
-var node_to_id: Dictionary[Node, int] = {}
-var id_to_node: Dictionary[int, Node] = {}
+var node_to_id := {}
+var id_to_node := {}
 
 ## Adds a Node to the repository. Can specify a node_id. Returns the set id.
 func add_node(node: Node, node_id := -1) -> int:
@@ -34,11 +34,10 @@ func add_node(node: Node, node_id := -1) -> int:
 				_current_id = 0
 		node_id = _current_id
 	else:
-		assert(node_id not in id_to_node, "Node IDs are stomping.")
+		assert(node_id not in node_to_id, "Node IDs are stomping.")
 	# print('[%s] adding %s with ID=%s' % [api.mp.name, node, node_id])
 	node_to_id[node] = node_id
 	id_to_node[node_id] = node
-	node.tree_exited.connect(remove_node_id.bind(node_id), CONNECT_ONE_SHOT + CONNECT_DEFERRED)
 	return node_id
 
 ## Removes a Node from the repository.
