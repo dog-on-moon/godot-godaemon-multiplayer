@@ -15,7 +15,7 @@ var replication_service: ReplicationService
 var last_interpolate_t := 0.0
 
 func _enter_tree() -> void:
-	replication_service = mp.get_service(ReplicationService)
+	replication_service = Godaemon.replication_service(self)
 	
 	# Replicate property changes as the last event in the frame.
 	process_priority = 100000
@@ -23,8 +23,8 @@ func _enter_tree() -> void:
 	replication_service.exit_replicated_scene.connect(exit_replicated_scene)
 	
 	if mp.is_server():
-		mp.api.rpc.set_rpc_server_receive_only(self, &"_sv_receive_reliable_properties")
-		mp.api.rpc.set_rpc_server_receive_only(self, &"_sv_receive_unreliable_properties")
+		Godaemon.rpcs(self).set_rpc_server_receive_only(self, &"_sv_receive_reliable_properties")
+		Godaemon.rpcs(self).set_rpc_server_receive_only(self, &"_sv_receive_unreliable_properties")
 
 #region Caches
 
@@ -49,9 +49,7 @@ func get_scene_replication_data(scene: Node) -> Array:
 		# Find the node.
 		var node_path := NodePath(property_path.get_concatenated_names())
 		var node := scene.get_node(node_path) if node_path else scene
-		if not node:
-			replication_data.append([null, NodePath()])
-			continue
+		assert(node, "A replicated scene's node being tracked by SyncService had their path modified.")
 		
 		# Add to replication data.
 		var prop_path := NodePath(property_path.get_concatenated_subnames())
@@ -85,7 +83,7 @@ func _process(delta: float) -> void:
 	for scene: Node in replication_service.replicated_scenes:
 		var node_id := mp.api.repository.get_id(scene)
 		if node_id == -1:
-			push_warning("Could not sync values for node %s: id missing" % scene)
+			push_warning("(%s) Could not sync values for node %s: missing id %s" % ["client" if mp.is_client() else "server", scene])
 			continue
 		
 		# Harvest each sync and reliable mode.
@@ -103,10 +101,6 @@ func _process(delta: float) -> void:
 					var data := _compress_values(node_id, sync, reliable, values)
 					if not data:
 						continue
-					
-					#var username_service: UsernameService = mp.get_service(UsernameService)
-					#print('[%s => %s] (%s, %s) updating %s properties with %s' % [username_service.get_username(mp.local_peer), username_service.get_username(to_peer), sync, reliable, scene, values])
-					#replication_service.get_observing_peers(scene)
 					
 					var rpc := _get_receive_rpc(reliable)
 					rpc.rpc_id(to_peer, data)
@@ -236,7 +230,7 @@ func _receive_properties(data: PackedByteArray):
 	var node_id: int = properties[0]
 	var scene := mp.api.repository.get_node(node_id)
 	if not scene:
-		# push_warning("SyncService._receive_properties does not know node ID %s" % properties[0])
+		push_warning("SyncService._receive_properties does not know node ID %s" % properties[0])
 		return
 	var sync: REPCO.SyncMode = properties[1]
 	var reliable: bool = properties[2]
@@ -293,10 +287,6 @@ func _receive_properties(data: PackedByteArray):
 		for peer in replication_service.get_observing_peers(scene):
 			if peer == mp.remote_peer:
 				continue
-			
-			#var username_service: UsernameService = mp.get_service(UsernameService)
-			#print('[%s => %s] (%s, %s) FORWARDING %s properties with %s' % [username_service.get_username(mp.local_peer), username_service.get_username(peer), sync, reliable, scene, values])
-			#replication_service.get_observing_peers(scene)
 			
 			rpc.rpc_id(peer, forward_data)
 
@@ -406,8 +396,9 @@ func _end_property_interpolation(node: Node, property_path: NodePath):
 		node.tree_exited.disconnect(cleanup_callback)
 
 func _cancel_all_property_interpolations(node: Node):
-	for property_path: NodePath in _property_interpolation_cache[node].keys():
-		_end_property_interpolation(node, property_path)
+	if node in _property_interpolation_cache:
+		for property_path: NodePath in _property_interpolation_cache[node].keys():
+			_end_property_interpolation(node, property_path)
 
 func _node_exit_in_property_callback(node: Node):
 	_property_interpolation_cache.erase(node)

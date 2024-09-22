@@ -16,7 +16,7 @@ var mp: MultiplayerRoot
 ## Internal setup function. Called after [method Node._ready].
 func _setup():
 	if get_reserved_channels() > 0:
-		mp.api.rpc.set_node_channel_override(self, get_initial_channel(mp))
+		Godaemon.rpcs(self).set_node_channel_override(self, get_initial_channel(mp))
 
 ## The number of ENet communication channels this Service reserves for itself.
 ## When non-zero, all RPCs on this Service's node will be set to use the base channel.

@@ -178,7 +178,7 @@ func _setup_service_signals():
 
 func _determine_service_channels():
 	service_channel_count = 0
-	for script: Script in configuration.services:
+	for script: Script in _get_services_to_load():
 		if not script.get_global_name():
 			continue
 		var n = script.new()
@@ -196,7 +196,7 @@ func _setup_services():
 	
 	_cleanup_services()
 	var nodes_to_add: Array[ServiceBase] = []
-	for script: Script in configuration.services:
+	for script: Script in _get_services_to_load():
 		if not script.get_global_name():
 			push_error("MultiplayerRoot: service '%s' is missing script global name" % script.resource_path)
 			continue
@@ -235,6 +235,13 @@ func _cleanup_services():
 	service_cache = {}
 	service_name_cache = {}
 
+func _get_services_to_load() -> Array[Script]:
+	var services: Array[Script] = []
+	if configuration.default_services:
+		services.append_array(MultiplayerConfig.DEFAULT_SERVICES)
+	services.append_array(configuration.services)
+	return services
+
 ## Returns a service by script reference.
 func get_service(t: Script, required := true) -> ServiceBase:
 	if required:
@@ -263,17 +270,6 @@ func is_client() -> bool:
 ## Returns true if the MultiplayerRoot is being ran as a server.
 func is_server() -> bool:
 	return api.is_server()
-
-## Finds the MultiplayerRoot associated with a given Node.
-static func fetch(node: Node) -> MultiplayerRoot:
-	var tree := node.get_tree()
-	if not tree:
-		return null
-	while node is not MultiplayerRoot and node != tree.root:
-		node = node.get_parent()
-	if node is MultiplayerRoot:
-		return node
-	return null
 
 ## Returns the total channel count allocated for the MultiplayerRoot.
 func get_total_channel_count() -> int:

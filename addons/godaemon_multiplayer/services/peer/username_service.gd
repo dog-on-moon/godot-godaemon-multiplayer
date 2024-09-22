@@ -11,7 +11,7 @@ signal username_updated(peer: int, username: StringName)
 ## Emitted when a local username request failed.
 signal username_request_failed()
 
-@onready var peer_service: PeerService = mp.get_service(PeerService)
+@onready var peer_service := Godaemon.peer_service(self)
 
 func _ready() -> void:
 	mp.peer_connected.connect(_setup_peer_name)
@@ -25,9 +25,9 @@ func _ready() -> void:
 			if key == USERNAME_KEY:
 				username_updated.emit(peer, get_username(peer))
 	)
-	mp.api.rpc.set_rpc_ratelimit(self, &"_request_username", 2, 1.0)
-	mp.api.rpc.set_rpc_server_receive_only(self, &"_request_username")
-	mp.api.rpc.set_node_channel_override(self, peer_service.get_initial_channel(mp))
+	Godaemon.rpcs(self).set_rpc_ratelimit(self, &"_request_username", 2, 1.0)
+	Godaemon.rpcs(self).set_rpc_server_receive_only(self, &"_request_username")
+	Godaemon.rpcs(self).set_node_channel_override(self, peer_service.get_initial_channel(mp))
 
 func _setup_peer_name(peer: int):
 	if mp.is_server():

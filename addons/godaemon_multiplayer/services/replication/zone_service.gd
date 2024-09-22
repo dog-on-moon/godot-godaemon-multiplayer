@@ -28,14 +28,14 @@ const ZONE_SVC = preload("res://addons/godaemon_multiplayer/services/replication
 const ZoneSvc = preload("res://addons/godaemon_multiplayer/services/replication/zone/zone_svc.gd")
 var svc: SubViewportContainer
 
-@onready var peer_service: PeerService = mp.get_service(PeerService)
-@onready var replication_service: ReplicationService = mp.get_service(ReplicationService)
-@onready var sync_service: SyncService = mp.get_service(SyncService, false)
+@onready var peer_service := Godaemon.peer_service(self)
+@onready var replication_service := Godaemon.replication_service(self)
+@onready var sync_service := Godaemon.sync_service(self)
 @onready var _initial_channel := get_initial_channel(mp)
 
 func _ready() -> void:
 	assert(replication_service)
-	mp.api.rpc.channel_modifiers.append(_channel_modifier)
+	Godaemon.rpcs(self).channel_modifiers.append(_channel_modifier)
 	if mp.is_server():
 		mp.peer_disconnected.connect(_peer_disconnected)
 		svc = ZONE_SVC.instantiate()
@@ -118,6 +118,9 @@ func remove_zone(zone: Zone) -> bool:
 	zone.queue_free()
 	return true
 
+func is_zone_valid(zone: Zone) -> bool:
+	return is_instance_valid(zone) and not zone.is_queued_for_deletion()
+
 #endregion
 
 #region Peer Interest
@@ -125,6 +128,8 @@ func remove_zone(zone: Zone) -> bool:
 ## Gives interest on a peer to be able to view a Zone.
 func add_interest(peer: int, zone: Zone) -> bool:
 	assert(mp.is_server())
+	if not is_zone_valid(zone):
+		return false
 	if peer in zone.interest:
 		push_warning("ZoneService.add_interest peer %s already had interest with %s" % [peer, zone.get_path_to(mp)])
 		return false
@@ -137,6 +142,8 @@ func add_interest(peer: int, zone: Zone) -> bool:
 ## Removes interest on a peer to be able to view a Zone.
 func remove_interest(peer: int, zone: Zone) -> bool:
 	assert(mp.is_server())
+	if not is_zone_valid(zone):
+		return false
 	if peer not in zone.interest:
 		push_warning("ZoneService.add_interest peer %s did not have interest with %s" % [peer, zone.get_path_to(mp)])
 		return false

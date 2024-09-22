@@ -21,7 +21,7 @@ func _propagate_input_event(event: InputEvent) -> bool:
 			return true
 	return false
 
-@onready var mp := MultiplayerRoot.fetch(self)
+@onready var mp := Godaemon.mp(self)
 
 func _ready() -> void:
 	# Setup viewport container visuals.

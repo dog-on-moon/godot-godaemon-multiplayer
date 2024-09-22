@@ -1,9 +1,6 @@
 extends SubViewport
 class_name Zone
-## A Zone is the root node of all distributed scenes in the godaemon_multiplayer API.
-## After a ServerRoot adds a scene, it lives within a Zone.
-## The contents can then be automatically replicated to clients
-## by assigning peer visibility.
+## A Zone is a replicated scene which manages a separate physics space, navigation map, and visual scenario.
 
 #region Signals
 
@@ -46,8 +43,8 @@ var use_window_render_settings := true
 #region Properties
 
 #set by ZoneService
-@onready var mp: MultiplayerRoot = MultiplayerRoot.fetch(self)
-@onready var zone_service: ZoneService = mp.get_service(ZoneService)
+@onready var mp: MultiplayerRoot = Godaemon.mp(self)
+@onready var zone_service := Godaemon.zone_service(self)
 
 var old_interest := {}
 
@@ -65,6 +62,13 @@ var old_interest := {}
 			old_interest = x
 
 @export var zone_index := 0
+
+## Returns all peers with interest in this Zone.
+func get_peers() -> Array[int]:
+	var peers: Array[int] = []
+	for p in interest:
+		peers.append(p)
+	return peers
 
 ## The scene we're in charge of.
 var scene: Node
@@ -152,14 +156,6 @@ func _exit_tree() -> void:
 	if mp.is_client():
 		zone_service.local_client_remove_interest(self)
 
-## Finds the Zone associated with a given Node.
-static func fetch(node: Node, mp: MultiplayerRoot = null) -> Zone:
-	if not mp:
-		mp = MultiplayerRoot.fetch(node)
-	if not mp:
-		return null
-	return mp.get_service(ZoneService).get_node_zone(node)
-
 ## Shorthand for ZoneService.add_interest
 func add_interest(peer: int):
 	return zone_service.add_interest(peer, self)
@@ -171,3 +167,7 @@ func remove_interest(peer: int) -> bool:
 ## Shorthand for ZoneService.has_interest
 func has_interest(peer: int) -> bool:
 	return zone_service.has_interest(peer, self)
+
+## Shorthand for ZoneService.remove_zone
+func remove() -> bool:
+	return zone_service.remove_zone(self)

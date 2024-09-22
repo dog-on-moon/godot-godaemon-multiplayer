@@ -59,7 +59,7 @@ func outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Err
 	var config: Dictionary = {}
 	if node.get_script():
 		config.merge(node.get_script().get_rpc_config())
-	config.merge(node.get_node_rpc_config())
+	config.merge(node.get_rpc_config())
 	if method not in config:
 		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc could not find RPC config")
 		return ERR_UNCONFIGURED
@@ -69,6 +69,9 @@ func outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Err
 		return ERR_UNCONFIGURED
 	config = config[method]
 	var rpc_mode: MultiplayerAPI.RPCMode = config.get("rpc_mode", MultiplayerAPI.RPC_MODE_AUTHORITY)
+	if (api.mp.is_client() and rpc_mode != MultiplayerAPI.RPC_MODE_ANY_PEER) or rpc_mode == MultiplayerAPI.RPC_MODE_DISABLED:
+		push_warning("GodaemonMultiplayerAPI.rpc.outbound_rpc Client attempted to send RPC on blocked method: %s.%s" % [node, method])
+		return ERR_UNAUTHORIZED
 	var transfer_mode: MultiplayerPeer.TransferMode = config.get("transfer_mode", MultiplayerPeer.TRANSFER_MODE_RELIABLE)
 	var call_local: bool = config.get("call_local", false)
 	var channel: int = config.get("channel", 0)
@@ -85,6 +88,10 @@ func outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Err
 		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc mismatched argument counts: %s(%s)" % [method, args])
 		return ERR_UNAVAILABLE
 	
+	# Perform local call.
+	if call_local:
+		node[method].callv(args)
+	
 	# Process hooks.
 	var from_peer := srs_override if srs_override != 0 else api.get_unique_id()
 	channel = get_node_channel_override(node, channel)
@@ -95,15 +102,11 @@ func outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Err
 	for modifier: Callable in target_peer_modifiers:
 		modifier.call(from_peer, target_peers, node, method, args)
 	for to_peer in target_peers:
+		if to_peer == from_peer:
+			continue
 		for filter: Callable in outbound_filters:
 			if not filter.call(from_peer, to_peer, node, method, args):
 				return ERR_UNAVAILABLE
-		
-		# Perform local call.
-		if call_local:
-			node[method].callv(args)
-		if to_peer == from_peer:
-			continue
 		
 		# Filter RPC through MultiplayerRoot.
 		var bytes := compress_rpc(from_peer, to_peer, node, method_idx, args)
@@ -116,7 +119,7 @@ func outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Err
 
 func inbound_rpc(id: int, bytes: PackedByteArray):
 	# Read bytes.
-	var data := decompress_rpc(bytes)
+	var data := decompress_rpc(id, bytes)
 	if not data:
 		return
 	var from_peer: int = data.get('from_peer')
@@ -132,23 +135,25 @@ func inbound_rpc(id: int, bytes: PackedByteArray):
 	var config: Dictionary = {}
 	if node.get_script():
 		config.merge(node.get_script().get_rpc_config())
-	config.merge(node.get_node_rpc_config())
-	var method: StringName = config.keys()[method_idx]
-	if not node.has_method(method):
+	config.merge(node.get_rpc_config())
+	if method_idx < 0 or method_idx >= config.size():
 		return
-	var rpc_mode: MultiplayerAPI.RPCMode = config[method].get("rpc_mode", MultiplayerAPI.RPC_MODE_AUTHORITY)
-	if api.mp.is_server() and rpc_mode != MultiplayerAPI.RPC_MODE_ANY_PEER:
+	var method: StringName = config.keys()[method_idx]
+	if not node.has_method(method) or method not in config:
+		return
+	var rpc_mode: MultiplayerAPI.RPCMode = config[method].get("rpc_mode", MultiplayerAPI.RPC_MODE_DISABLED)
+	if (api.mp.is_server() and rpc_mode != MultiplayerAPI.RPC_MODE_ANY_PEER) or rpc_mode == MultiplayerAPI.RPC_MODE_DISABLED:
 		push_warning("GodaemonMultiplayerAPI.rpc.inbound_rpc Client attempted to send RPC on blocked method: %s.%s" % [node, method])
 		return
 	var callable: Callable = node[method].bindv(args)
 	
 	# Test ratelimit.
-	if not _check_rpc_ratelimit(id, node, method):
+	if not _check_rpc_ratelimit(from_peer, node, method):
 		return
 	
 	# Test filters.
 	for filter: Callable in inbound_filters:
-		if not filter.call(id, to_peer, node, method, args):
+		if not filter.call(from_peer, to_peer, node, method, args):
 			return
 	
 	api.profiler.rpc(true, node.get_instance_id(), bytes.size())
@@ -156,29 +161,29 @@ func inbound_rpc(id: int, bytes: PackedByteArray):
 	var method_is_server_only: bool = method in _node_rpc_server_receive_only.get(node, {})
 	
 	# Call or re-route RPC.
-	remote_sender = id
-	if to_peer == 1:
-		# This RPC is specifically for the server.
-		callable.call()
-	elif remote_sender == 1:
-		# This RPC is on and for the client, so call with the true remote sender
-		remote_sender = from_peer
+	remote_sender = from_peer
+	if to_peer == 1 or id == 1:
+		# This RPC is specifically for the server (client => server),
+		# or this RPC is specifically from the server (server => client).
 		callable.call()
 	elif to_peer > 0:
+		# This RPC is specifically from a client, but for another client (client => client)
+		# So we will have to forward it back to that peer.
 		if not method_is_server_only:
-			# OK, this RPC was designated for a specific target instead.
-			# We will need to RPC it back to that peer.
 			srs_override = from_peer
 			callable.rpc_id(to_peer)
 			srs_override = 0
 	else:
-		# This RPC was designed for everyone but a certain peer.
+		# This is a broadcast RPC from a client, so we accept it ourselves,
+		# and then forward it to all other clients.
 		var skip_peer := -to_peer
 		if skip_peer != 1:
+			# Call it locally (if the target peer ID wasn't -1)
 			callable.call()
 		if not method_is_server_only:
 			srs_override = from_peer
 			for p in api.get_peers():
+				# Don't forward the RPC to the skipped peer, ourselves, or to the sender
 				if p == skip_peer or p == 1 or p == from_peer:
 					continue
 				callable.rpc_id(p)
@@ -240,7 +245,7 @@ func compress_rpc(from_peer: int, to_peer: int, node: Node, method_idx: int, arg
 		return PackedByteArray()
 	return data
 
-func decompress_rpc(data: PackedByteArray) -> Dictionary:
+func decompress_rpc(id: int, data: PackedByteArray) -> Dictionary:
 	var stream := PackedByteStream.new()
 	stream.setup_read(data)
 	
@@ -250,7 +255,7 @@ func decompress_rpc(data: PackedByteArray) -> Dictionary:
 	var dense_args := header & 2
 	
 	# Decode RPC properties.
-	var from_peer := api.get_remote_sender_id()
+	var from_peer := id
 	if api.is_client():
 		from_peer = stream.read_u32()
 	var to_peer := stream.read_u32()

@@ -1,7 +1,9 @@
 extends RefCounted
 ## Provides profiler methods to the GodaemonMultiplayerAPI.
 
-static var network_profiler_peer := 1
+## The peer ID that the profiler is currently monitoring.
+## When set to 0, the network profiler shows data from all peers.
+var network_profiler_peer := 0
 
 var api: GodaemonMultiplayerAPI
 

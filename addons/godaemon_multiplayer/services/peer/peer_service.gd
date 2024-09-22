@@ -45,8 +45,8 @@ var peer_data_ns_callbacks := {}
 func _ready() -> void:
 	mp.peer_connected.connect(_peer_connected)
 	mp.peer_disconnected.connect(_peer_disconnected)
-	mp.api.rpc.set_rpc_ratelimit(self, &"_request_sync", 1, 1.0)
-	mp.api.rpc.set_rpc_server_receive_only(self, &"_request_sync")
+	Godaemon.rpcs(self).set_rpc_ratelimit(self, &"_request_sync", 1, 1.0)
+	Godaemon.rpcs(self).set_rpc_server_receive_only(self, &"_request_sync")
 
 func _peer_connected(peer: int):
 	peer_data[peer] = {}

@@ -20,8 +20,8 @@ func _enter_tree() -> void:
 	if mp.is_server():
 		mp.peer_connected.connect(_peer_connected)
 		mp.peer_disconnected.connect(_peer_disconnected)
-		mp.api.rpc.target_peer_modifiers.append(_target_peer_modifier)
-		mp.api.rpc.outbound_filters.append(_rpc_filter)
+		Godaemon.rpcs(self).target_peer_modifiers.append(_target_peer_modifier)
+		Godaemon.rpcs(self).outbound_filters.append(_rpc_filter)
 
 func _peer_connected(peer: int):
 	# Peers need to know what initial scenes must be replicated to them.
@@ -72,15 +72,23 @@ func _replicated_scene_search(node: Node):
 	if node.child_entered_tree.is_connected(_node_child_entered_tree):
 		return
 	
-	# Setup RPC index.
-	if mp.api.repository.get_id(node) == -1:
-		mp.api.repository.add_node(node)
-	
-	# Does this node have replicated properties?
-	const key := REPCO.META_REPLICATE_SCENE
-	if node.has_meta(key) and node not in replicated_scenes:
-		replicated_scenes[node] = {1: false}
-		enter_replicated_scene.emit(node)
+	# Only the server will catalog IDs and replicated scenes,
+	# but will tell the client them during replication.
+	# The client will still use the exit trees below to cleanup leaving IDs
+	if mp.is_server():
+		# Setup RPC index.
+		if mp.api.repository.get_id(node) == -1:
+			mp.api.repository.add_node(node)
+		
+		# Does this node have replicated properties?
+		const key := REPCO.META_REPLICATE_SCENE
+		if node.has_meta(key) and node not in replicated_scenes:
+			# Register the node, and set its default global replication.
+			# Node.owner will only be set at this point if the replicated scene
+			# is instantiated within another replicated scene, so we assume
+			# those to be TRUE by default and then simply DELETE them later on client replication.
+			replicated_scenes[node] = {1: node.owner in replicated_scenes}
+			enter_replicated_scene.emit(node)
 	
 	# Setup signals on this node.
 	node.child_entered_tree.connect(_node_child_entered_tree)
@@ -101,7 +109,7 @@ func _node_tree_exiting(node: Node):
 	if node in _visibility_cache:
 		_visibility_cache.erase(node)
 	node.child_entered_tree.disconnect(_node_child_entered_tree)
-	if mp.api and mp.api.repository:
+	if mp.api and mp.api.repository and mp.api.repository.get_id(node) != -1:
 		mp.api.repository.remove_node(node)
 
 func _node_child_entered_tree(node: Node):
@@ -266,6 +274,8 @@ func reparent_scene(node: Node, parent: Node):
 	assert(mp.is_server())
 	assert(node in replicated_scenes)
 	assert(mp.api.repository.get_id(parent))
+	# TODO - Better keep replication information for sub-replicated scenes,
+	#        and probably even try to keep the node ID as well
 	var visibility_dict: Dictionary = replicated_scenes[node].duplicate()
 	var global_visible: bool = visibility_dict[1]
 	visibility_dict.erase(1)
@@ -420,6 +430,7 @@ func update_visibility(data: PackedByteArray):
 		if not node:
 			push_warning("Visibility asked to remove node that didn't exist")
 			continue
+		mp.api.repository.remove_node_id(node_id)
 		node.get_parent().remove_child(node)
 		node.queue_free()
 	
@@ -458,11 +469,16 @@ func update_visibility(data: PackedByteArray):
 			var node_path := scene_state.get_node_path(node_idx)
 			var subnode := scene.get_node_or_null(node_path)
 			if subnode:
-				var node_id: int = node_ids[node_idx]
-				if node_id == 0:
+				if subnode != scene and subnode.has_meta(REPCO.META_REPLICATE_SCENE):
+					# Delete sub-replicated scenes of the initial scene,
+					# replication for them will happen separately.
 					subnode.queue_free()
 				else:
-					mp.api.repository.add_node(subnode, node_id)
+					var node_id: int = node_ids[node_idx]
+					if node_id == 0:
+						subnode.queue_free()
+					else:
+						mp.api.repository.add_node(subnode, node_id)
 			else:
 				push_warning("Could not find subnode om received scene. Weird")
 				break
@@ -495,6 +511,8 @@ func update_visibility(data: PackedByteArray):
 				prop_node.set_indexed(prop_path, value)
 		
 		# Finally, add scene.
+		replicated_scenes[scene] = {}
+		enter_replicated_scene.emit(scene)
 		parent.add_child(scene)
 
 func _compress_visibility_data(added_node_data: Array, removed_node_data: Array) -> PackedByteArray:

@@ -2,7 +2,6 @@ extends MultiplayerAPIExtension
 class_name GodaemonMultiplayerAPI
 ## An extension of SceneMultiplayer, re-implementing its base overrides.
 
-
 const Profiler = preload("res://addons/godaemon_multiplayer/api/profiler.gd")
 const Repository = preload("res://addons/godaemon_multiplayer/api/repository.gd")
 const Rpc = preload("res://addons/godaemon_multiplayer/api/rpc.gd")

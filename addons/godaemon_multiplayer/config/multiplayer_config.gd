@@ -6,12 +6,23 @@ class_name MultiplayerConfig
 
 const DEFAULT_AUTHENTICATOR = preload("res://addons/godaemon_multiplayer/config/peer_authenticator.gd")
 
+const DEFAULT_SERVICES := [
+	preload("res://addons/godaemon_multiplayer/services/peer/peer_service.gd"),
+	preload("res://addons/godaemon_multiplayer/services/replication/replication_service.gd"),
+	preload("res://addons/godaemon_multiplayer/services/replication/sync_service.gd"),
+	preload("res://addons/godaemon_multiplayer/services/replication/zone_service.gd"),
+]
+
 # @export_group("Services")
 #region
 
 ## An array of ServiceBase scripts that are instantiated to the ServerRoot
 ## once a connection has been established.
 @export var services: Array[Script] = []
+
+## Enables the default services (Peer, Replication, Sync, and Zone).
+## Leave this on, unless you intend to replace parts of Godaemon's standard functionality.
+@export var default_services := true
 
 #endregion
 
