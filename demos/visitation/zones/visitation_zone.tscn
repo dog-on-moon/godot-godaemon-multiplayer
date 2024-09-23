@@ -1,0 +1,26 @@
+[gd_scene load_steps=2 format=3 uid="uid://dkxgxgxhxlxbe"]
+
+[ext_resource type="Script" path="res://demos/visitation/zones/button.gd" id="1_umbdd"]
+
+[node name="VisitationZone" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+metadata/_r = 0
+metadata/_mp = {
+NodePath(":modulate"): [0, 2, 0, true],
+NodePath("Button:press_count"): [0, 2, 1, true],
+NodePath("Button:position"): [0, 2, 0, true]
+}
+
+[node name="Button" type="Button" parent="."]
+z_index = 1
+custom_minimum_size = Vector2(128, 48)
+layout_mode = 1
+offset_right = 128.0
+offset_bottom = 48.0
+text = "Presses: %s"
+script = ExtResource("1_umbdd")

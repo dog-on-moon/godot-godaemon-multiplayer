@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3 uid="uid://ei3wu2aq8khh"]
 
 [ext_resource type="PackedScene" uid="uid://dd5cv6d0t044y" path="res://addons/godaemon_multiplayer/util/testing/multiplayer_test_frame.tscn" id="1_ffrjb"]
-[ext_resource type="Resource" uid="uid://chrm3b4gumtyv" path="res://demos/visitation/visitation.tres" id="2_bkne2"]
+[ext_resource type="Resource" uid="uid://chrm3b4gumtyv" path="res://demos/visitation/visitation_config.tres" id="2_bkne2"]
 
 [node name="Game" type="Node"]
 

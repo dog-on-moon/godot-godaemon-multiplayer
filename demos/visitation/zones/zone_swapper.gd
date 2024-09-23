@@ -12,12 +12,12 @@ extends Control
 
 var server_zones: Array[Zone] = []
 
-@onready var mp := MultiplayerRoot.fetch(self)
-@onready var zone_service: ZoneService = mp.get_service(ZoneService)
+@onready var mp := Godaemon.mp(self)
+@onready var zone_service := Godaemon.zone_service(self)
 
 func _ready() -> void:
-	mp.api.rpc.set_rpc_server_receive_only(self, &"_request_zone")
-	mp.api.rpc.set_rpc_ratelimit(self, &"_request_zone", 1, 0.1)
+	Godaemon.rpcs(self).set_rpc_server_receive_only(self, &"_request_zone")
+	Godaemon.rpcs(self).set_rpc_ratelimit(self, &"_request_zone", 1, 0.1)
 	
 	if mp.is_client():
 		for idx in zone_buttons:

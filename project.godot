@@ -11,17 +11,18 @@ config_version=5
 [application]
 
 config/name="godot-godaemon-multiplayer"
-run/main_scene="res://demos/2d_platformer/game_local.tscn"
+run/main_scene="res://demos/2d_platformer/play_multi.tscn"
 config/features=PackedStringArray("4.4", "Forward Plus")
 config/icon="res://icon.svg"
 
 [autoload]
 
 SubprocessServer="*res://addons/godaemon_multiplayer/util/subprocess_server.gd"
+Godaemon="*res://addons/godaemon_multiplayer/godaemon.gd"
 
 [display]
 
-window/stretch/mode="viewport"
+window/stretch/mode="canvas_items"
 
 [editor_plugins]
 

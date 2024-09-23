@@ -1,0 +1,15 @@
+[gd_scene load_steps=4 format=3 uid="uid://c61n5v3nj6bol"]
+
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/nodes/client_root.gd" id="1_tvhu4"]
+[ext_resource type="Resource" uid="uid://bcip4bpi7o72h" path="res://demos/2d_platformer/2d_platformer_config.tres" id="2_wiu3c"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/nodes/server_root.gd" id="3_2fr3r"]
+
+[node name="Game" type="Node"]
+
+[node name="ClientRoot" type="Node" parent="."]
+script = ExtResource("1_tvhu4")
+configuration = ExtResource("2_wiu3c")
+
+[node name="ServerRoot" type="Node" parent="."]
+script = ExtResource("3_2fr3r")
+configuration = ExtResource("2_wiu3c")

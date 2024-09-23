@@ -2,15 +2,15 @@ extends ServiceBase
 class_name VisitationSetupService
 ## Sets up the Visitation demo.
 
-const ZONE_SWAPPER = preload("res://demos/visitation/zone_swapper.tscn")
-const VISITATION_ZONE = preload("res://demos/visitation/visitation_zone.tscn")
+const ZONE_SWAPPER = preload("res://demos/visitation/zones/zone_swapper.tscn")
+const VISITATION_ZONE = preload("res://demos/visitation/zones/visitation_zone.tscn")
 
-@onready var zone_service: ZoneService = mp.get_service(ZoneService)
+@onready var zone_service := Godaemon.zone_service(self)
 
 func _ready() -> void:
 	if mp.is_server():
 		var swapper: Node = ZONE_SWAPPER.instantiate()
-		var swapper_zone := zone_service.add_zone(swapper)
+		var swapper_zone: Zone = zone_service.add_zone(swapper)
 		
 		var colors := [Color.RED, Color.GREEN, Color.BLUE]
 		

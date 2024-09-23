@@ -7,8 +7,11 @@ class_name ZoneService
 ## - Zones use exclusive ENet chnanels for themselves and their children, used for RPCs/replication/synchronization.
 ## - Peer interest state is replicated to clients within a Zone, so they know who else is present.
 
-## When true, all created Zones will share a singular World3D.
-const ZONES_SHARE_WORLD := true
+## When true, all created Zones on the client will share a World2D and World3D.
+const CLIENT_ZONES_SHARE_WORLD := true
+
+## When true, all created Zones on the server will share a World2D and World3D.
+const SERVER_ZONES_SHARE_WORLD := false
 
 @onready var base_world_2d := World2D.new()
 @onready var base_world_3d := World3D.new()

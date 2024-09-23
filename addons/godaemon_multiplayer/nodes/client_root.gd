@@ -44,9 +44,9 @@ const InternalServer = preload("res://addons/godaemon_multiplayer/nodes/internal
 @export_group("Internal Server")
 #region
 
-## When true, connection attempts will also setup an additional process
-## for running an internal server. This process will contain user arguments
-## in its creation which define the existence of an internal server.
+## When true, this client will run a separate, background process of Godot
+## running a ServerRoot node of the same multiplayer configuration.
+## This is similar to running a ServerRoot elsewhere in the scene tree.
 @export var use_internal_server := false:
 	set(x):
 		use_internal_server = x

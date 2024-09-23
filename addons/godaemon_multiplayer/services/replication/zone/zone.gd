@@ -1,6 +1,7 @@
 extends SubViewport
 class_name Zone
-## A Zone is a replicated scene which manages a separate physics space, navigation map, and visual scenario.
+## A Zone is a high-level replicated scene, containerizing its world within a Viewport.
+## You can access the Zone that any node lives in via Godaemon.zone(Node).
 
 #region Signals
 
@@ -34,7 +35,7 @@ signal interest_removed(peer: int)
 
 ## When true, the Zone will use the game window's rendering settings.
 ## Leave this true unless you want to customize the viewport's rendering settings.
-## Please call `ZoneService.update_render_properties()` whenever you update the game
+## Please call `Godaemon.zone_service(node).update_render_properties()` whenever you update the game
 ## window's rendering settings, so that the Zones will update as well.
 var use_window_render_settings := true
 
@@ -145,7 +146,8 @@ func _ready() -> void:
 
 	if not Engine.is_editor_hint():
 		# Setup World2D and World3D.
-		if mp.is_client() and zone_service.ZONES_SHARE_WORLD:
+		if (mp.is_client() and zone_service.CLIENT_ZONES_SHARE_WORLD) \
+				or (mp.is_server() and zone_service.SERVER_ZONES_SHARE_WORLD):
 			_world_2d = zone_service.base_world_2d
 			_world_3d = zone_service.base_world_3d
 		else:

@@ -1,6 +1,6 @@
 extends Camera2D
 
 func _ready() -> void:
-	if multiplayer.is_server():
+	if Godaemon.mp(self).is_server():
 		enabled = true
 		make_current()

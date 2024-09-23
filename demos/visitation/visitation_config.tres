@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="MultiplayerConfig" load_steps=4 format=3 uid="uid://chrm3b4gumtyv"]
+
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/config/peer_authenticator.gd" id="1_ube3g"]
+[ext_resource type="Script" path="res://addons/godaemon_multiplayer/config/multiplayer_config.gd" id="2_1wu78"]
+[ext_resource type="Script" path="res://demos/visitation/visitation_setup_service.gd" id="3_kpmyt"]
+
+[resource]
+script = ExtResource("2_1wu78")
+services = Array[Script]([ExtResource("3_kpmyt")])
+default_services = true
+max_clients = 32
+channel_count = 0
+in_bandwidth = 0
+out_bandwidth = 0
+connection_timeout = 5.0
+authenticator = ExtResource("1_ube3g")
+authentication_timeout = 3.0
+version = 1
+allow_object_decoding = false
+use_dtls_encryption = false
+peer_timeout = 0.032
+peer_timeout_minimum = 45.0
+peer_timeout_maximum = 60.0
+enable_peer_timeout = true
+enable_dev_peer_timeout = false

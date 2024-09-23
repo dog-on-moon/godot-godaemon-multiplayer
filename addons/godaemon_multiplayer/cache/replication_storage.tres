@@ -9,7 +9,7 @@ cache_dict = {
 "res://addons/godaemon_multiplayer/services/replication/zone/zone_svc.tscn": 1,
 "res://demos/2d_platformer/area/ext_zone.tscn": 5,
 "res://demos/2d_platformer/player/player.tscn": 6,
-"res://demos/visitation/star.tscn": 2,
-"res://demos/visitation/visitation_zone.tscn": 3,
-"res://demos/visitation/zone_swapper.tscn": 4
+"res://demos/visitation/zones/icon.tscn": 2,
+"res://demos/visitation/zones/visitation_zone.tscn": 3,
+"res://demos/visitation/zones/zone_swapper.tscn": 4
 }
