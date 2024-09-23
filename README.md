@@ -1,6 +1,3 @@
-# godot-authoritative-multiplayer
- A networking framework for an authoritative multiplayer server in Godot. Provides a suite of functionality for network synchronization, node interest, and interpolation.
-
 ![screen-shot](https://github.com/dog-on-moon/godot-godaemon-multiplayer/blob/main/readme/banner.png)
 
 # Godaemon Multiplayer
