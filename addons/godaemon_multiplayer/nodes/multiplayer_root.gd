@@ -172,6 +172,7 @@ var service_channel_count := 0
 func _setup_service_signals():
 	if Engine.is_editor_hint():
 		return
+	assert(configuration)
 	_determine_service_channels()
 	connection_success.connect(_setup_services)
 	server_disconnected.connect(_cleanup_services)

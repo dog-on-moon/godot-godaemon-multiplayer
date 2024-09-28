@@ -88,10 +88,6 @@ func outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Err
 		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc mismatched argument counts: %s(%s)" % [method, args])
 		return ERR_UNAVAILABLE
 	
-	# Perform local call.
-	if call_local:
-		node[method].callv(args)
-	
 	# Process hooks.
 	var from_peer := srs_override if srs_override != 0 else api.get_unique_id()
 	channel = get_node_channel_override(node, channel)
@@ -104,9 +100,14 @@ func outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Err
 	for to_peer in target_peers:
 		if to_peer == from_peer:
 			continue
+		
+		var filtered := false
 		for filter: Callable in outbound_filters:
 			if not filter.call(from_peer, to_peer, node, method, args):
-				return ERR_UNAVAILABLE
+				filtered = true
+				break
+		if filtered:
+			continue
 		
 		# Filter RPC through MultiplayerRoot.
 		var bytes := compress_rpc(from_peer, to_peer, node, method_idx, args)
@@ -115,6 +116,12 @@ func outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Err
 		var target_peer: int = 1 if api.is_client() else to_peer
 		api.profiler.rpc(false, node.get_instance_id(), bytes.size() + 1)
 		api.send_command(GodaemonMultiplayerAPI.NetCommand.RPC, bytes, target_peer, transfer_mode, channel)
+	
+	# Perform local call (we do it late so this callback won't interrupt the expected RPCing)
+	if call_local:
+		node[method].callv(args)
+	
+	# We're done.
 	return OK
 
 func inbound_rpc(id: int, bytes: PackedByteArray):

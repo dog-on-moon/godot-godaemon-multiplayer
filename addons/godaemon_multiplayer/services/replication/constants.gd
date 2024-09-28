@@ -1,7 +1,5 @@
 ## Constants for replication. Yay
 
-const Util = preload("res://addons/godaemon_multiplayer/util/util.gd")
-
 const META_SYNC_PROPERTIES := &"_mp"
 const META_REPLICATE_SCENE := &"_r"
 const META_OWNER := &"_o"
@@ -50,7 +48,7 @@ const DEFAULT_SYNC_RELIABLE := true
 static func set_replicated_property(object: Node, property_path: NodePath, send: int, recv: int, sync: SyncMode, reliable: bool):
 	const key_name := META_SYNC_PROPERTIES
 	var root := object if object.scene_file_path else object.owner
-	var true_path := Util.owner_property_path(object, property_path)
+	var true_path := Godaemon.Util.owner_property_path(object, property_path)
 	if not root.has_meta(key_name):
 		root.set_meta(key_name, {})
 	var property_dict: Dictionary = root.get_meta(key_name)
@@ -62,13 +60,13 @@ static func set_replicated_property(object: Node, property_path: NodePath, send:
 ## If unspecified, returns an empty Array.
 static func get_replicated_property(object: Node, property_path: NodePath) -> Array:
 	var root := object if object.scene_file_path else object.owner
-	var true_path := Util.owner_property_path(object, property_path)
+	var true_path := Godaemon.Util.owner_property_path(object, property_path)
 	return root.get_meta(META_SYNC_PROPERTIES, {}).get(true_path, [])
 
 ## Removes the replicated property from the node.
 static func remove_replicated_property(object: Node, property_path: NodePath):
 	var root := object if object.scene_file_path else object.owner
-	var true_path := Util.owner_property_path(object, property_path)
+	var true_path := Godaemon.Util.owner_property_path(object, property_path)
 	var property_dict := root.get_meta(META_SYNC_PROPERTIES, {})
 	property_dict.erase(true_path)
 	if not property_dict:
@@ -78,7 +76,7 @@ static func remove_replicated_property(object: Node, property_path: NodePath):
 static func get_replicated_property_dict(object: Node) -> Dictionary:
 	var root := object if object.scene_file_path else object.owner
 	var properties: Dictionary = root.get_meta(META_SYNC_PROPERTIES, {})
-	var base_path := StringName(Util.owner_path(object))
+	var base_path := StringName(Godaemon.Util.owner_path(object))
 	var ret_properties := {}
 	for property: NodePath in properties:
 		if property.get_concatenated_names() == base_path:

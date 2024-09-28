@@ -80,7 +80,7 @@ func start_connection() -> bool:
 	connection_state = ConnectionState.DISCONNECTED
 	
 	# Attempt creating an internal server.
-	if not _start_internal_server():
+	if not await _start_internal_server():
 		push_warning("ClientRoot.attempt_connect could not make internal server")
 		connection_failed.emit(connection_state)
 		return false
@@ -260,6 +260,8 @@ func _start_internal_server() -> bool:
 		)
 		if internal_server_pid == -1:
 			return false
+		if not headless_internal_server:
+			await get_tree().create_timer(5.0).timeout
 	return true
 
 func _end_internal_server():

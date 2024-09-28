@@ -23,11 +23,6 @@ func _process(delta: float) -> void:
 			if not OS.is_process_running(pid):
 				subprocesses.erase(pid)
 				subprocess_closed.emit(pid)
-	
-	# If our parent PID dies, we should die too.
-	if parent_pid != -1:
-		if not OS.is_process_running(parent_pid):
-			get_tree().quit()
 
 func _enter_tree():
 	for arg in OS.get_cmdline_user_args():
@@ -44,6 +39,7 @@ func _exit_tree() -> void:
 func create_subprocess(scene_path: String, user_kwargs := {}, headless := true, child_processes_can_fork := false) -> int:
 	# Validate user_kwargs.
 	assert(KW_PARENT_PID not in user_kwargs)
+	user_kwargs[KW_PARENT_PID] = OS.get_process_id()
 	
 	# Prevent child processes from forking.
 	if parent_pid != -1 and not child_processes_can_fork:
@@ -72,6 +68,7 @@ func create_subprocess(scene_path: String, user_kwargs := {}, headless := true, 
 
 ## Kills all subprocesses.
 func kill_all_subprocesses():
+	print('SubprocessServer: killing all subprocesses')
 	for pid in subprocesses.duplicate():
 		kill_subprocess(pid)
 
@@ -79,6 +76,7 @@ func kill_all_subprocesses():
 func kill_subprocess(pid: int) -> bool:
 	if pid not in subprocesses:
 		return false
+	print('SubprocessServer: killing subprocess %s' % pid)
 	OS.kill(pid)
 	subprocesses.erase(pid)
 	subprocess_closed.emit(pid)

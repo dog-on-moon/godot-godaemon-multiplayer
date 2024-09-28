@@ -2,7 +2,6 @@
 extends VBoxContainer
 
 const REPCO = preload("res://addons/godaemon_multiplayer/services/replication/constants.gd")
-const Util = preload("res://addons/godaemon_multiplayer/util/util.gd")
 
 var PROPERTY_TYPE_FILTER := PackedInt32Array([
 	TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING, TYPE_VECTOR2, TYPE_VECTOR2I,

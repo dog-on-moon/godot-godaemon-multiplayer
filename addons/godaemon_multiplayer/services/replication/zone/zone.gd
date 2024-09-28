@@ -60,7 +60,7 @@ var old_interest := {}
 			for peer in old_interest:
 				if peer not in interest:
 					interest_removed.emit(peer)
-			old_interest = x
+			old_interest = x.duplicate()
 
 @export var zone_index := 0
 

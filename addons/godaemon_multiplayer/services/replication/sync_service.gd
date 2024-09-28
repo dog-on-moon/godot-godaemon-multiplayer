@@ -49,7 +49,7 @@ func get_scene_replication_data(scene: Node) -> Array:
 		# Find the node.
 		var node_path := NodePath(property_path.get_concatenated_names())
 		var node := scene.get_node(node_path) if node_path else scene
-		assert(node, "A replicated scene's node being tracked by SyncService had their path modified.")
+		assert(node, "SyncService tracking scene %s could not find node of path: %s" % [scene, node_path])
 		
 		# Add to replication data.
 		var prop_path := NodePath(property_path.get_concatenated_subnames())
@@ -253,19 +253,21 @@ func _receive_properties(data: PackedByteArray):
 			continue
 		
 		# If we're reading from the server, skip client-blocked values.
+		if mp.is_server():
+			var filter: REPCO.PeerFilter = replication_fields[0]
+			match filter:
+				REPCO.PeerFilter.SERVER:
+					continue
+				REPCO.PeerFilter.OWNER_SERVER:
+					var node_owner := REPCO.get_node_owner(node)
+					if node_owner != mp.remote_peer:
+						continue
+				REPCO.PeerFilter.NOT_OWNER, REPCO.PeerFilter.OWNER_ONCE:
+					var node_owner := REPCO.get_node_owner(node)
+					if node_owner == mp.remote_peer:
+						continue
+		
 		var value: Variant = values[idx]
-		var filter: REPCO.PeerFilter = replication_fields[0] if mp.is_server() else replication_fields[1]
-		match filter:
-			REPCO.PeerFilter.SERVER:
-				continue
-			REPCO.PeerFilter.OWNER_SERVER:
-				var node_owner := REPCO.get_node_owner(node)
-				if node_owner != mp.remote_peer:
-					continue
-			REPCO.PeerFilter.NOT_OWNER, REPCO.PeerFilter.OWNER_ONCE:
-				var node_owner := REPCO.get_node_owner(node)
-				if node_owner == mp.remote_peer:
-					continue
 		updated_values[idx] = value
 		
 		# Get and set property value.

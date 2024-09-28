@@ -18,7 +18,6 @@ config/icon="res://icon.svg"
 [autoload]
 
 SubprocessServer="*res://addons/godaemon_multiplayer/util/subprocess_server.gd"
-Godaemon="*res://addons/godaemon_multiplayer/godaemon.gd"
 
 [display]
 

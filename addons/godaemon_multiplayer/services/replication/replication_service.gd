@@ -473,10 +473,12 @@ func update_visibility(data: PackedByteArray):
 					# Delete sub-replicated scenes of the initial scene,
 					# replication for them will happen separately.
 					subnode.queue_free()
+					subnode.get_parent().remove_child(subnode)
 				else:
 					var node_id: int = node_ids[node_idx]
 					if node_id == 0:
 						subnode.queue_free()
+						subnode.get_parent().remove_child(subnode)
 					else:
 						mp.api.repository.add_node(subnode, node_id)
 			else:

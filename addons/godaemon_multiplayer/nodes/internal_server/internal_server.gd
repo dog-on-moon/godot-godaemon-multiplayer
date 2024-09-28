@@ -30,7 +30,7 @@ func _ready() -> void:
 		terminal.error("kwarg %s undefined" % KW_INTERNAL_SERVER_CONFIG_PATH)
 		return shutdown()
 	
-	terminal.info('Loading configuration...')
+	terminal.info('Loading configuration at (%s)...' % config_path)
 	configuration = load(config_path)
 	if not configuration:
 		terminal.error('Configuration resource failed to load.')
@@ -43,6 +43,20 @@ func _ready() -> void:
 		return shutdown()
 	
 	terminal.info('Connected on port %s with config %s.' % [port, configuration.resource_path])
+	
+	peer_connected.connect(
+		func (peer: int):
+			terminal.info("Peer %s connected." % peer)
+			for child in get_children():
+				print(child)
+	)
+	peer_disconnected.connect(
+		func (peer: int):
+			# If all clients disconnect, end the process.
+			terminal.info("Peer %s disconnected." % peer)
+			if api.get_peers().size() <= 1:
+				shutdown()
+	)
 
 func shutdown(instant := false):
 	if instant:

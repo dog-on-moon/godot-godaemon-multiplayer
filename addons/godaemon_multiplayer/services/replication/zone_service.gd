@@ -204,7 +204,7 @@ func get_node_zone(node: Node) -> Zone:
 	# Recursively iterate to find the zone.
 	var tree := node.get_tree()
 	if not tree:
-		push_warning("ZoneService.get_node_zone(%s) not in tree" % node.get_path_to(mp))
+		push_warning("ZoneService.get_node_zone(%s) not in tree" % node)
 		return null
 	var zone: Node = node
 	while zone is not Zone and zone != tree.root:
