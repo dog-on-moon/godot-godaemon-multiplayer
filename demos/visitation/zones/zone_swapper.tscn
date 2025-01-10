@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3 uid="uid://inrt54jihwgj"]
 
-[ext_resource type="Script" path="res://demos/visitation/zones/zone_swapper.gd" id="1_y5u33"]
+[ext_resource type="Script" uid="uid://bqtm8q1dp3sch" path="res://demos/visitation/zones/zone_swapper.gd" id="1_y5u33"]
 
 [node name="ZoneSwapper" type="Control"]
 layout_mode = 3

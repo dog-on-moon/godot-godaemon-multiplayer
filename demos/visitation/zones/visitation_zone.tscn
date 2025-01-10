@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3 uid="uid://dkxgxgxhxlxbe"]
 
-[ext_resource type="Script" path="res://demos/visitation/zones/button.gd" id="1_umbdd"]
+[ext_resource type="Script" uid="uid://dga6bqcil6sss" path="res://demos/visitation/zones/button.gd" id="1_umbdd"]
 
 [node name="VisitationZone" type="Control"]
 layout_mode = 3
