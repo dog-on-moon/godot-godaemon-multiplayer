@@ -27,8 +27,7 @@ func _ready() -> void:
 		set_physics_process(false)
 		set_process_unhandled_input(false)
 	
-	var us: UsernameService = Godaemon.service(self, UsernameService)
-	username_label.text = us.get_username(Godaemon.mp(self).get_node_owner(self))
+	username_label.text = str(Godaemon.mp(self).get_node_owner(self))
 
 func _physics_process(delta: float) -> void:
 	# Add the gravity.

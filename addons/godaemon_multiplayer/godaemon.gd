@@ -90,31 +90,3 @@ static func zone_scene(node: Node, required := true) -> Node:
 	if mp(node).is_client():
 		return client_zone(node).scene
 	return zone(node).scene
-
-#region Custom services
-
-## Tracks overworld battles, who's partaking in them, and cleans up battles when completed.
-static func battle_service(node: Node, required := true) -> BattleService:
-	return service(node, BattleService, required)
-
-## Allows for sending of "Context" objects that track game actions and disperse to various objects and services.
-static func context_service(node: Node, required := true) -> ContextService:
-	return service(node, ContextService, required)
-
-## Handles game-wide alerts for players.
-static func popup_service(node: Node, required := true) -> PopupService:
-	return service(node, PopupService, required)
-
-## Main game loop, blitz.
-static func game_service(node: Node, required := true) -> GameService:
-	return service(node, GameService, required)
-
-## Carries all peer-adjacent information.
-static func player_service(node: Node, required := true) -> PlayerService:
-	return service(node, PlayerService, required)
-
-## Handles all chat-related shenanigans.
-static func chat_service(node: Node, required := true) -> ChatService:
-	return service(node, ChatService, required)
-
-#endregion
