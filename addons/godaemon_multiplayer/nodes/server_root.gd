@@ -78,13 +78,14 @@ func start_connection() -> bool:
 	api.scene_multiplayer.auth_callback = authenticator.server_receive_auth
 	if not api.scene_multiplayer.peer_authenticating.is_connected(authenticator.server_start_auth):
 		api.scene_multiplayer.peer_authenticating.connect(authenticator.server_start_auth)
-	if not api.peer_connected.is_connected(peer_connected.emit):
-		api.peer_connected.connect(peer_connected.emit)
+	if not api.peer_connected.is_connected(on_peer_connected):
+		api.peer_connected.connect(on_peer_connected)
 	if not api.peer_disconnected.is_connected(peer_disconnected.emit):
 		api.peer_disconnected.connect(peer_disconnected.emit)
 	
 	api.multiplayer_peer = peer
 	api.connected()
+	connection_state = ConnectionState.CONNECTED
 	connection_success.emit()
 	return true
 
@@ -99,13 +100,16 @@ func end_connection() -> bool:
 	api.scene_multiplayer.auth_callback = Callable()
 	if api.scene_multiplayer.peer_authenticating.is_connected(authenticator.server_start_auth):
 		api.scene_multiplayer.peer_authenticating.disconnect(authenticator.server_start_auth)
-	if api.peer_connected.is_connected(peer_connected.emit):
-		api.peer_connected.disconnect(peer_connected.emit)
+	if api.peer_connected.is_connected(on_peer_connected):
+		api.peer_connected.disconnect(on_peer_connected)
 	if api.peer_disconnected.is_connected(peer_disconnected.emit):
 		api.peer_disconnected.disconnect(peer_disconnected.emit)
 	cleanup_peer_authenticator()
 	server_disconnected.emit()
 	return true
+
+func on_peer_connected(peer: int):
+	peer_connected.emit(peer)
 
 #endregion
 

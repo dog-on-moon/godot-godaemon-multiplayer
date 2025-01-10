@@ -58,3 +58,7 @@ func get_node(id: int) -> Node:
 ## Returns the ID of a node in the repository. Returns -1 if not found.
 func get_id(node: Node) -> int:
 	return node_to_id.get(node, -1)
+
+## Returns whether or not a given node is replicated.
+func is_replicated(node: Node) -> bool:
+	return get_id(node) != -1

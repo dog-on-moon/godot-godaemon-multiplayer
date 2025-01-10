@@ -7,7 +7,7 @@ class_name MultiplayerConfig
 const DEFAULT_AUTHENTICATOR = preload("res://addons/godaemon_multiplayer/config/peer_authenticator.gd")
 
 const DEFAULT_SERVICES := [
-	preload("res://addons/godaemon_multiplayer/services/peer/peer_service.gd"),
+	#preload("res://addons/godaemon_multiplayer/services/peer/peer_service.gd"),
 	preload("res://addons/godaemon_multiplayer/services/replication/replication_service.gd"),
 	preload("res://addons/godaemon_multiplayer/services/replication/sync_service.gd"),
 	preload("res://addons/godaemon_multiplayer/services/replication/zone_service.gd"),

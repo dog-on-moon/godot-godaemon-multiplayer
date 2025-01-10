@@ -64,3 +64,6 @@ static func get_index(scene_file_path: String) -> int:
 
 static func get_scene_file_path(index: int) -> String:
 	return cache_storage.rep_id_to_scene_path.get(index, '')
+
+static func is_packed_scene_replicated(packed_scene: PackedScene) -> bool:
+	return get_index(packed_scene.resource_path) != -1

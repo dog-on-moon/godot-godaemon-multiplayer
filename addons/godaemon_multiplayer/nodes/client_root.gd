@@ -149,7 +149,8 @@ func start_connection() -> bool:
 		_:
 			peer.close()
 			connection_failed.emit(connection_state)
-			_end_internal_server()
+			if not multiconnect_on_ready:
+				_end_internal_server()
 			return false
 
 #region Client Async Connect
@@ -242,6 +243,10 @@ func _on_client_peer_disconnect(peer: int):
 	# Forces a disconnection whenever the server peer disconencts
 	if connection_state == ConnectionState.CONNECTED and peer == 1:
 		end_connection()
+
+func end_multi_connect():
+	super()
+	_end_internal_server()
 
 #endregion
 

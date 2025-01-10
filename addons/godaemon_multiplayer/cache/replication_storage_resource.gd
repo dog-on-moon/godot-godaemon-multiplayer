@@ -14,7 +14,10 @@ const SAVE_PATH: String = "res://addons/godaemon_multiplayer/cache/replication_s
 @export var cache_dict: Dictionary = {}:
 	set(x):
 		cache_dict = x
+		assert(is_valid(), "Replication resource at '%s' is invalid, please re-open and validate it manually" % SAVE_PATH)
 		rep_id_to_scene_path = UTIL.invert_dictionary(cache_dict)
+
+@export_tool_button("Validate") var _validate = validate
 
 var rep_id_to_scene_path: Dictionary = {}
 
@@ -42,6 +45,38 @@ func remove_scene_from_cache(scene_file_path: String):
 			rep_id_to_scene_path.erase(rep_id)
 		cache_dict.erase(scene_file_path)
 		save()
+
+func validate():
+	var new_cache_dict := {}
+	var existing_ids := {}
+	var misses := {}
+	for sfp: String in cache_dict:
+		var id: int = cache_dict[sfp]
+		if id in existing_ids:
+			misses[sfp] = null
+		else:
+			new_cache_dict[sfp] = id
+			existing_ids[id] = null
+	for miss: String in misses:
+		var id := 0
+		while id in existing_ids:
+			id += 1
+		new_cache_dict[miss] = id
+		existing_ids[id] = null
+	cache_dict = new_cache_dict
+	print_rich('[b][color=gray]-=-[/color] [rainbow freq=0.15]I love you, ReplicationStorageResource. You are valid.[/rainbow] [color=gray]-=-[/color]')
+	print_rich("[i][color=dark_gray][font_size=8]sniff... thank yuo....[/font_size][/color][/i]")
+
+func is_valid() -> bool:
+	var existing_ids := {}
+	for sfp: String in cache_dict:
+		var id: int = cache_dict[sfp]
+		if id in existing_ids:
+			push_warning("ID collision at %s" % id)
+			return false
+		else:
+			existing_ids[id] = null
+	return true
 
 ## Saves storage to disk
 func save() -> void:

@@ -70,7 +70,7 @@ func _get_peer_ids() -> PackedInt32Array:
 	return scene_multiplayer.get_peers()
 
 func _get_remote_sender_id() -> int:
-	return rpc.remote_sender
+	return rpc.remote_sender if rpc else 0
 
 func send_packet(bytes: PackedByteArray, id := 0, mode := MultiplayerPeer.TRANSFER_MODE_RELIABLE, channel := 0):
 	send_command(NetCommand.RAW, bytes, id, mode, channel)

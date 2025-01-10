@@ -132,6 +132,8 @@ var _currently_multi_connecting := false
 ## Can be cancelled with ServerRoot.cancel_multiple_connects.
 func start_multi_connect(attempts := -1) -> bool:
 	assert(connection_state == ConnectionState.DISCONNECTED)
+	if _currently_multi_connecting:
+		return false
 	_currently_multi_connecting = true
 	while attempts != 0:
 		if await start_connection():
@@ -140,13 +142,11 @@ func start_multi_connect(attempts := -1) -> bool:
 		if not _currently_multi_connecting:
 			return false
 		attempts -= 1
-	_currently_multi_connecting = false
+	end_multi_connect()
 	return false
 
 ## Cancels multi-connecting once the current connection attempt is complete.
 func end_multi_connect():
-	if not _currently_multi_connecting:
-		push_warning("MultiplayerRoot.end_multi_connect was not actively multi-connecting")
 	_currently_multi_connecting = false
 
 #endregion
@@ -287,5 +287,6 @@ func is_local_owner(node: Node) -> bool:
 #endregion
 
 func _exit_tree() -> void:
-	if not Engine.is_editor_hint():
+	if (not Engine.is_editor_hint()) and connection_state != ConnectionState.DISCONNECTED:
 		end_connection()
+		end_multi_connect()

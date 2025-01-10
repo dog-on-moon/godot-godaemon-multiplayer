@@ -14,6 +14,9 @@ const REPCO = preload("res://addons/godaemon_multiplayer/services/replication/co
 ## A dictionary map of replicated scenes to their peer visibility states.
 var replicated_scenes := {}
 
+## A dictionary map of sub-replicated scenes -- replicated scenes defined as defaults within other ones.
+var default_sub_replicated_scenes := {}
+
 func _enter_tree() -> void:
 	# Look for existing replicated scenes, setup initial signals.
 	_replicated_scene_search(mp)
@@ -88,6 +91,8 @@ func _replicated_scene_search(node: Node):
 			# is instantiated within another replicated scene, so we assume
 			# those to be TRUE by default and then simply DELETE them later on client replication.
 			replicated_scenes[node] = {1: node.owner in replicated_scenes}
+			if node.owner in replicated_scenes:
+				default_sub_replicated_scenes[node] = true
 			enter_replicated_scene.emit(node)
 	
 	# Setup signals on this node.
@@ -106,6 +111,7 @@ func _node_tree_exiting(node: Node):
 				_update_visibility(peer, [], [node])
 		replicated_scenes.erase(node)
 		exit_replicated_scene.emit(node)
+	default_sub_replicated_scenes.erase(node)
 	if node in _visibility_cache:
 		_visibility_cache.erase(node)
 	node.child_entered_tree.disconnect(_node_child_entered_tree)
@@ -191,6 +197,20 @@ func _get_replicated_scene_descendants(node: Node) -> Dictionary:
 		if node.is_ancestor_of(n):
 			descendants[n] = null
 	return descendants
+
+#endregion
+
+#region Client Scene Remap
+
+var _client_scene_remaps: Dictionary[PackedScene, PackedScene] = {}
+
+## Tells the ReplicationService to transform a received scene into
+## another one, who is presumably nearly identical.
+func remap_scene(from_scene: PackedScene, into_scene: PackedScene):
+	assert(mp.is_client())
+	assert(ReplicationCacheManager.get_index(from_scene.resource_path) != -1)
+	assert(ReplicationCacheManager.get_index(into_scene.resource_path) != -1)
+	_client_scene_remaps[from_scene] = into_scene
 
 #endregion
 
@@ -339,9 +359,7 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 	
 	# Sort nodepaths by shortest to longest.
 	var np_sort_func := func (a: Node, b: Node):
-		var a_path := String(a.get_path())
-		var b_path := String(b.get_path())
-		return len(a_path) < len(b_path)
+		return mp.api.repository.get_id(a) < mp.api.repository.get_id(b)
 	if added_nodes:
 		added_nodes.sort_custom(np_sort_func)
 	if removed_nodes:
@@ -352,7 +370,7 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 	for node in added_nodes:
 		var parent_id := mp.api.repository.get_id(node.get_parent())
 		if parent_id == -1:
-			push_warning("Could not replicate node %s to peer (parent missing repository ID)" % node)
+			push_warning("Could not replicate node %s to peer (parent missing repository ID).\nEnsure the parent is in a replicated scene." % node)
 			continue
 		var scene_idx := ReplicationCacheManager.get_index(node.scene_file_path)
 		if scene_idx == -1:
@@ -393,12 +411,15 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 			else:
 				node_ids.append(0)
 		
+		var deferred := node in default_sub_replicated_scenes
+		
 		var add_data := [
 			parent_id,
 			node_owner,
 			scene_idx,
 			property_values,
 			node_ids,
+			deferred,
 		]
 		added_node_data.append(add_data)
 	
@@ -435,6 +456,7 @@ func update_visibility(data: PackedByteArray):
 		node.queue_free()
 	
 	# Add nodes.
+	var deferred_entries := []
 	var added_node_data: Array = visibility_data[0]
 	for add_data in added_node_data:
 		var parent_id: int = add_data[0]
@@ -442,6 +464,7 @@ func update_visibility(data: PackedByteArray):
 		var scene_idx: int = add_data[2]
 		var property_values: Array = add_data[3]
 		var node_ids: Array = add_data[4]
+		var deferred: bool = add_data[5]
 		
 		# Create scene.
 		var sfp := ReplicationCacheManager.get_scene_file_path(scene_idx)
@@ -457,6 +480,8 @@ func update_visibility(data: PackedByteArray):
 		
 		# Load scene, set properties.
 		var packed_scene: PackedScene = load(sfp)
+		packed_scene = _client_scene_remaps.get(packed_scene, packed_scene)
+		
 		var scene_state := packed_scene.get_state()
 		var scene: Node = packed_scene.instantiate()
 		scene.set_meta(REPCO.META_OWNER, node_owner)
@@ -482,8 +507,8 @@ func update_visibility(data: PackedByteArray):
 					else:
 						mp.api.repository.add_node(subnode, node_id)
 			else:
-				push_warning("Could not find subnode om received scene. Weird")
-				break
+				push_warning("Could not find subnode %s on received scene %s. Weird" % [node_path, packed_scene.resource_path])
+				continue
 		
 		# Now load properties.
 		var scene_owner := scene.get_meta(REPCO.META_OWNER, 1)
@@ -513,6 +538,17 @@ func update_visibility(data: PackedByteArray):
 				prop_node.set_indexed(prop_path, value)
 		
 		# Finally, add scene.
+		if deferred:
+			deferred_entries.append([parent, scene])
+		else:
+			replicated_scenes[scene] = {}
+			enter_replicated_scene.emit(scene)
+			parent.add_child(scene)
+	
+	for d in deferred_entries:
+		var parent: Node = d[0]
+		var scene: Node = d[1]
+		#scene.print_tree_pretty()
 		replicated_scenes[scene] = {}
 		enter_replicated_scene.emit(scene)
 		parent.add_child(scene)
@@ -538,6 +574,7 @@ func _compress_visibility_data(added_node_data: Array, removed_node_data: Array)
 		var scene_idx: int = added_data[2]
 		var node_properties: Array = added_data[3]
 		var node_ids: Array = added_data[4]
+		var deferred: bool = added_data[5]
 		
 		assert(scene_idx < (2 ** (MAX_SCENE_BYTES * 8)))
 		assert(node_ids.size() < (2 ** (MAX_NODE_ID_BYTES * 8)))
@@ -551,6 +588,7 @@ func _compress_visibility_data(added_node_data: Array, removed_node_data: Array)
 			+ property_variant.size()
 			+ MAX_NODE_ID_BYTES
 			+ (MAX_NODE_ID_BYTES * node_ids.size())
+			+ 1
 		)
 		
 		stream.write_unsigned(parent_idx, MAX_NODE_ID_BYTES)
@@ -560,6 +598,7 @@ func _compress_visibility_data(added_node_data: Array, removed_node_data: Array)
 		stream.write_unsigned(node_ids.size(), MAX_NODE_ID_BYTES)
 		for node_id in node_ids:
 			stream.write_unsigned(node_id, MAX_NODE_ID_BYTES)
+		stream.write_unsigned(int(deferred), 1)
 	
 	# Encode removed node data.
 	stream.allocate(removed_node_count * MAX_NODE_ID_BYTES)
@@ -597,7 +636,9 @@ func _decompress_visibility_data(data: PackedByteArray) -> Array:
 		for _i in node_id_count:
 			node_ids.append(stream.read_unsigned(MAX_NODE_ID_BYTES))
 		
-		added_node_data.append([parent_idx, node_owner, scene_idx, node_properties, node_ids])
+		var deferred := bool(stream.read_unsigned(1))
+		
+		added_node_data.append([parent_idx, node_owner, scene_idx, node_properties, node_ids, deferred])
 	
 	# Decode removed node data.
 	var removed_node_data: Array = []

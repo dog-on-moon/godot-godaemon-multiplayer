@@ -7,31 +7,24 @@ class_name ZoneService
 ## - Zones use exclusive ENet chnanels for themselves and their children, used for RPCs/replication/synchronization.
 ## - Peer interest state is replicated to clients within a Zone, so they know who else is present.
 
-## When true, all created Zones on the client will share a World2D and World3D.
-const CLIENT_ZONES_SHARE_WORLD := true
-
-## When true, all created Zones on the server will share a World2D and World3D.
-const SERVER_ZONES_SHARE_WORLD := false
-
-@onready var base_world_2d := World2D.new()
-@onready var base_world_3d := World3D.new()
-
 ## Emitted on a client whenever they've received interest for a zone.
-signal cl_added_interest(zone: Zone)
+signal cl_added_interest(zone: ClientZone)
 
 ## Emitted on a client whenever they've lost interest for a zone.
-signal cl_removed_interest(zone: Zone)
+signal cl_removed_interest(zone: ClientZone)
+
+signal cl_has_svc()
 
 ## The number of reserved channels we'll use for Zones.
-const RESERVED_ZONE_CHANNELS := 32
+const RESERVED_ZONE_CHANNELS := 16
 const RESERVED_ZONE_CHANNELS_HALF := RESERVED_ZONE_CHANNELS / 2
 
 const ZONE = preload("res://addons/godaemon_multiplayer/services/replication/zone/zone.tscn")
+const CLIENT_ZONE = preload("res://addons/godaemon_multiplayer/services/replication/zone/client_zone.tscn")
 const ZONE_SVC = preload("res://addons/godaemon_multiplayer/services/replication/zone/zone_svc.tscn")
 const ZoneSvc = preload("res://addons/godaemon_multiplayer/services/replication/zone/zone_svc.gd")
 var svc: SubViewportContainer
 
-@onready var peer_service := Godaemon.peer_service(self)
 @onready var replication_service := Godaemon.replication_service(self)
 @onready var sync_service := Godaemon.sync_service(self)
 @onready var _initial_channel := get_initial_channel(mp)
@@ -44,6 +37,14 @@ func _ready() -> void:
 		svc = ZONE_SVC.instantiate()
 		add_child(svc)
 		replication_service.set_visibility(svc, true)
+	else:
+		child_entered_tree.connect(
+			func (n: Node):
+				if n is SubViewportContainer:
+					svc = n
+					cl_has_svc.emit()
+		)
+		replication_service.remap_scene(ZONE, CLIENT_ZONE)
 
 func _peer_disconnected(peer: int):
 	clear_peer_interest(peer)
@@ -51,22 +52,40 @@ func _peer_disconnected(peer: int):
 #region Service internals
 
 func _channel_modifier(channel: int, node: Node, transfer_mode: MultiplayerPeer.TransferMode):
-	if node == replication_service:
-		# Newly replicated scenes on the ReplicationService are filtered by the first added node's zone's channel.
-		for n in replication_service._rpc_added_nodes + replication_service._rpc_removed_nodes:
-			var zone := get_node_zone(n)
+	if mp.is_server():
+		if node == replication_service:
+			# Newly replicated scenes on the ReplicationService are filtered by the first added node's zone's channel.
+			for n in replication_service._rpc_added_nodes + replication_service._rpc_removed_nodes:
+				var zone := get_node_zone(n)
+				if zone:
+					return get_zone_channel(zone, transfer_mode)
+		elif sync_service and node == sync_service and sync_service._rpc_scene:
+			# Sync RPCs from the SyncService are filtered by their scene's zone's channel.
+			var zone := get_node_zone(sync_service._rpc_scene)
 			if zone:
 				return get_zone_channel(zone, transfer_mode)
-	elif sync_service and node == sync_service and sync_service._rpc_scene:
-		# Sync RPCs from the SyncService are filtered by their scene's zone's channel.
-		var zone := get_node_zone(sync_service._rpc_scene)
-		if zone:
-			return get_zone_channel(zone, transfer_mode)
+		else:
+			# RPCs for any node are set to their zone's channel.
+			var zone := get_node_zone(node)
+			if zone:
+				return get_zone_channel(zone, transfer_mode)
 	else:
-		# RPCs for any node are set to their zone's channel.
-		var zone := get_node_zone(node)
-		if zone:
-			return get_zone_channel(zone, transfer_mode)
+		if node == replication_service:
+			# Newly replicated scenes on the ReplicationService are filtered by the first added node's zone's channel.
+			for n in replication_service._rpc_added_nodes + replication_service._rpc_removed_nodes:
+				var zone := get_node_zone_cl(n)
+				if zone:
+					return get_zone_channel_cl(zone, transfer_mode)
+		elif sync_service and node == sync_service and sync_service._rpc_scene:
+			# Sync RPCs from the SyncService are filtered by their scene's zone's channel.
+			var zone := get_node_zone_cl(sync_service._rpc_scene)
+			if zone:
+				return get_zone_channel_cl(zone, transfer_mode)
+		else:
+			# RPCs for any node are set to their zone's channel.
+			var zone := get_node_zone_cl(node)
+			if zone:
+				return get_zone_channel_cl(zone, transfer_mode)
 	return channel
 
 ## We filter each RPC in a zone to use a dedicated channel.
@@ -76,6 +95,12 @@ func get_reserved_channels() -> int:
 ## Returns the ENet channel ID associated with a Zone.
 func get_zone_channel(zone: Zone, transfer_mode := MultiplayerPeer.TransferMode.TRANSFER_MODE_RELIABLE) -> int:
 	var channel: int = 1 + _initial_channel + (zone.zone_index % RESERVED_ZONE_CHANNELS_HALF)
+	if transfer_mode == MultiplayerPeer.TransferMode.TRANSFER_MODE_RELIABLE:
+		channel += RESERVED_ZONE_CHANNELS_HALF
+	return channel
+
+func get_zone_channel_cl(client_zone: ClientZone, transfer_mode := MultiplayerPeer.TransferMode.TRANSFER_MODE_RELIABLE) -> int:
+	var channel: int = 1 + _initial_channel + (client_zone.zone_index % RESERVED_ZONE_CHANNELS_HALF)
 	if transfer_mode == MultiplayerPeer.TransferMode.TRANSFER_MODE_RELIABLE:
 		channel += RESERVED_ZONE_CHANNELS_HALF
 	return channel
@@ -97,6 +122,7 @@ func add_zone(node: Node) -> Zone:
 	assert(node.scene_file_path, "Added zones must be from a PackedScene")
 	assert(ReplicationCacheManager.get_index(node.scene_file_path) != -1, "Zone must have scene replication enabled")
 	var zone := ZONE.instantiate()
+	zone.setup(sync_service)
 	zone.scene = node
 	zone.zone_index = zone_index
 	zone_index += 1
@@ -170,13 +196,13 @@ func clear_peer_interest(peer: int):
 		if has_interest(peer, zone):
 			remove_interest(peer, zone)
 
-func local_client_add_interest(zone: Zone):
-	zones[zone] = null
-	cl_added_interest.emit(zone)
+func local_client_add_interest(client_zone: ClientZone):
+	zones[client_zone] = null
+	cl_added_interest.emit(client_zone)
 
-func local_client_remove_interest(zone: Zone):
-	zones.erase(zone)
-	cl_added_interest.emit(zone)
+func local_client_remove_interest(client_zone: ClientZone):
+	zones.erase(client_zone)
+	cl_removed_interest.emit(client_zone)
 
 #endregion
 
@@ -198,6 +224,7 @@ var _zone_node_cache := {}
 
 ## Gets the Zone that a node is in.
 func get_node_zone(node: Node) -> Zone:
+	assert(mp.is_server())
 	if node in _zone_node_cache:
 		return _zone_node_cache[node]
 	
@@ -218,5 +245,30 @@ func get_node_zone(node: Node) -> Zone:
 	else:
 		_zone_node_cache[node] = null
 		return null
+
+## Gets the client Zone that a node is in.
+func get_node_zone_cl(node: Node) -> ClientZone:
+	assert(mp.is_client())
+	if node in _zone_node_cache:
+		return _zone_node_cache[node]
+	
+	# Recursively iterate to find the zone.
+	var tree := node.get_tree()
+	if not tree:
+		push_warning("ZoneService.get_node_zone_cl(%s) not in tree" % node)
+		return null
+	var zone: Node = node
+	while zone is not ClientZone and zone != tree.root:
+		zone = zone.get_parent()
+	
+	# Now cache.
+	node.tree_exited.connect(func (): _zone_node_cache.erase(node), CONNECT_ONE_SHOT)
+	if zone is ClientZone:
+		_zone_node_cache[node] = zone
+		return zone
+	else:
+		_zone_node_cache[node] = null
+		return null
+
 
 #endregion

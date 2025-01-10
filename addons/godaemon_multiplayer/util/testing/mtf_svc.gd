@@ -49,6 +49,8 @@ func _ready() -> void:
 		ProjectSettings.get_setting("display/window/size/viewport_height")
 	)
 	sub_viewport.size_2d_override_stretch = true
+	sub_viewport.world_2d = World2D.new()
+	sub_viewport.world_3d = World3D.new()
 	mp = ClientRoot.new() if client else ServerRoot.new()
 	mp.name = "ClientRoot" if client else "ServerRoot"
 	mp.multiconnect_on_ready = false

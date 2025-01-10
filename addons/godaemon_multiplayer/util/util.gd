@@ -29,8 +29,8 @@ static func owner_path(node: Node) -> NodePath:
 static func _child_callback_entered_tree(child: Node, parent: Node, child_path: NodePath, callback: Callable) -> void:
 	var potential_node: Node = parent.get_node_or_null(child_path)
 	if potential_node:
-		callback.call(child)
 		parent.child_entered_tree.disconnect(_child_callback_entered_tree.bind(parent, child_path, callback))
+		callback.call(child)
 
 ## Adds a callback when a potential child with the given nodepath is created.
 static func child_callback(parent: Node, child_path: NodePath, callback: Callable) -> void:

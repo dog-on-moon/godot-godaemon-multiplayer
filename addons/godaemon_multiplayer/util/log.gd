@@ -1,3 +1,4 @@
+@tool
 class_name Log
 ## i'm not allowed to feel sorry
 
@@ -57,8 +58,8 @@ static func _make_log_message(object: Object, message: String, level: Level) -> 
 	return message_base
 
 static func peer_name(object: Object, peer: int):
-	if object is Node and object.multiplayer and peer != 0:
-		var username_service := Godaemon.username_service(object)
+	if object is Node and object.multiplayer and object.multiplayer is GodaemonMultiplayerAPI and peer != 0:
+		var username_service := Godaemon.service(object, UsernameService, false)
 		if username_service:
 			return str(username_service.get_username(peer))
 		else:
@@ -81,19 +82,29 @@ static func gay(object: Object, message: String) -> void:
 	if _is_loggable(object, Log.Level.INFO):
 		print_rich(_make_log_message(object, '[rainbow]%s[/rainbow]' % message, Log.Level.INFO))
 
-static var benchmarks: Dictionary[Object, float] = {}
-
-static func start_benchmark(object: Object) -> void:
+static func dict(object: Object, dict: Dictionary) -> void:
 	if _is_loggable(object, Log.Level.INFO):
-		benchmarks[object] = Time.get_ticks_msec()
-		print_rich(_make_log_message(object, '[i]Starting benchmark[/i]', Log.Level.INFO))
+		var keys := dict.keys()
+		var values := dict.values()
+		var s := "values:"
+		for idx in keys.size():
+			s += '\n\t%s: %s' % [keys[idx], values[idx]]
+		Log.info(object, s)
+
+static var benchmarks: Dictionary[Object, Array] = {}
+
+static func start_benchmark(object: Object, msg := "benchmark") -> void:
+	if _is_loggable(object, Log.Level.INFO):
+		benchmarks[object] = [Time.get_unix_time_from_system(), msg]
+		# print_rich(_make_log_message(object, '[i]Starting benchmark[/i]', Log.Level.INFO))
 
 static func end_benchmark(object: Object) -> void:
+	var end_t := Time.get_unix_time_from_system()
 	if _is_loggable(object, Log.Level.INFO) and object in benchmarks:
-		var start_t := benchmarks[object]
-		var end_t := Time.get_ticks_msec()
+		var start_t: float = benchmarks[object][0]
+		var msg: String = benchmarks[object][1]
 		benchmarks.erase(object)
-		print_rich(_make_log_message(object, '[i]Benchmark: %s sec[/i]' % ((end_t - start_t) * 0.001), Log.Level.INFO))
+		print_rich(_make_log_message(object, ('([i]%.3f sec[/i]) ' % (end_t - start_t)) + msg, Log.Level.INFO))
 
 static var stepping: Dictionary[Object, int] = {}
 

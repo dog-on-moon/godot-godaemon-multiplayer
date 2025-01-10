@@ -6,18 +6,18 @@ const KW_INTERNAL_SERVER_PORT := "_INTERNAL_SERVER_PORT"
 const KW_INTERNAL_SERVER_CONFIG_PATH := "_INTERNAL_SERVER_CONFIG_PATH"
 const INTERNAL_SERVER_SCENE := "res://addons/godaemon_multiplayer/nodes/internal_server/internal_server.tscn"
 
-@onready var terminal: Control = $Terminal
+var terminal: Control
 
-func _ready() -> void:
+func _enter_tree() -> void:
 	if Engine.is_editor_hint():
 		return
 	if SubprocessServer.parent_pid == -1:
 		# ran as a standalone scene, so testing in editor
 		SubprocessServer.kwargs = {
 			KW_INTERNAL_SERVER_PORT: 27027,
-			KW_INTERNAL_SERVER_CONFIG_PATH: "res://demos/test/test_config.tres",
+			KW_INTERNAL_SERVER_CONFIG_PATH: "res://game/multiplayer/multiplayer_config.tres",
 		}
-	
+	terminal = $Terminal
 	terminal.info('Process kwargs: %s' % SubprocessServer.kwargs)
 	
 	var port := SubprocessServer.kwargs.get(KW_INTERNAL_SERVER_PORT, 0)
@@ -37,12 +37,7 @@ func _ready() -> void:
 		return shutdown()
 	terminal.info('Configuration loaded.')
 	
-	terminal.info('Attempting connection...')
-	if not await start_connection():
-		terminal.error("Could not connect: %s" % get_connection_state_name(connection_state))
-		return shutdown()
-	
-	terminal.info('Connected on port %s with config %s.' % [port, configuration.resource_path])
+	await ready
 	
 	peer_connected.connect(
 		func (peer: int):
@@ -57,6 +52,13 @@ func _ready() -> void:
 			if api.get_peers().size() <= 1:
 				shutdown()
 	)
+	
+	terminal.info('Attempting connection...')
+	if not await start_connection():
+		terminal.error("Could not connect: %s" % get_connection_state_name(connection_state))
+		return shutdown()
+	
+	terminal.info('Connected on port %s with config %s.' % [port, configuration.resource_path])
 
 func shutdown(instant := false):
 	if instant:

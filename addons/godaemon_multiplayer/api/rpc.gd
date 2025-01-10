@@ -117,9 +117,12 @@ func outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Err
 		api.profiler.rpc(false, node.get_instance_id(), bytes.size() + 1)
 		api.send_command(GodaemonMultiplayerAPI.NetCommand.RPC, bytes, target_peer, transfer_mode, channel)
 	
-	# Perform local call (we do it late so this callback won't interrupt the expected RPCing)
-	if call_local:
+	# Perform local call (we do it late so this callback won't interrupt the expected RPCing).
+	# Also, if we're the server, only call local if SRS override is 0 (so the server doesnt also call local during forwarding)
+	if call_local and (api.is_client() or srs_override == 0):
+		remote_sender = api.get_unique_id()
 		node[method].callv(args)
+		remote_sender = 0
 	
 	# We're done.
 	return OK
