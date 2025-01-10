@@ -4,7 +4,7 @@ class_name ClientRoot
 ## The client node for a multiplayer session.
 ## Establishes a connection with a ServerRoot.
 
-const InternalServer = preload("res://addons/godaemon_multiplayer/nodes/internal_server/internal_server.gd")
+const InternalServer = preload("res://addons/godaemon_multiplayer/api/nodes/internal_server/internal_server.gd")
 
 #region Exports
 

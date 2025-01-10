@@ -9,7 +9,7 @@ signal node_owner_updated(node: Node)
 signal enter_replicated_scene(scene: Node)
 signal exit_replicated_scene(scene: Node)
 
-const REPCO = preload("res://addons/godaemon_multiplayer/services/replication/constants.gd")
+const REPCO = preload("res://addons/godaemon_multiplayer/replication/constants.gd")
 
 ## A dictionary map of replicated scenes to their peer visibility states.
 var replicated_scenes := {}

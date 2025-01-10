@@ -58,13 +58,7 @@ static func _make_log_message(object: Object, message: String, level: Level) -> 
 	return message_base
 
 static func peer_name(object: Object, peer: int):
-	if object is Node and object.multiplayer and object.multiplayer is GodaemonMultiplayerAPI and peer != 0:
-		var username_service := Godaemon.service(object, UsernameService, false)
-		if username_service:
-			return str(username_service.get_username(peer))
-		else:
-			return str(peer)
-	return ""
+	return str(peer) if peer != 1 else "Server"
 
 static func info(object: Object, message: String) -> void:
 	if _is_loggable(object, Log.Level.INFO):

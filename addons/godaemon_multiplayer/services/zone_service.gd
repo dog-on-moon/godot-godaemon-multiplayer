@@ -19,10 +19,10 @@ signal cl_has_svc()
 const RESERVED_ZONE_CHANNELS := 16
 const RESERVED_ZONE_CHANNELS_HALF := RESERVED_ZONE_CHANNELS / 2
 
-const ZONE = preload("res://addons/godaemon_multiplayer/services/replication/zone/zone.tscn")
-const CLIENT_ZONE = preload("res://addons/godaemon_multiplayer/services/replication/zone/client_zone.tscn")
-const ZONE_SVC = preload("res://addons/godaemon_multiplayer/services/replication/zone/zone_svc.tscn")
-const ZoneSvc = preload("res://addons/godaemon_multiplayer/services/replication/zone/zone_svc.gd")
+const ZONE = preload("res://addons/godaemon_multiplayer/services/zone/zone.tscn")
+const CLIENT_ZONE = preload("res://addons/godaemon_multiplayer/services/zone/client_zone.tscn")
+const ZONE_SVC = preload("res://addons/godaemon_multiplayer/services/zone/zone_svc.tscn")
+const ZoneSvc = preload("res://addons/godaemon_multiplayer/services/zone/zone_svc.gd")
 var svc: SubViewportContainer
 
 @onready var replication_service := Godaemon.replication_service(self)

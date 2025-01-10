@@ -2,7 +2,7 @@ extends ServiceBase
 class_name SyncService
 ## Watches and syncs property changes within replicated scenes.
 
-const REPCO = preload("res://addons/godaemon_multiplayer/services/replication/constants.gd")
+const REPCO = preload("res://addons/godaemon_multiplayer/replication/constants.gd")
 
 ## The ticks-per-second for updating interpolation fields.
 const INTERPOLATE_TPS := 20.0

@@ -9,7 +9,7 @@ const MAX_BYTES := MAX_BITS / 8
 const MAX_ID := 2 ** MAX_BITS
 
 const UTIL := preload("res://addons/godaemon_multiplayer/util/util.gd")
-const SAVE_PATH: String = "res://addons/godaemon_multiplayer/cache/replication_storage.tres"
+const SAVE_PATH: String = "res://addons/godaemon_multiplayer/replication/cache/replication_storage.tres"
 
 @export var cache_dict: Dictionary = {}:
 	set(x):

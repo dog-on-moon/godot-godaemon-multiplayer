@@ -4,7 +4,7 @@ extends Node
 class_name MultiplayerRoot
 ## Base class for ClientRoot and ServerRoot.
 
-const REPCO = preload("res://addons/godaemon_multiplayer/services/replication/constants.gd")
+const REPCO = preload("res://addons/godaemon_multiplayer/replication/constants.gd")
 const MAX_ENET_CHANNELS := 253
 
 #region Exports
