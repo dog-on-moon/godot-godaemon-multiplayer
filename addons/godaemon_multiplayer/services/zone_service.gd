@@ -15,10 +15,6 @@ signal cl_removed_interest(zone: ClientZone)
 
 signal cl_has_svc()
 
-## The number of reserved channels we'll use for Zones.
-const RESERVED_ZONE_CHANNELS := 16
-const RESERVED_ZONE_CHANNELS_HALF := RESERVED_ZONE_CHANNELS / 2
-
 const ZONE = preload("res://addons/godaemon_multiplayer/services/zone/zone.tscn")
 const CLIENT_ZONE = preload("res://addons/godaemon_multiplayer/services/zone/client_zone.tscn")
 const ZONE_SVC = preload("res://addons/godaemon_multiplayer/services/zone/zone_svc.tscn")
@@ -31,7 +27,6 @@ var svc: SubViewportContainer
 
 func _ready() -> void:
 	assert(replication_service)
-	Godaemon.rpcs(self).channel_modifiers.append(_channel_modifier)
 	if mp.is_server():
 		mp.peer_disconnected.connect(_peer_disconnected)
 		svc = ZONE_SVC.instantiate()
@@ -48,64 +43,6 @@ func _ready() -> void:
 
 func _peer_disconnected(peer: int):
 	clear_peer_interest(peer)
-
-#region Service internals
-
-func _channel_modifier(channel: int, node: Node, transfer_mode: MultiplayerPeer.TransferMode):
-	if mp.is_server():
-		if node == replication_service:
-			# Newly replicated scenes on the ReplicationService are filtered by the first added node's zone's channel.
-			for n in replication_service._rpc_added_nodes + replication_service._rpc_removed_nodes:
-				var zone := get_node_zone(n)
-				if zone:
-					return get_zone_channel(zone, transfer_mode)
-		elif sync_service and node == sync_service and sync_service._rpc_scene:
-			# Sync RPCs from the SyncService are filtered by their scene's zone's channel.
-			var zone := get_node_zone(sync_service._rpc_scene)
-			if zone:
-				return get_zone_channel(zone, transfer_mode)
-		else:
-			# RPCs for any node are set to their zone's channel.
-			var zone := get_node_zone(node)
-			if zone:
-				return get_zone_channel(zone, transfer_mode)
-	else:
-		if node == replication_service:
-			# Newly replicated scenes on the ReplicationService are filtered by the first added node's zone's channel.
-			for n in replication_service._rpc_added_nodes + replication_service._rpc_removed_nodes:
-				var zone := get_node_zone_cl(n)
-				if zone:
-					return get_zone_channel_cl(zone, transfer_mode)
-		elif sync_service and node == sync_service and sync_service._rpc_scene:
-			# Sync RPCs from the SyncService are filtered by their scene's zone's channel.
-			var zone := get_node_zone_cl(sync_service._rpc_scene)
-			if zone:
-				return get_zone_channel_cl(zone, transfer_mode)
-		else:
-			# RPCs for any node are set to their zone's channel.
-			var zone := get_node_zone_cl(node)
-			if zone:
-				return get_zone_channel_cl(zone, transfer_mode)
-	return channel
-
-## We filter each RPC in a zone to use a dedicated channel.
-func get_reserved_channels() -> int:
-	return 1 + RESERVED_ZONE_CHANNELS
-
-## Returns the ENet channel ID associated with a Zone.
-func get_zone_channel(zone: Zone, transfer_mode := MultiplayerPeer.TransferMode.TRANSFER_MODE_RELIABLE) -> int:
-	var channel: int = 1 + _initial_channel + (zone.zone_index % RESERVED_ZONE_CHANNELS_HALF)
-	if transfer_mode == MultiplayerPeer.TransferMode.TRANSFER_MODE_RELIABLE:
-		channel += RESERVED_ZONE_CHANNELS_HALF
-	return channel
-
-func get_zone_channel_cl(client_zone: ClientZone, transfer_mode := MultiplayerPeer.TransferMode.TRANSFER_MODE_RELIABLE) -> int:
-	var channel: int = 1 + _initial_channel + (client_zone.zone_index % RESERVED_ZONE_CHANNELS_HALF)
-	if transfer_mode == MultiplayerPeer.TransferMode.TRANSFER_MODE_RELIABLE:
-		channel += RESERVED_ZONE_CHANNELS_HALF
-	return channel
-
-#endregion
 
 #region Zone Management
 

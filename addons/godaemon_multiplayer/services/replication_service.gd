@@ -24,7 +24,7 @@ func _enter_tree() -> void:
 		mp.peer_connected.connect(_peer_connected)
 		mp.peer_disconnected.connect(_peer_disconnected)
 		Godaemon.rpcs(self).target_peer_modifiers.append(_target_peer_modifier)
-		Godaemon.rpcs(self).outbound_filters.append(_rpc_filter)
+		#Godaemon.rpcs(self).outbound_filters.append(_rpc_filter)  TODO - is this necessary?
 
 func _peer_connected(peer: int):
 	# Peers need to know what initial scenes must be replicated to them.
