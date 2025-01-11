@@ -365,7 +365,7 @@ func _compress_values(node_id: int, sync: REPCO.SyncMode, reliable: bool, values
 	for idx in values:
 		stream.allocate(1 + stream.get_var_size(values[idx]))
 		stream.write_u8(idx)
-		stream.write_variant(values[idx], mp.configuration.allow_object_decoding)
+		stream.write_variant(values[idx], false)
 	if not stream.valid:
 		push_warning("SyncService._compress_values was invalid")
 		return PackedByteArray()
@@ -382,7 +382,7 @@ func _decompress_values(data: PackedByteArray) -> Array:
 	var values := {}
 	for _i in values_size:
 		var idx := stream.read_u8()
-		var value := stream.read_variant(mp.configuration.allow_object_decoding)
+		var value := stream.read_variant(false)
 		values[idx] = value
 	results.append(values)
 	if not stream.valid:

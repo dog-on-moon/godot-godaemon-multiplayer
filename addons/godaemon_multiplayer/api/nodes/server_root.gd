@@ -35,7 +35,7 @@ func start_connection() -> bool:
 	# Setup MultiplayerAPI and peer.
 	var api := GodaemonMultiplayerAPI.new()
 	api.mp = self
-	api.scene_multiplayer.allow_object_decoding = configuration.allow_object_decoding
+	api.scene_multiplayer.allow_object_decoding = false
 	api.scene_multiplayer.auth_timeout = configuration.authentication_timeout
 	get_tree().set_multiplayer(api, get_path())
 	var peer = ENetMultiplayerPeer.new()

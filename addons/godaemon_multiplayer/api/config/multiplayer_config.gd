@@ -78,12 +78,6 @@ const DEFAULT_SERVICES := [
 
 @export_group("Security")
 #region
-## When true, objects will be encoded and decoded during RPCs.
-## [b]WARNING:[/b] Deserialized objects can contain code which gets executed.
-## Do not use this option if the serialized object comes from untrusted sources
-## to avoid potential security threat such as remote code execution.
-@export var allow_object_decoding := false
-
 ## Determines if DTLS encryption is enabled.
 @export var use_dtls_encryption := false:
 	set(x):

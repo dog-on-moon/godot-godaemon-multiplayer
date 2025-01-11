@@ -573,7 +573,7 @@ func _compress_visibility_data(added_node_data: Array, removed_node_data: Array)
 		
 		assert(node_ids.size() < (2 ** (MAX_NODE_ID_BYTES * 8)))
 		
-		var property_variant := var_to_bytes(node_properties) if not mp.configuration.allow_object_decoding else var_to_bytes_with_objects(node_properties)
+		var property_variant := var_to_bytes(node_properties)
 		
 		stream.allocate(
 			MAX_NODE_ID_BYTES
@@ -622,7 +622,7 @@ func _decompress_visibility_data(data: PackedByteArray) -> Array:
 		var parent_idx := stream.read_unsigned(MAX_NODE_ID_BYTES)
 		var node_owner := stream.read_unsigned(MAX_NODE_OWNER_BYTES)
 		var scene_uid := stream.read_unsigned(8)
-		var node_properties := stream.read_variant(mp.configuration.allow_object_decoding)
+		var node_properties := stream.read_variant(false)
 		
 		var node_id_count := stream.read_unsigned(MAX_NODE_ID_BYTES)
 		var node_ids := []

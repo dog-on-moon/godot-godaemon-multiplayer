@@ -247,7 +247,7 @@ func compress_rpc(from_peer: int, to_peer: int, node: Node, method_idx: int, arg
 		if dense_args:
 			data.append_array(args[0])
 		else:
-			var args_data := var_to_bytes(args) if not api.mp.configuration.allow_object_decoding else var_to_bytes_with_objects(args)
+			var args_data := var_to_bytes(args)
 			data.append_array(args_data)
 	
 	if not stream.valid:
@@ -278,7 +278,7 @@ func decompress_rpc(id: int, data: PackedByteArray) -> Dictionary:
 		if dense_args:
 			args = [stream.data.slice(stream.c)]
 		else:
-			args = stream.read_variant(api.mp.configuration.allow_object_decoding)
+			args = stream.read_variant(false)
 	
 	if not stream.valid:
 		if OS.has_feature("debug"):

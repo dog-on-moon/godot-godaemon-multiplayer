@@ -1,4 +1,18 @@
 {
+	"5643041355025873573": {
+		"_class": "SyncService",
+		"_name": "res://addons/godaemon_multiplayer/services/sync_service.gd",
+		"methods": [],
+		"properties": [],
+		"signals": []
+	},
+	"6442654088861148762": {
+		"_class": "ReplicationService",
+		"_name": "res://addons/godaemon_multiplayer/services/replication_service.gd",
+		"methods": [],
+		"properties": [],
+		"signals": []
+	},
 	"6608134835668395677": {
 		"_name": "res://node_parent.gd",
 		"methods": [
