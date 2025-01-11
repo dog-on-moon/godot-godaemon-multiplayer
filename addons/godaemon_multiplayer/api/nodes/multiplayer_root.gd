@@ -39,13 +39,20 @@ func _setup_timeout_handler():
 	peer_connected.connect(
 		func (p: int):
 			var packet_peer: ENetPacketPeer = multiplayer.multiplayer_peer.get_peer(p)
-			var unlimited_time := configuration.enable_peer_timeout
-			if OS.has_feature("editor"):
-				unlimited_time = configuration.enable_dev_peer_timeout
-			if not unlimited_time:
-				packet_peer.set_timeout(configuration.peer_timeout * 1000.0, configuration.peer_timeout_minimum * 1000.0, configuration.peer_timeout_maximum * 1000.0)
+			if configuration.peer_has_timeout():
+				# Peers have standard timeout.
+				packet_peer.set_timeout(
+					roundi(configuration.peer_timeout * 1000.0),
+					roundi(configuration.peer_timeout_minimum * 1000.0),
+					roundi(configuration.peer_timeout_maximum * 1000.0)
+				)
 			else:
-				packet_peer.set_timeout(configuration.peer_timeout * 1000.0, 3600.0 * 1000.0, 3600.0 * 1000.0)
+				# Peers have very very long timeout
+				packet_peer.set_timeout(
+					roundi(configuration.peer_timeout * 1000.0),
+					roundi(36000.0 * 1000.0),
+					roundi(36000.0 * 1000.0)
+				)
 	)
 
 #endregion

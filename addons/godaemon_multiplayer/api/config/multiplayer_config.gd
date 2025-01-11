@@ -105,12 +105,20 @@ const DEFAULT_SERVICES := [
 @export_range(0.0, 120.0, 0.1, "or_greater") var peer_timeout_minimum := 45.0
 
 ## A fixed timeout for which any packet must be acknowledged, or the peer will be dropped.
-@export_range(0.0, 120.0, 0.1, "or_greater") var peer_timeout_maximum := 60.0
+@export_range(0.0, 120.0, 0.1, "or_greater") var peer_timeout_maximum := 20.0
 
 ## Determines if peer timeout is enabled.
 @export var enable_peer_timeout := true
 
 ## Determines if peer timeout is enabled in the editor.
 @export var enable_dev_peer_timeout := false
+
+## Returns TRUE if peers have timeout in this configuration.
+func peer_has_timeout() -> bool:
+	return (
+		enable_dev_peer_timeout
+		if OS.has_feature("editor") else
+		enable_peer_timeout
+	)
 
 #endregion
