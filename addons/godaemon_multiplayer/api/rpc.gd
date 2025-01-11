@@ -2,7 +2,7 @@ extends RefCounted
 ## Provides an interface for RPCs for the GodaemonMultiplayerAPI.
 
 ## The max number of bits reserved for RPC methods.
-## Turning this up will allow you to add more RPCs on a given node.
+## Turning this up will allow you to add more RPCs on a given object.
 const MAX_RPC_METHOD_BITS := 8
 const MAX_RPC_METHOD_BYTES := MAX_RPC_METHOD_BITS / 8
 const MAX_RPC_METHODS := 2 ** MAX_RPC_METHOD_BITS
@@ -11,25 +11,25 @@ var api: GodaemonMultiplayerAPI
 
 ## An array of functions that modify the outbound RPC channel.
 ## They take the arguments:
-## 	(channel: int, node: Node, transfer_mode: MultiplayerPeer.TransferMode) 
+## 	(channel: int, object: Object, transfer_mode: MultiplayerPeer.TransferMode) 
 ## The function will return the new channel.
 var channel_modifiers: Array[Callable] = []
 
 ## An array of functions that are called on every outbound RPC.
 ## They take the arguments:
-## 	(from_peer: int, target_peers: Array[int], node: Node, method: StringName, args: Array) 
+## 	(from_peer: int, target_peers: Array[int], object: Object, method: StringName, args: Array) 
 ## Modifying the target_peers array in-place will modify the target peers of the RPC.
 var target_peer_modifiers: Array[Callable] = []
 
 ## An array of functions that are called on every outbound RPC.
 ## They take the arguments:
-## 	(from_peer: int, to_peer: int, node: Node, method: StringName, args: Array) 
+## 	(from_peer: int, to_peer: int, object: Object, method: StringName, args: Array) 
 ## The RPC is blocked if a filter function returns false.
 var outbound_filters: Array[Callable] = []
 
 ## An array of functions that are called on every inbound RPC.
 ## They take the arguments:
-## 	(from_peer: int, to_peer: int, node: Node, method: StringName, args: Array) 
+## 	(from_peer: int, to_peer: int, object: Object, method: StringName, args: Array) 
 ## The RPC is blocked if a filter function returns false.
 var inbound_filters: Array[Callable] = []
 
@@ -49,17 +49,17 @@ func cleanup():
 # This is only applicable to the server.
 var srs_override := 0
 
-func outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Error:
-	if api.repository.get_id(node) == -1:
-		push_error("Attempted to send RPC on untracked node: %s.\n
-				Use mp.api.repository.add_node(node, id), and ensure the id is matched on both server and client." % node)
+func outbound_rpc(peer: int, object: Object, method: StringName, args: Array) -> Error:
+	if api.repository.get_id(object) == -1:
+		push_error("Attempted to send RPC on untracked object: %s.\n
+				Use mp.api.repository.add_object(obj, id), and ensure the id is matched on both server and client." % object)
 		return ERR_CANT_RESOLVE
 	
 	# Ensure there is a valid RPC config.
 	var config: Dictionary = {}
-	if node.get_script():
-		config.merge(node.get_script().get_rpc_config())
-	config.merge(node.get_rpc_config())
+	if object.get_script():
+		config.merge(object.get_script().get_rpc_config())
+	config.merge(object.get_rpc_config())
 	if method not in config:
 		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc could not find RPC config")
 		return ERR_UNCONFIGURED
@@ -70,58 +70,54 @@ func outbound_rpc(peer: int, node: Node, method: StringName, args: Array) -> Err
 	config = config[method]
 	var rpc_mode: MultiplayerAPI.RPCMode = config.get("rpc_mode", MultiplayerAPI.RPC_MODE_AUTHORITY)
 	if (api.mp.is_client() and rpc_mode != MultiplayerAPI.RPC_MODE_ANY_PEER) or rpc_mode == MultiplayerAPI.RPC_MODE_DISABLED:
-		push_warning("GodaemonMultiplayerAPI.rpc.outbound_rpc Client attempted to send RPC on blocked method: %s.%s" % [node, method])
+		push_warning("GodaemonMultiplayerAPI.rpc.outbound_rpc Client attempted to send RPC on blocked method: %s.%s" % [object, method])
 		return ERR_UNAUTHORIZED
 	var transfer_mode: MultiplayerPeer.TransferMode = config.get("transfer_mode", MultiplayerPeer.TRANSFER_MODE_RELIABLE)
 	var call_local: bool = config.get("call_local", false)
 	var channel: int = config.get("channel", 0)
 	
-	# Validate node.
-	var node_path := api.mp.get_path_to(node)
-	if not node_path:
-		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc could not find path to node")
+	# Validate object.
+	if not object.has_method(method):
+		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc object missing method %s" % method)
 		return ERR_UNAVAILABLE
-	if not node.has_method(method):
-		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc node missing method %s" % method)
-		return ERR_UNAVAILABLE
-	if node[method].get_argument_count() != args.size():
+	if object[method].get_argument_count() != args.size():
 		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc mismatched argument counts: %s(%s)" % [method, args])
 		return ERR_UNAVAILABLE
 	
 	# Process hooks.
 	var from_peer := srs_override if srs_override != 0 else api.get_unique_id()
-	channel = get_node_channel_override(node, channel)
+	channel = get_object_channel_override(object, channel)
 	for modifier: Callable in channel_modifiers:
-		channel = modifier.call(channel, node, transfer_mode)
+		channel = modifier.call(channel, object, transfer_mode)
 	
 	var target_peers: Array[int] = [peer]
 	for modifier: Callable in target_peer_modifiers:
-		modifier.call(from_peer, target_peers, node, method, args)
+		modifier.call(from_peer, target_peers, object, method, args)
 	for to_peer in target_peers:
 		if to_peer == from_peer:
 			continue
 		
 		var filtered := false
 		for filter: Callable in outbound_filters:
-			if not filter.call(from_peer, to_peer, node, method, args):
+			if not filter.call(from_peer, to_peer, object, method, args):
 				filtered = true
 				break
 		if filtered:
 			continue
 		
 		# Filter RPC through MultiplayerRoot.
-		var bytes := compress_rpc(from_peer, to_peer, node, method_idx, args)
+		var bytes := compress_rpc(from_peer, to_peer, object, method_idx, args)
 		if not bytes:
 			continue
 		var target_peer: int = 1 if api.is_client() else to_peer
-		api.profiler.rpc(false, node.get_instance_id(), bytes.size() + 1)
+		api.profiler.rpc(false, object.get_instance_id(), bytes.size() + 1)
 		api.send_command(GodaemonMultiplayerAPI.NetCommand.RPC, bytes, target_peer, transfer_mode, channel)
 	
 	# Perform local call (we do it late so this callback won't interrupt the expected RPCing).
 	# Also, if we're the server, only call local if SRS override is 0 (so the server doesnt also call local during forwarding)
 	if call_local and (api.is_client() or srs_override == 0):
 		remote_sender = api.get_unique_id()
-		node[method].callv(args)
+		object[method].callv(args)
 		remote_sender = 0
 	
 	# We're done.
@@ -132,43 +128,43 @@ func inbound_rpc(id: int, bytes: PackedByteArray):
 	var data := decompress_rpc(id, bytes)
 	if not data:
 		return
-	var from_peer: int = data.get('from_peer')
-	var to_peer: int = data.get('to_peer')
-	var node_id: int = data.get('node_id')
-	var method_idx: int = data.get('method_idx')
-	var args: Array = data.get('args')
+	var from_peer:  int = data[0]
+	var to_peer:    int = data[1]
+	var object_id:  int = data[2]
+	var method_idx: int = data[3]
+	var args:     Array = data[4]
 	
-	# Ensure node and callable can be found.
-	var node := api.repository.get_node(node_id)
-	if not node:
+	# Ensure object and callable can be found.
+	var object := api.repository.get_object(object_id)
+	if not object:
 		return
 	var config: Dictionary = {}
-	if node.get_script():
-		config.merge(node.get_script().get_rpc_config())
-	config.merge(node.get_rpc_config())
+	if object.get_script():
+		config.merge(object.get_script().get_rpc_config())
+	config.merge(object.get_rpc_config())
 	if method_idx < 0 or method_idx >= config.size():
 		return
 	var method: StringName = config.keys()[method_idx]
-	if not node.has_method(method) or method not in config:
+	if not object.has_method(method) or method not in config:
 		return
 	var rpc_mode: MultiplayerAPI.RPCMode = config[method].get("rpc_mode", MultiplayerAPI.RPC_MODE_DISABLED)
 	if (api.mp.is_server() and rpc_mode != MultiplayerAPI.RPC_MODE_ANY_PEER) or rpc_mode == MultiplayerAPI.RPC_MODE_DISABLED:
-		push_warning("GodaemonMultiplayerAPI.rpc.inbound_rpc Client attempted to send RPC on blocked method: %s.%s" % [node, method])
+		push_warning("GodaemonMultiplayerAPI.rpc.inbound_rpc Client attempted to send RPC on blocked method: %s.%s" % [object, method])
 		return
-	var callable: Callable = node[method].bindv(args)
+	var callable: Callable = object[method].bindv(args)
 	
 	# Test ratelimit.
-	if not _check_rpc_ratelimit(from_peer, node, method):
+	if not _check_rpc_ratelimit(from_peer, object, method):
 		return
 	
 	# Test filters.
 	for filter: Callable in inbound_filters:
-		if not filter.call(from_peer, to_peer, node, method, args):
+		if not filter.call(from_peer, to_peer, object, method, args):
 			return
 	
-	api.profiler.rpc(true, node.get_instance_id(), bytes.size())
+	api.profiler.rpc(true, object.get_instance_id(), bytes.size())
 	
-	var method_is_server_only: bool = method in _node_rpc_server_receive_only.get(node, {})
+	var method_is_server_only: bool = method in _object_rpc_server_receive_only.get(object, {})
 	
 	# Call or re-route RPC.
 	remote_sender = from_peer
@@ -204,13 +200,13 @@ func inbound_rpc(id: int, bytes: PackedByteArray):
 
 #region RPC Serializer
 
-func compress_rpc(from_peer: int, to_peer: int, node: Node, method_idx: int, args: Array) -> PackedByteArray:
+func compress_rpc(from_peer: int, to_peer: int, object: Object, method_idx: int, args: Array) -> PackedByteArray:
 	var stream := PackedByteStream.new()
 	stream.setup_write(
 		1  # header
 		+ (4 if api.is_server() else 0)  # from_peer
 		+ 4  # to_peer
-		+ api.repository.MAX_BYTES  # node id
+		+ api.repository.MAX_BYTES  # object id
 		+ MAX_RPC_METHOD_BYTES  # method id
 	)
 	
@@ -229,15 +225,15 @@ func compress_rpc(from_peer: int, to_peer: int, node: Node, method_idx: int, arg
 		stream.write_u32(from_peer)
 	stream.write_u32(to_peer)
 	
-	var id := api.repository.get_id(node)
+	var id := api.repository.get_id(object)
 	if id == -1:
-		push_warning("Attempted to send RPC on node without id: %s" % node)
+		push_warning("Attempted to send RPC on object without id: %s" % object)
 		return PackedByteArray()
 	stream.write_unsigned(id, api.repository.MAX_BYTES)
 	
 	# Encode method idx.
 	if method_idx >= MAX_RPC_METHODS:
-		push_warning("Attempted to send RPC on mode %s exceeding max methods: %s" % [node, MAX_RPC_METHODS])
+		push_warning("Attempted to send RPC on mode %s exceeding max methods: %s" % [object, MAX_RPC_METHODS])
 		return PackedByteArray()
 	stream.write_unsigned(method_idx, MAX_RPC_METHOD_BYTES)
 	
@@ -255,7 +251,7 @@ func compress_rpc(from_peer: int, to_peer: int, node: Node, method_idx: int, arg
 		return PackedByteArray()
 	return data
 
-func decompress_rpc(id: int, data: PackedByteArray) -> Dictionary:
+func decompress_rpc(id: int, data: PackedByteArray) -> Array:
 	var stream := PackedByteStream.new()
 	stream.setup_read(data)
 	
@@ -269,7 +265,7 @@ func decompress_rpc(id: int, data: PackedByteArray) -> Dictionary:
 	if api.is_client():
 		from_peer = stream.read_u32()
 	var to_peer := stream.read_u32()
-	var node_id := stream.read_unsigned(api.repository.MAX_BYTES)
+	var object_id := stream.read_unsigned(api.repository.MAX_BYTES)
 	var method_idx := stream.read_unsigned(MAX_RPC_METHOD_BYTES)
 	
 	# Decode args, if present.
@@ -283,79 +279,73 @@ func decompress_rpc(id: int, data: PackedByteArray) -> Dictionary:
 	if not stream.valid:
 		if OS.has_feature("debug"):
 			push_warning("Decompressed RPC stream is invalid")
-		return {}
-	return {
-		'from_peer': from_peer,
-		'to_peer': to_peer,
-		'node_id': node_id,
-		'method_idx': method_idx,
-		'args': args,
-	}
+		return []
+	return [from_peer, to_peer, object_id, method_idx, args]
 
 #endregion
 
-#region Override Node Channels
+#region Override Object Channels
 
-## Mapping of node to override channel.
-var node_channels := {}
+## Mapping of object to override channel.
+var object_channels := {}
 
-## Overrides the RPC channels on a given Node.
-func set_node_channel_override(node: Node, channel: int):
-	if node not in node_channels:
-		node.tree_exited.connect(_clear_node_channel_override.bind(node), CONNECT_ONE_SHOT)
-	node_channels[node] = channel
+## Overrides the RPC channels on a given Object.
+func set_object_channel_override(object: Object, channel: int):
+	if object not in object_channels:
+		object.tree_exited.connect(_clear_object_channel_override.bind(object), CONNECT_ONE_SHOT)
+	object_channels[object] = channel
 
-## Clears the channels set on a Node.
-func _clear_node_channel_override(node: Node):
-	node_channels.erase(node)
+## Clears the channels set on a Object.
+func _clear_object_channel_override(object: Object):
+	object_channels.erase(object)
 
-## Returns the channel of a Node.
-func get_node_channel_override(node: Node, default_channel: int = 0) -> int:
-	return node_channels.get(node, default_channel)
+## Returns the channel of a Object.
+func get_object_channel_override(object: Object, default_channel: int = 0) -> int:
+	return object_channels.get(object, default_channel)
 
 #endregion
 
 #region RPC Ratelimits
 
-var _node_rpc_ratelimits := {}
+var _object_rpc_ratelimits := {}
 
-## Sets the ratelimit on a given RPC for a Node.
-func set_rpc_ratelimit(node: Node, method: StringName, count: int, duration: float):
-	var node_in_dict: bool = node in _node_rpc_ratelimits
-	_node_rpc_ratelimits.get_or_add(node, {})[method] = RateLimiter.new(api.mp, count, duration)
-	if not node_in_dict:
-		node.tree_exited.connect(_clear_rpc_ratelimit.bind(node), CONNECT_ONE_SHOT)
+## Sets the ratelimit on a given RPC for a Object.
+func set_rpc_ratelimit(object: Object, method: StringName, count: int, duration: float):
+	var object_in_dict: bool = object in _object_rpc_ratelimits
+	_object_rpc_ratelimits.get_or_add(object, {})[method] = RateLimiter.new(api.mp, count, duration)
+	if not object_in_dict:
+		object.tree_exited.connect(_clear_rpc_ratelimit.bind(object), CONNECT_ONE_SHOT)
 
-## Tests the ratelimit on a given RPC for a Node.
-func _check_rpc_ratelimit(peer: int, node: Node, method: StringName) -> bool:
-	if node not in _node_rpc_ratelimits:
+## Tests the ratelimit on a given RPC for a Object.
+func _check_rpc_ratelimit(peer: int, object: Object, method: StringName) -> bool:
+	if object not in _object_rpc_ratelimits:
 		return true
-	if method not in _node_rpc_ratelimits[node]:
+	if method not in _object_rpc_ratelimits[object]:
 		return true
-	var rl: RateLimiter = _node_rpc_ratelimits[node][method]
+	var rl: RateLimiter = _object_rpc_ratelimits[object][method]
 	var result := rl.check(peer)
 	if not result and OS.has_feature("editor"):
-		push_warning("GodaemonMultiplayerAPI: ratelimited RPC %s.%s() for peer %s" % [node.name, method, peer])
+		push_warning("GodaemonMultiplayerAPI: ratelimited RPC %s.%s() for peer %s" % [object.name, method, peer])
 	return result
 
-func _clear_rpc_ratelimit(node: Node):
-	_node_rpc_ratelimits.erase(node)
+func _clear_rpc_ratelimit(object: Object):
+	_object_rpc_ratelimits.erase(object)
 
 #endregion
 
 #region RPC Security
 
-var _node_rpc_server_receive_only := {}
+var _object_rpc_server_receive_only := {}
 
 ## Sets an RPC to only allow being received by the server.
 ## This will prevent clients from being able to send the RPC to other clients.
-func set_rpc_server_receive_only(node: Node, method: StringName):
-	if node not in _node_rpc_server_receive_only:
-		_node_rpc_server_receive_only[node] = {}
-		node.tree_exited.connect(_clear_node_rpc_server_receive_only.bind(node), CONNECT_ONE_SHOT)
-	_node_rpc_server_receive_only[node][method] = null
+func set_rpc_server_receive_only(object: Object, method: StringName):
+	if object not in _object_rpc_server_receive_only:
+		_object_rpc_server_receive_only[object] = {}
+		object.tree_exited.connect(_clear_object_rpc_server_receive_only.bind(object), CONNECT_ONE_SHOT)
+	_object_rpc_server_receive_only[object][method] = null
 
-func _clear_node_rpc_server_receive_only(node: Node):
-	_node_rpc_server_receive_only.erase(node)
+func _clear_object_rpc_server_receive_only(object: Object):
+	_object_rpc_server_receive_only.erase(object)
 
 #endregion

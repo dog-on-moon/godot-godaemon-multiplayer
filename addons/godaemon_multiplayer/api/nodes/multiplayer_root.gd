@@ -200,7 +200,7 @@ func _determine_service_channels():
 		n.queue_free()
 
 func _setup_services():
-	api.repository.add_node(self)
+	api.repository.add_object(self)
 	
 	_cleanup_services()
 	var nodes_to_add: Array[ServiceBase] = []
@@ -217,7 +217,7 @@ func _setup_services():
 		service_name_cache[script.get_global_name()] = n
 		n.name = script.get_global_name()
 		n.mp = self
-		api.repository.add_node(n)
+		api.repository.add_object(n)
 		nodes_to_add.append(n)
 	
 	# this add children shenanigans is a bit tragic,

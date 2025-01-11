@@ -288,7 +288,7 @@ func _receive_properties(data: PackedByteArray):
 	if not properties:
 		return
 	var node_id: int = properties[0]
-	var scene := mp.api.repository.get_node(node_id)
+	var scene := mp.api.repository.get_object(node_id)
 	if not scene:
 		push_warning("SyncService._receive_properties does not know node ID %s" % properties[0])
 		return

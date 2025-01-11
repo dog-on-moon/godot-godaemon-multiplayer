@@ -81,7 +81,7 @@ func _replicated_scene_search(node: Node):
 	if mp.is_server():
 		# Setup RPC index.
 		if mp.api.repository.get_id(node) == -1:
-			mp.api.repository.add_node(node)
+			mp.api.repository.add_object(node)
 		
 		# Does this node have replicated properties?
 		const key := REPCO.META_REPLICATE_SCENE
@@ -116,7 +116,7 @@ func _node_tree_exiting(node: Node):
 		_visibility_cache.erase(node)
 	node.child_entered_tree.disconnect(_node_child_entered_tree)
 	if mp.api and mp.api.repository and mp.api.repository.get_id(node) != -1:
-		mp.api.repository.remove_node(node)
+		mp.api.repository.remove_object(node)
 
 func _node_child_entered_tree(node: Node):
 	_replicated_scene_search(node)
@@ -274,7 +274,7 @@ func _set_node_owner(bytes: PackedByteArray):
 	stream.setup_read(bytes)
 	var node_id := stream.read_unsigned(mp.api.repository.MAX_BYTES)
 	var peer := stream.read_u32()
-	var node := mp.api.repository.get_node(node_id)
+	var node := mp.api.repository.get_object(node_id)
 	if not node_id:
 		push_warning("ReplicationService._set_node_owner could not find node ID %s" % node_id)
 		return
@@ -443,11 +443,11 @@ func update_visibility(data: PackedByteArray):
 	# Remove nodes.
 	var removed_node_data: Array = visibility_data[1]
 	for node_id: int in removed_node_data:
-		var node := mp.api.repository.get_node(node_id)
+		var node := mp.api.repository.get_object(node_id)
 		if not node:
 			push_warning("Visibility asked to remove node that didn't exist")
 			continue
-		mp.api.repository.remove_node_id(node_id)
+		mp.api.repository.remove_object_id(node_id)
 		node.get_parent().remove_child(node)
 		node.queue_free()
 	
@@ -469,7 +469,7 @@ func update_visibility(data: PackedByteArray):
 			continue
 		
 		# Find parent.
-		var parent := mp.api.repository.get_node(parent_id)
+		var parent := mp.api.repository.get_object(parent_id)
 		if not parent:
 			push_warning("Received unknown parent node ID %s in visibility update.\nThe server must communicate the replicated scene's parent node ID to the client in advance." % parent_id)
 			continue
@@ -501,7 +501,7 @@ func update_visibility(data: PackedByteArray):
 						subnode.queue_free()
 						subnode.get_parent().remove_child(subnode)
 					else:
-						mp.api.repository.add_node(subnode, node_id)
+						mp.api.repository.add_object(subnode, node_id)
 			else:
 				push_warning("Could not find subnode %s on received scene %s. Weird" % [node_path, packed_scene.resource_path])
 				continue
