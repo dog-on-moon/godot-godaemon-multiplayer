@@ -43,6 +43,9 @@ func _ready() -> void:
 	
 	delete_button.icon = editor_theme.get_icon(&"Remove", &"EditorIcons")
 	
+	if not _config:
+		return
+	
 	send_server.set_pressed_no_signal(_config.get_send_filter_flag(ReplicationConfigBase.Filter.Server))
 	send_owner .set_pressed_no_signal(_config.get_send_filter_flag(ReplicationConfigBase.Filter.Owner))
 	send_client.set_pressed_no_signal(_config.get_send_filter_flag(ReplicationConfigBase.Filter.Client))

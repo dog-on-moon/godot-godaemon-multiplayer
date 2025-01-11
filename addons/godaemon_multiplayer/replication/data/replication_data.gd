@@ -12,14 +12,32 @@ static var _data: ReplicationData
 
 static func _static_init() -> void:
 	_data = _load()
-	for rep: ScriptReplication in _data.script_replication_map.values():
-		if not rep.updated.is_connected(save):
-			rep.updated.connect(save)
+	
+	if Engine.is_editor_hint():
+		var changed := false
+		for uid in _data.script_replication_map.keys():
+			# Check if the script still exists.
+			var path := uid_to_path(uid)
+			if not (path and FileAccess.file_exists(path)):
+				_data.script_replication_map.erase(uid)
+				changed = true
+				continue
+			
+			# Setup script autosave.
+			var rep: ScriptReplication = _data.script_replication_map[uid]
+			if not rep.updated.is_connected(save):
+				rep.updated.connect(save)
+		if changed:
+			_data.save.call_deferred()
 
 ## Returns a script's replication data.
 ## Returns null if it does not exist.
 static func get_script_replication(script: Script) -> ScriptReplication:
-	return _data.script_replication_map.get(path_to_uid(script.resource_path), null)
+	var uid := path_to_uid(script.resource_path)
+	if uid == -1:
+		print('script %s has no uid?' % script.resource_path)
+		return null
+	return _data.script_replication_map.get(uid, null)
 
 ## Toggles a script's replication.
 static func toggle_script_replication(script: Script, mode: bool) -> ScriptReplication:

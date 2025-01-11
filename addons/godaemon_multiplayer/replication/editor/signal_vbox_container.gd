@@ -58,6 +58,29 @@ func _ready() -> void:
 			EditorInterface.popup_dialog_centered(w, Vector2i(32, 32))
 	)
 
+func _set_script(script: Script):
+	if script:
+		# Remove dead definitions.
+		var sr := ReplicationData.get_script_replication(script)
+		if sr:
+			var args := get_arguments(script)
+			var changed := false
+			
+			for config in sr.signal_config.duplicate():
+				var found := false
+				for a in args:
+					if config.name == arg_to_name(a):
+						found = true
+						break
+				if not found:
+					# This config is dead.
+					sr.signal_config.erase(config)
+					changed = true
+	
+			if changed:
+				sr.signal_config = sr.signal_config
+	super(script)
+
 func get_arguments(s: Script) -> Array:
 	if not s:
 		return []

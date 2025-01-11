@@ -60,21 +60,6 @@
 				"sync": 0
 			}
 		],
-		"signals": [
-			{
-				"flags": 0,
-				"name": "freak",
-				"recv_filter": 7,
-				"reliable": true,
-				"send_filter": 1
-			},
-			{
-				"flags": 0,
-				"name": "friday",
-				"recv_filter": 7,
-				"reliable": true,
-				"send_filter": 1
-			}
-		]
+		"signals": []
 	}
 }

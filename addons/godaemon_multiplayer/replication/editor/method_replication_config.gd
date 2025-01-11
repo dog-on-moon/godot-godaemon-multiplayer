@@ -6,7 +6,7 @@ var config: ReplicationMethodConfig:
 
 func _ready() -> void:
 	super()
-	if not argument:
+	if not argument or not config:
 		return
 	
 	config_name.text = create_method_signature(argument)

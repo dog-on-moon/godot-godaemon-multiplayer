@@ -6,7 +6,7 @@ var config: ReplicationPropertyConfig:
 
 func _ready() -> void:
 	super()
-	if not argument:
+	if not argument or not config:
 		return
 	
 	delete_button.pressed.connect(

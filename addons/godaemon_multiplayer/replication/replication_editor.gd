@@ -47,23 +47,32 @@ func _visibility_changed():
 func _set_script(script: Script):
 	_current_script = script
 	
+	# Ensure script has UID
+	var invalid_uid := (ReplicationData.path_to_uid(script.resource_path) == -1) if script else false
+	
 	# Update the replication data cache.
-	if script:
+	if script and not invalid_uid:
 		ReplicationData.validate_script_replication(script)
 	
 	# Now update EVERYTHING DOG
-	if script:
+	#if script and not invalid_uid:
 		_stored_script_length = script.source_code.length()
 		_stored_script_hash = hash(script.source_code)
 	else:
 		_stored_script_length = -1
 		_stored_script_hash = 0
-	_update_script_label(script)
-	method_v_box_container._set_script(script)
-	property_v_box_container._set_script(script)
-	signal_v_box_container._set_script(script)
+	if not invalid_uid:
+		_update_script_label(script)
+		method_v_box_container._set_script(script)
+		property_v_box_container._set_script(script)
+		signal_v_box_container._set_script(script)
+	else:
+		script_name.text = " Script has no UID."
+		method_v_box_container._set_script(null)
+		property_v_box_container._set_script(null)
+		signal_v_box_container._set_script(null)
 	
-	if script:
+	if script and not invalid_uid:
 		ReplicationData.validate_script_replication(script)
 
 func _update_script_label(script: Script):

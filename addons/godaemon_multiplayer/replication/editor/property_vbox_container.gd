@@ -43,47 +43,27 @@ func _ready() -> void:
 
 
 func _set_script(script: Script):
-	var args := get_arguments(script)
-	var names := args.map(arg_to_name)
-	_clear_inherited()
+	if script:
+		# Remove dead definitions.
+		var sr := ReplicationData.get_script_replication(script)
+		if sr:
+			var args := get_arguments(script)
+			var changed := false
+			
+			for config in sr.property_config.duplicate():
+				var found := false
+				for a in args:
+					if config.name == arg_to_name(a):
+						found = true
+						break
+				if not found:
+					# This config is dead.
+					sr.property_config.erase(config)
+					changed = true
 	
-	# remove old scripts
-	for tscn: ReplicationConfigBase_ in configs.duplicate():
-		#print('if %s not in %s:' % [arg_to_name(tscn.argument), names])
-		
-		if arg_to_name(tscn.argument) not in names or old_script != script:
-			remove_child(tscn)
-			tscn.queue_free()
-			configs.erase(tscn)
-			#print('removing %s' % arg_to_name(tscn.argument))
-	
-	old_script = script
-	
-	print(args)
-	
-	# add new scripts
-	for arg in args:
-		if not arg:
-			continue
-		
-		var exists := false
-		for config in configs:
-			# it already exists
-			if arg_to_name(config.argument) == arg_to_name(arg):
-				exists = true
-				break
-		
-		if not exists:
-			var config := get_tscn()
-			config.argument = arg
-			config._script = ReplicationData.get_script_replication(script)
-			config._config = arg_to_config(script, arg)
-			add_child(config)
-			configs.append(config)
-			#print('adding %s' % arg_to_name(arg))
-	
-	_add_inherited(script, true)
-
+			if changed:
+				sr.property_config = sr.property_config
+	super(script)
 
 func get_arguments(s: Script) -> Array:
 	if not s:
