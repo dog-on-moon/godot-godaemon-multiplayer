@@ -22,6 +22,7 @@ func _load_editor():
 	replication_editor = load("res://addons/godaemon_multiplayer/replication/replication_editor.tscn").instantiate()
 	replication_editor.plugin = self
 	replication_editor_button = add_control_to_bottom_panel(replication_editor, "Replication")
+	update_editor_button_text()
 
 func _unload_editor():
 	remove_control_from_bottom_panel(replication_editor)
@@ -33,3 +34,25 @@ func _reload_editor():
 	_unload_editor()
 	_load_editor()
 	replication_editor_button.button_pressed = true
+
+func update_editor_button_text():
+	if not replication_editor_button:
+		return
+	var s: Script = EditorInterface.get_script_editor().get_current_script()
+	if not s:
+		replication_editor_button.text = "Replication (0)"
+	else:
+		var x := 0
+		var depth := 200
+		var parent := s
+		while parent:
+			depth -= 1
+			if depth <= 0:
+				break
+			var sr := ReplicationData.get_script_replication(parent)
+			if sr:
+				x += sr.method_config.size() + sr.property_config.size() + sr.signal_config.size()
+			parent = parent.get_base_script()
+			if not parent:
+				break
+		replication_editor_button.text = "Replication (%s)" % x

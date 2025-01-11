@@ -119,6 +119,7 @@ text = "Replicate Property"
 [node name="SignalContainer" type="VBoxContainer" parent="VBoxContainer/HBoxContainer2"]
 layout_mode = 2
 size_flags_horizontal = 3
+size_flags_stretch_ratio = 0.8
 
 [node name="Panel" type="Panel" parent="VBoxContainer/HBoxContainer2/SignalContainer"]
 layout_mode = 2

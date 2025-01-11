@@ -29,6 +29,10 @@ func _ready() -> void:
 	_set_script(script_editor.get_current_script())
 	script_editor.editor_script_changed.connect(_set_script)
 	visibility_changed.connect(_visibility_changed)
+	
+	method_v_box_container.child_order_changed.connect(_config_update)
+	property_v_box_container.child_order_changed.connect(_config_update)
+	signal_v_box_container.child_order_changed.connect(_config_update)
 
 var _stored_script_length := 0
 var _stored_script_hash := 0
@@ -74,6 +78,11 @@ func _set_script(script: Script):
 	
 	if script and not invalid_uid:
 		ReplicationData.validate_script_replication(script)
+	
+	plugin.update_editor_button_text()
+
+func _config_update():
+	plugin.update_editor_button_text()
 
 func _update_script_label(script: Script):
 	if not script:

@@ -57,7 +57,7 @@ var zones := {}
 func add_zone(node: Node) -> Zone:
 	assert(mp.is_server())
 	assert(node.scene_file_path, "Added zones must be from a PackedScene")
-	assert(ReplicationCacheManager.get_index(node.scene_file_path) != -1, "Zone must have scene replication enabled")
+	#assert(ReplicationCacheManager.get_index(node.scene_file_path) != -1, "Zone must have scene replication enabled")
 	var zone := ZONE.instantiate()
 	zone.setup(sync_service)
 	zone.scene = node

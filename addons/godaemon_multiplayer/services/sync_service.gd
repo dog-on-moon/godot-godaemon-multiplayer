@@ -2,8 +2,6 @@ extends ServiceBase
 class_name SyncService
 ## Watches and syncs property changes within replicated scenes.
 
-const REPCO = preload("res://addons/godaemon_multiplayer/replication/old/constants.gd")
-
 ## The ticks-per-second for updating interpolation fields.
 const INTERPOLATE_TPS := 20.0
 const INTERPOLATE_MSPT := (1.0 / INTERPOLATE_TPS) * 1000.0
@@ -43,20 +41,20 @@ func get_scene_replication_data(scene: Node) -> Array:
 		return _scene_replication_data_cache[scene]
 		
 	var replication_data := []
-	var replication_dict: Dictionary = scene.get_meta(REPCO.META_SYNC_PROPERTIES, {})
-	for property_path: NodePath in replication_dict:
-		# Skip property if not syncable.
-		if replication_dict[property_path][2] == REPCO.SyncMode.ON_GENERATE:
-			continue
-		
-		# Find the node.
-		var node_path := NodePath(property_path.get_concatenated_names())
-		var node := scene.get_node(node_path) if node_path else scene
-		assert(node, "SyncService tracking scene %s could not find node of path: %s" % [scene, node_path])
-		
-		# Add to replication data.
-		var prop_path := NodePath(property_path.get_concatenated_subnames())
-		replication_data.append([node, prop_path, replication_dict[property_path]])
+	#var replication_dict: Dictionary = scene.get_meta(REPCO.META_SYNC_PROPERTIES, {})
+	#for property_path: NodePath in replication_dict:
+		## Skip property if not syncable.
+		#if replication_dict[property_path][2] == REPCO.SyncMode.ON_GENERATE:
+			#continue
+		#
+		## Find the node.
+		#var node_path := NodePath(property_path.get_concatenated_names())
+		#var node := scene.get_node(node_path) if node_path else scene
+		#assert(node, "SyncService tracking scene %s could not find node of path: %s" % [scene, node_path])
+		#
+		## Add to replication data.
+		#var prop_path := NodePath(property_path.get_concatenated_subnames())
+		#replication_data.append([node, prop_path, replication_dict[property_path]])
 	
 	# Return cached value.
 	_scene_replication_data_cache[scene] = replication_data
@@ -90,8 +88,8 @@ func mark_dirty(node: Node):
 
 #region Sender Processing
 
-const HARVEST_SYNCS: Array[REPCO.SyncMode] = [REPCO.SyncMode.ON_CHANGE, REPCO.SyncMode.INTERPOLATE_ON_CHANGE]
-const HARVEST_RELIABLES: Array[bool] = [true, false]
+#const HARVEST_SYNCS: Array[REPCO.SyncMode] = [REPCO.SyncMode.ON_CHANGE, REPCO.SyncMode.INTERPOLATE_ON_CHANGE]
+#const HARVEST_RELIABLES: Array[bool] = [true, false]
 
 var _rpc_scene: Node  # used for ZoneService filtering
 
@@ -125,22 +123,22 @@ func _update_sync(scene: Node, is_interpolate_frame: bool):
 	# Harvest each sync and reliable mode.
 	var changed := false
 	_rpc_scene = scene
-	var target_peers := [1] if mp.is_client() else replication_service.get_observing_peers(scene)
-	for sync in HARVEST_SYNCS:
-		if sync == REPCO.SyncMode.INTERPOLATE_ON_CHANGE and not is_interpolate_frame:
-			continue
-		for reliable in HARVEST_RELIABLES:
-			for to_peer in target_peers:
-				var values := get_replication_data_values(scene, sync, to_peer, reliable)
-				if not values:
-					continue
-				changed = true
-				var data := _compress_values(node_id, sync, reliable, values)
-				if not data:
-					continue
-				
-				var rpc := _get_receive_rpc(reliable)
-				rpc.rpc_id(to_peer, data)
+	#var target_peers := [1] if mp.is_client() else replication_service.get_observing_peers(scene)
+	#for sync in HARVEST_SYNCS:
+		#if sync == REPCO.SyncMode.INTERPOLATE_ON_CHANGE and not is_interpolate_frame:
+			#continue
+		#for reliable in HARVEST_RELIABLES:
+			#for to_peer in target_peers:
+				#var values := get_replication_data_values(scene, sync, to_peer, reliable)
+				#if not values:
+					#continue
+				#changed = true
+				#var data := _compress_values(node_id, sync, reliable, values)
+				#if not data:
+					#continue
+				#
+				#var rpc := _get_receive_rpc(reliable)
+				#rpc.rpc_id(to_peer, data)
 	
 	if changed:
 		update_value_cache(scene)
@@ -151,15 +149,16 @@ var _replication_data_value_cache := {}
 
 func _get_replication_data_value_cache(scene: Node) -> Array:
 	var value_cache: Array = _replication_data_value_cache.get_or_add(scene, [])
-	var size: int = scene.get_meta(REPCO.META_SYNC_PROPERTIES, {}).size()
-	if value_cache.size() != size:
-		value_cache.resize(size)
-		value_cache.fill(null)
+	#var size: int = scene.get_meta(REPCO.META_SYNC_PROPERTIES, {}).size()
+	#if value_cache.size() != size:
+		#value_cache.resize(size)
+		#value_cache.fill(null)
 	return value_cache
 
 ## Given a whole bunch of area, harvest the current property values for replication.
 ## If a value should not be replicated, its index will be null.
-func get_replication_data_values(scene: Node, sync: REPCO.SyncMode, to_peer: int, reliable: bool) -> Dictionary:
+#func get_replication_data_values(scene: Node, sync: REPCO.SyncMode, to_peer: int, reliable: bool) -> Dictionary:
+func get_replication_data_values(scene: Node, sync: int, to_peer: int, reliable: bool) -> Dictionary:
 	var replication_data := get_scene_replication_data(scene)
 	var values := {}
 	if not replication_data:
@@ -180,17 +179,17 @@ func get_replication_data_values(scene: Node, sync: REPCO.SyncMode, to_peer: int
 			continue
 		
 		# If we're on client/server, avoid sending certain values.
-		var filter: REPCO.PeerFilter = replication_fields[0] if mp.is_client() else replication_fields[1]
-		var node_owner := Godaemon.get_node_owner(node)
-		match filter:
-			REPCO.PeerFilter.SERVER:
-				continue
-			REPCO.PeerFilter.OWNER_SERVER:
-				if node_owner != test_peer:
-					continue
-			REPCO.PeerFilter.NOT_OWNER, REPCO.PeerFilter.OWNER_ONCE:
-				if node_owner == test_peer:
-					continue
+		#var filter: REPCO.PeerFilter = replication_fields[0] if mp.is_client() else replication_fields[1]
+		#var node_owner := Godaemon.get_node_owner(node)
+		#match filter:
+			#REPCO.PeerFilter.SERVER:
+				#continue
+			#REPCO.PeerFilter.OWNER_SERVER:
+				#if node_owner != test_peer:
+					#continue
+			#REPCO.PeerFilter.NOT_OWNER, REPCO.PeerFilter.OWNER_ONCE:
+				#if node_owner == test_peer:
+					#continue
 		
 		# If there's property interpolation active on this value,
 		# we definitely don't want to re-write it on accident.
@@ -288,7 +287,8 @@ func _receive_properties(data: PackedByteArray):
 	if not scene:
 		push_warning("SyncService._receive_properties does not know node ID %s" % properties[0])
 		return
-	var sync: REPCO.SyncMode = properties[1]
+	#var sync: REPCO.SyncMode = properties[1]
+	var sync: int = properties[1]
 	var reliable: bool = properties[2]
 	var values: Dictionary = properties[3]
 	
@@ -309,19 +309,19 @@ func _receive_properties(data: PackedByteArray):
 			continue
 		
 		# If we're reading from the server, skip client-blocked values.
-		if mp.is_server():
-			var filter: REPCO.PeerFilter = replication_fields[0]
-			match filter:
-				REPCO.PeerFilter.SERVER:
-					continue
-				REPCO.PeerFilter.OWNER_SERVER:
-					var node_owner := Godaemon.get_node_owner(node)
-					if node_owner != mp.remote_peer:
-						continue
-				REPCO.PeerFilter.NOT_OWNER, REPCO.PeerFilter.OWNER_ONCE:
-					var node_owner := Godaemon.get_node_owner(node)
-					if node_owner == mp.remote_peer:
-						continue
+		#if mp.is_server():
+			#var filter: REPCO.PeerFilter = replication_fields[0]
+			#match filter:
+				#REPCO.PeerFilter.SERVER:
+					#continue
+				#REPCO.PeerFilter.OWNER_SERVER:
+					#var node_owner := Godaemon.get_node_owner(node)
+					#if node_owner != mp.remote_peer:
+						#continue
+				#REPCO.PeerFilter.NOT_OWNER, REPCO.PeerFilter.OWNER_ONCE:
+					#var node_owner := Godaemon.get_node_owner(node)
+					#if node_owner == mp.remote_peer:
+						#continue
 		
 		var value: Variant = values[idx]
 		updated_values[idx] = value
@@ -329,10 +329,10 @@ func _receive_properties(data: PackedByteArray):
 		# Get and set property value.
 		var property_path: NodePath = replication_data[idx][1]
 		var true_value: Variant = _decompress_property_change(values[idx], node, property_path)
-		if sync == REPCO.SyncMode.ON_CHANGE:
-			node.set_indexed(property_path, true_value)
-		elif sync == REPCO.SyncMode.INTERPOLATE_ON_CHANGE:
-			_start_property_interpolation(node, property_path, true_value)
+		#if sync == REPCO.SyncMode.ON_CHANGE:
+			#node.set_indexed(property_path, true_value)
+		#elif sync == REPCO.SyncMode.INTERPOLATE_ON_CHANGE:
+			#_start_property_interpolation(node, property_path, true_value)
 		_set_value_cache(value_cache, idx, value)
 	
 	# If we're the server, forward the updated properties to other peers.
@@ -350,7 +350,8 @@ func _receive_properties(data: PackedByteArray):
 
 #region Compression
 
-func _compress_values(node_id: int, sync: REPCO.SyncMode, reliable: bool, values: Dictionary) -> PackedByteArray:
+#func _compress_values(node_id: int, sync: REPCO.SyncMode, reliable: bool, values: Dictionary) -> PackedByteArray:
+func _compress_values(node_id: int, sync: int, reliable: bool, values: Dictionary) -> PackedByteArray:
 	var stream := PackedByteStream.new()
 	stream.setup_write(mp.api.repository.MAX_BYTES + 3)
 	stream.write_unsigned(node_id, mp.api.repository.MAX_BYTES)

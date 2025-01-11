@@ -9,8 +9,6 @@ signal node_owner_updated(node: Node)
 signal enter_replicated_scene(scene: Node)
 signal exit_replicated_scene(scene: Node)
 
-const REPCO = preload("res://addons/godaemon_multiplayer/replication/old/constants.gd")
-
 ## A dictionary map of replicated scenes to their peer visibility states.
 var replicated_scenes := {}
 
@@ -84,7 +82,7 @@ func _replicated_scene_search(node: Node):
 			mp.api.repository.add_object(node)
 		
 		# Does this node have replicated properties?
-		const key := REPCO.META_REPLICATE_SCENE
+		const key := &"1"  # REPCO.META_REPLICATE_SCENE
 		if node.has_meta(key) and node not in replicated_scenes:
 			# Register the node, and set its default global replication.
 			# Node.owner will only be set at this point if the replicated scene
@@ -208,8 +206,8 @@ var _client_scene_remaps: Dictionary[PackedScene, PackedScene] = {}
 ## another one, who is presumably nearly identical.
 func remap_scene(from_scene: PackedScene, into_scene: PackedScene):
 	assert(mp.is_client())
-	assert(ReplicationCacheManager.get_index(from_scene.resource_path) != -1)
-	assert(ReplicationCacheManager.get_index(into_scene.resource_path) != -1)
+	#assert(ReplicationCacheManager.get_index(from_scene.resource_path) != -1)
+	#assert(ReplicationCacheManager.get_index(into_scene.resource_path) != -1)
 	_client_scene_remaps[from_scene] = into_scene
 
 #endregion
@@ -255,7 +253,7 @@ func clear_peer_visibility(node: Node, peer: int):
 ## This is a special peer ID that is replicated across clients.
 func set_node_owner(node: Node, peer: int = 1):
 	assert(mp.is_server())
-	node.set_meta(REPCO.META_OWNER, peer)
+	#node.set_meta(REPCO.META_OWNER, peer)
 	
 	# Tell each observing peer who the new owner is.
 	if node.is_node_ready():
@@ -278,7 +276,7 @@ func _set_node_owner(bytes: PackedByteArray):
 	if not node_id:
 		push_warning("ReplicationService._set_node_owner could not find node ID %s" % node_id)
 		return
-	node.set_meta(REPCO.META_OWNER, peer)
+	#node.set_meta(REPCO.META_OWNER, peer)
 	node_owner_updated.emit(node)
 
 #endregion
@@ -376,23 +374,23 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 		var property_values := []
 		var node_owner := Godaemon.get_node_owner(node)
 		
-		var replication_data: Dictionary = node.get_meta(REPCO.META_SYNC_PROPERTIES, {})
-		for property_path: NodePath in replication_data:
-			var property_data: Array = replication_data[property_path]
-			match property_data[1]:  # match receive filter
-				REPCO.PeerFilter.SERVER:
-					continue
-				REPCO.PeerFilter.OWNER_SERVER:
-					if peer != node_owner:
-						continue
-				REPCO.PeerFilter.NOT_OWNER:
-					if peer == node_owner:
-						continue
-			var node_path := NodePath(property_path.get_concatenated_names())
-			var prop_path := NodePath(property_path.get_concatenated_subnames())
-			var target_node := node.get_node(node_path) if node_path else node
-			var value := target_node.get_indexed(prop_path)
-			property_values.append(value)
+		#var replication_data: Dictionary = node.get_meta(REPCO.META_SYNC_PROPERTIES, {})
+		#for property_path: NodePath in replication_data:
+			#var property_data: Array = replication_data[property_path]
+			#match property_data[1]:  # match receive filter
+				#REPCO.PeerFilter.SERVER:
+					#continue
+				#REPCO.PeerFilter.OWNER_SERVER:
+					#if peer != node_owner:
+						#continue
+				#REPCO.PeerFilter.NOT_OWNER:
+					#if peer == node_owner:
+						#continue
+			#var node_path := NodePath(property_path.get_concatenated_names())
+			#var prop_path := NodePath(property_path.get_concatenated_subnames())
+			#var target_node := node.get_node(node_path) if node_path else node
+			#var value := target_node.get_indexed(prop_path)
+			#property_values.append(value)
 		
 		var packed_scene: PackedScene = load(node.scene_file_path)
 		var scene_state := packed_scene.get_state()
@@ -480,7 +478,7 @@ func update_visibility(data: PackedByteArray):
 		
 		var scene_state := packed_scene.get_state()
 		var scene: Node = packed_scene.instantiate()
-		scene.set_meta(REPCO.META_OWNER, node_owner)
+		#scene.set_meta(REPCO.META_OWNER, node_owner)
 		
 		# Load owners/IDs first.
 		for node_idx in scene_state.get_node_count():
@@ -489,49 +487,49 @@ func update_visibility(data: PackedByteArray):
 				break
 			var node_path := scene_state.get_node_path(node_idx)
 			var subnode := scene.get_node_or_null(node_path)
-			if subnode:
-				if subnode != scene and subnode.has_meta(REPCO.META_REPLICATE_SCENE):
-					# Delete sub-replicated scenes of the initial scene,
-					# replication for them will happen separately.
-					subnode.queue_free()
-					subnode.get_parent().remove_child(subnode)
-				else:
-					var node_id: int = node_ids[node_idx]
-					if node_id == 0:
-						subnode.queue_free()
-						subnode.get_parent().remove_child(subnode)
-					else:
-						mp.api.repository.add_object(subnode, node_id)
-			else:
-				push_warning("Could not find subnode %s on received scene %s. Weird" % [node_path, packed_scene.resource_path])
-				continue
+			#if subnode:
+				#if subnode != scene and subnode.has_meta(REPCO.META_REPLICATE_SCENE):
+					## Delete sub-replicated scenes of the initial scene,
+					## replication for them will happen separately.
+					#subnode.queue_free()
+					#subnode.get_parent().remove_child(subnode)
+				#else:
+					#var node_id: int = node_ids[node_idx]
+					#if node_id == 0:
+						#subnode.queue_free()
+						#subnode.get_parent().remove_child(subnode)
+					#else:
+						#mp.api.repository.add_object(subnode, node_id)
+			#else:
+				#push_warning("Could not find subnode %s on received scene %s. Weird" % [node_path, packed_scene.resource_path])
+				#continue
 		
 		# Now load properties.
-		var scene_owner := scene.get_meta(REPCO.META_OWNER, 1)
-		var replication_data: Dictionary = scene.get_meta(REPCO.META_SYNC_PROPERTIES, {})
-		var replication_data_keys := replication_data.keys()
-		var true_idx := -1
-		for idx: int in replication_data_keys.size():
-			var property_path: NodePath = replication_data_keys[idx]
-			var property_data: Array = replication_data[property_path]
-			match property_data[1]:  # match receive filter
-				REPCO.PeerFilter.SERVER:
-					continue
-				REPCO.PeerFilter.OWNER_SERVER:
-					if mp.local_peer != scene_owner:
-						continue
-				REPCO.PeerFilter.NOT_OWNER:
-					if mp.local_peer == scene_owner:
-						continue
-			true_idx += 1
-			
-			var prop_node_path := NodePath(property_path.get_concatenated_names())
-			var prop_path := NodePath(property_path.get_concatenated_subnames())
-			
-			var prop_node := scene.get_node_or_null(prop_node_path) if prop_node_path else scene
-			if prop_node:
-				var value: Variant = property_values[true_idx]
-				prop_node.set_indexed(prop_path, value)
+		#var scene_owner := scene.get_meta(REPCO.META_OWNER, 1)
+		#var replication_data: Dictionary = scene.get_meta(REPCO.META_SYNC_PROPERTIES, {})
+		#var replication_data_keys := replication_data.keys()
+		#var true_idx := -1
+		#for idx: int in replication_data_keys.size():
+			#var property_path: NodePath = replication_data_keys[idx]
+			#var property_data: Array = replication_data[property_path]
+			#match property_data[1]:  # match receive filter
+				#REPCO.PeerFilter.SERVER:
+					#continue
+				#REPCO.PeerFilter.OWNER_SERVER:
+					#if mp.local_peer != scene_owner:
+						#continue
+				#REPCO.PeerFilter.NOT_OWNER:
+					#if mp.local_peer == scene_owner:
+						#continue
+			#true_idx += 1
+			#
+			#var prop_node_path := NodePath(property_path.get_concatenated_names())
+			#var prop_path := NodePath(property_path.get_concatenated_subnames())
+			#
+			#var prop_node := scene.get_node_or_null(prop_node_path) if prop_node_path else scene
+			#if prop_node:
+				#var value: Variant = property_values[true_idx]
+				#prop_node.set_indexed(prop_path, value)
 		
 		# Finally, add scene.
 		if deferred:

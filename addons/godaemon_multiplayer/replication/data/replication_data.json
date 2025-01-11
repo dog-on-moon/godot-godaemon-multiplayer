@@ -53,7 +53,7 @@
 				"flags": 0,
 				"name": "_cl_receive_reliable_properties",
 				"ratelimit": 0.0,
-				"recv_filter": 6,
+				"recv_filter": 7,
 				"reliable": true,
 				"send_filter": 1
 			},
@@ -61,42 +61,28 @@
 				"flags": 0,
 				"name": "_cl_receive_unreliable_properties",
 				"ratelimit": 0.0,
-				"recv_filter": 6,
-				"reliable": false,
+				"recv_filter": 7,
+				"reliable": true,
 				"send_filter": 1
 			},
 			{
 				"flags": 0,
 				"name": "_sv_receive_reliable_properties",
 				"ratelimit": 0.0,
-				"recv_filter": 1,
+				"recv_filter": 7,
 				"reliable": true,
-				"send_filter": 6
+				"send_filter": 1
 			},
 			{
 				"flags": 0,
 				"name": "_sv_receive_unreliable_properties",
 				"ratelimit": 0.0,
-				"recv_filter": 1,
-				"reliable": false,
-				"send_filter": 6
+				"recv_filter": 7,
+				"reliable": true,
+				"send_filter": 1
 			}
 		],
 		"properties": [],
-		"signals": []
-	},
-	"5848342373569808564": {
-		"methods": [],
-		"properties": [
-			{
-				"flags": 0,
-				"name": "modulate",
-				"recv_filter": 7,
-				"reliable": true,
-				"send_filter": 1,
-				"sync": 0
-			}
-		],
 		"signals": []
 	},
 	"6442654088861148762": {
@@ -107,7 +93,7 @@
 				"flags": 0,
 				"name": "_set_node_owner",
 				"ratelimit": 0.0,
-				"recv_filter": 6,
+				"recv_filter": 7,
 				"reliable": true,
 				"send_filter": 1
 			},
@@ -115,7 +101,7 @@
 				"flags": 0,
 				"name": "update_visibility",
 				"ratelimit": 0.0,
-				"recv_filter": 6,
+				"recv_filter": 7,
 				"reliable": true,
 				"send_filter": 1
 			}
@@ -156,6 +142,7 @@
 		"signals": []
 	},
 	"8269759586463036538": {
+		"_name": "res://demos/visitation/zones/icon.gd",
 		"methods": [],
 		"properties": [
 			{
