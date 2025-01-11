@@ -6,6 +6,8 @@ const Repository = preload("res://addons/godaemon_multiplayer/api/repository.gd"
 const RpcInterface = preload("res://addons/godaemon_multiplayer/api/rpc.gd")
 const Util = preload("res://addons/godaemon_multiplayer/util/util.gd")
 
+const META_OWNER := &"_o"
+
 ## The MultiplayerRoot provides access to the connection state of its encapsulated multiplayer tree.
 ## It also creates all the service nodes within itself.
 static func mp(node: Node, required := true) -> MultiplayerRoot:
@@ -90,3 +92,20 @@ static func zone_scene(node: Node, required := true) -> Node:
 	if mp(node).is_client():
 		return client_zone(node).scene
 	return zone(node).scene
+
+## Returns the owner of a node.
+static func get_node_owner(node: Node) -> int:
+	while node is not MultiplayerRoot and not node.has_meta(META_OWNER):
+		node = node.get_parent()
+	return node.get_meta(META_OWNER, 1)
+
+## Checks if we locally own a node.
+static func is_local_owner(node: Node, required := true) -> bool:
+	var _mp := mp(node, required)
+	if not _mp:
+		return false
+	return get_node_owner(node) == _mp.local_peer
+
+## Returns whether or not a given node is replicated.
+func is_replicated(node: Node) -> bool:
+	return repository(node).is_replicated(node)

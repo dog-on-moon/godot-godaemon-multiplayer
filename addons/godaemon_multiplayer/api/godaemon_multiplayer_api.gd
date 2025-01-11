@@ -116,12 +116,4 @@ func is_client() -> bool:
 func is_server() -> bool:
 	return get_unique_id() == 1
 
-## Gets the owner ID of this node.
-func get_node_owner(node: Node) -> int:
-	return mp.get_node_owner(node) if mp else 1
-
-## Returns true if the local peer owns this node.
-func is_local_owner(node: Node) -> bool:
-	return get_node_owner(node) == get_unique_id()
-
 #endregion

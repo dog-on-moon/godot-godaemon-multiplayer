@@ -1,0 +1,147 @@
+[gd_scene load_steps=6 format=3 uid="uid://cy8pwv5b1wil8"]
+
+[ext_resource type="Script" uid="uid://cffaxicuibu6c" path="res://addons/godaemon_multiplayer/replication/replication_editor.gd" id="1_axgcc"]
+[ext_resource type="Script" uid="uid://dk6o36fihjsuh" path="res://addons/godaemon_multiplayer/replication/editor/method_vbox_container.gd" id="2_5pnhf"]
+[ext_resource type="Script" uid="uid://c2ot1tgbdo770" path="res://addons/godaemon_multiplayer/replication/editor/property_vbox_container.gd" id="3_5pnhf"]
+[ext_resource type="Script" uid="uid://hjxorbenfee3" path="res://addons/godaemon_multiplayer/replication/editor/signal_vbox_container.gd" id="4_5pnhf"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_sbus2"]
+
+[node name="ReplicationEditor" type="Control"]
+custom_minimum_size = Vector2(0, 128)
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_axgcc")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="Control" type="Control" parent="VBoxContainer/HBoxContainer"]
+custom_minimum_size = Vector2(6, 0)
+layout_mode = 2
+
+[node name="ScriptIcon" type="TextureRect" parent="VBoxContainer/HBoxContainer"]
+unique_name_in_owner = true
+modulate = Color(0.278431, 0.54902, 0.74902, 1)
+layout_mode = 2
+stretch_mode = 3
+
+[node name="ScriptName" type="RichTextLabel" parent="VBoxContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/normal = SubResource("StyleBoxEmpty_sbus2")
+bbcode_enabled = true
+text = " [rainbow freq=0.2 sat=0.6][b][wave]Moondog[/wave][/b][/rainbow] (moondog.gd)"
+vertical_alignment = 1
+
+[node name="ReloadButton" type="Button" parent="VBoxContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Reload"
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="MethodContainer" type="VBoxContainer" parent="VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Panel" type="Panel" parent="VBoxContainer/HBoxContainer2/MethodContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="ScrollContainer" type="ScrollContainer" parent="VBoxContainer/HBoxContainer2/MethodContainer/Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 6.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="MethodVBoxContainer" type="VBoxContainer" parent="VBoxContainer/HBoxContainer2/MethodContainer/Panel/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 0
+script = ExtResource("2_5pnhf")
+
+[node name="PropertyContainer" type="VBoxContainer" parent="VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Panel" type="Panel" parent="VBoxContainer/HBoxContainer2/PropertyContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="ScrollContainer" type="ScrollContainer" parent="VBoxContainer/HBoxContainer2/PropertyContainer/Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_vertical = 3
+
+[node name="PropertyVBoxContainer" type="VBoxContainer" parent="VBoxContainer/HBoxContainer2/PropertyContainer/Panel/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("3_5pnhf")
+
+[node name="NewProperty" type="Button" parent="VBoxContainer/HBoxContainer2/PropertyContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Replicate Property"
+
+[node name="SignalContainer" type="VBoxContainer" parent="VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Panel" type="Panel" parent="VBoxContainer/HBoxContainer2/SignalContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="ScrollContainer" type="ScrollContainer" parent="VBoxContainer/HBoxContainer2/SignalContainer/Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_vertical = 3
+
+[node name="SignalVBoxContainer" type="VBoxContainer" parent="VBoxContainer/HBoxContainer2/SignalContainer/Panel/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("4_5pnhf")
+
+[node name="NewSignal" type="Button" parent="VBoxContainer/HBoxContainer2/SignalContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Replicate Signal"

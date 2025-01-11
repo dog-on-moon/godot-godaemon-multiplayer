@@ -4,7 +4,7 @@ extends Node
 class_name MultiplayerRoot
 ## Base class for ClientRoot and ServerRoot.
 
-const REPCO = preload("res://addons/godaemon_multiplayer/replication/constants.gd")
+const REPCO = preload("res://addons/godaemon_multiplayer/replication/old/constants.gd")
 const MAX_ENET_CHANNELS := 253
 
 #region Exports
@@ -275,14 +275,6 @@ func is_server() -> bool:
 ## Returns the total channel count allocated for the MultiplayerRoot.
 func get_total_channel_count() -> int:
 	return 1 + configuration.channel_count + service_channel_count
-
-## Gets the owner ID of this node.
-func get_node_owner(node: Node) -> int:
-	return REPCO.get_node_owner(node)
-
-## Returns true if the local peer owns this node.
-func is_local_owner(node: Node) -> bool:
-	return get_node_owner(node) == local_peer
 
 #endregion
 

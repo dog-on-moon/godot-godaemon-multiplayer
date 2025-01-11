@@ -20,14 +20,14 @@ var right := false
 var jump := false
 
 func _ready() -> void:
-	if Godaemon.mp(self).is_local_owner(self):
+	if Godaemon.is_local_owner(self):
 		camera_2d.enabled = true
 		camera_2d.make_current()
 	else:
 		set_physics_process(false)
 		set_process_unhandled_input(false)
 	
-	username_label.text = str(Godaemon.mp(self).get_node_owner(self))
+	username_label.text = str(Godaemon.get_node_owner(self))
 
 func _physics_process(delta: float) -> void:
 	# Add the gravity.

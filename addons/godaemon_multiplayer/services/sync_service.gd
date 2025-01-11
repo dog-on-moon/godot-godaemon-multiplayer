@@ -2,7 +2,7 @@ extends ServiceBase
 class_name SyncService
 ## Watches and syncs property changes within replicated scenes.
 
-const REPCO = preload("res://addons/godaemon_multiplayer/replication/constants.gd")
+const REPCO = preload("res://addons/godaemon_multiplayer/replication/old/constants.gd")
 
 ## The ticks-per-second for updating interpolation fields.
 const INTERPOLATE_TPS := 20.0
@@ -185,7 +185,7 @@ func get_replication_data_values(scene: Node, sync: REPCO.SyncMode, to_peer: int
 		
 		# If we're on client/server, avoid sending certain values.
 		var filter: REPCO.PeerFilter = replication_fields[0] if mp.is_client() else replication_fields[1]
-		var node_owner := REPCO.get_node_owner(node)
+		var node_owner := Godaemon.get_node_owner(node)
 		match filter:
 			REPCO.PeerFilter.SERVER:
 				continue
@@ -319,11 +319,11 @@ func _receive_properties(data: PackedByteArray):
 				REPCO.PeerFilter.SERVER:
 					continue
 				REPCO.PeerFilter.OWNER_SERVER:
-					var node_owner := REPCO.get_node_owner(node)
+					var node_owner := Godaemon.get_node_owner(node)
 					if node_owner != mp.remote_peer:
 						continue
 				REPCO.PeerFilter.NOT_OWNER, REPCO.PeerFilter.OWNER_ONCE:
-					var node_owner := REPCO.get_node_owner(node)
+					var node_owner := Godaemon.get_node_owner(node)
 					if node_owner == mp.remote_peer:
 						continue
 		

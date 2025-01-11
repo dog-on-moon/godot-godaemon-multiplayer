@@ -9,7 +9,7 @@ signal node_owner_updated(node: Node)
 signal enter_replicated_scene(scene: Node)
 signal exit_replicated_scene(scene: Node)
 
-const REPCO = preload("res://addons/godaemon_multiplayer/replication/constants.gd")
+const REPCO = preload("res://addons/godaemon_multiplayer/replication/old/constants.gd")
 
 ## A dictionary map of replicated scenes to their peer visibility states.
 var replicated_scenes := {}
@@ -268,10 +268,6 @@ func set_node_owner(node: Node, peer: int = 1):
 			_set_node_owner.rpc_id(observer, stream.data)
 		node_owner_updated.emit(node)
 
-## Gets the owner of a node.
-func get_node_owner(node: Node) -> int:
-	return REPCO.get_node_owner(node)
-
 @rpc
 func _set_node_owner(bytes: PackedByteArray):
 	var stream := PackedByteStream.new()
@@ -372,13 +368,13 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 		if parent_id == -1:
 			push_warning("Could not replicate node %s to peer (parent missing repository ID).\nEnsure the parent is in a replicated scene." % node)
 			continue
-		var scene_idx := ReplicationCacheManager.get_index(node.scene_file_path)
-		if scene_idx == -1:
-			push_warning("Could not replicate node %s to peer (scene '%s' is not replicatable)" % [scene_idx, node.scene_file_path])
+		var scene_uid := ReplicationData.path_to_uid(node.scene_file_path)
+		if scene_uid == -1:
+			push_warning("Could not replicate node to peer (scene '%s' missing UID)" % [node.scene_file_path])
 			continue
 		
 		var property_values := []
-		var node_owner := REPCO.get_node_owner(node)
+		var node_owner := Godaemon.get_node_owner(node)
 		
 		var replication_data: Dictionary = node.get_meta(REPCO.META_SYNC_PROPERTIES, {})
 		for property_path: NodePath in replication_data:
@@ -416,7 +412,7 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 		var add_data := [
 			parent_id,
 			node_owner,
-			scene_idx,
+			scene_uid,
 			property_values,
 			node_ids,
 			deferred,
@@ -461,13 +457,13 @@ func update_visibility(data: PackedByteArray):
 	for add_data in added_node_data:
 		var parent_id: int = add_data[0]
 		var node_owner: int = add_data[1]
-		var scene_idx: int = add_data[2]
+		var scene_uid: int = add_data[2]
 		var property_values: Array = add_data[3]
 		var node_ids: Array = add_data[4]
 		var deferred: bool = add_data[5]
 		
 		# Create scene.
-		var sfp := ReplicationCacheManager.get_scene_file_path(scene_idx)
+		var sfp := ReplicationData.uid_to_path(scene_uid)
 		if not sfp:
 			push_warning("Received invalid scene path in visibility update.")
 			continue
@@ -554,7 +550,6 @@ func update_visibility(data: PackedByteArray):
 		parent.add_child(scene)
 
 func _compress_visibility_data(added_node_data: Array, removed_node_data: Array) -> PackedByteArray:
-	const MAX_SCENE_BYTES := ReplicationCacheManager.cache_storage.MAX_BYTES
 	const MAX_NODE_ID_BYTES := mp.api.repository.MAX_BYTES
 	const MAX_NODE_OWNER_BYTES := 4
 	
@@ -571,12 +566,11 @@ func _compress_visibility_data(added_node_data: Array, removed_node_data: Array)
 	for added_data in added_node_data:
 		var parent_idx: int = added_data[0]
 		var node_owner: int = added_data[1]
-		var scene_idx: int = added_data[2]
+		var scene_uid: int = added_data[2]
 		var node_properties: Array = added_data[3]
 		var node_ids: Array = added_data[4]
 		var deferred: bool = added_data[5]
 		
-		assert(scene_idx < (2 ** (MAX_SCENE_BYTES * 8)))
 		assert(node_ids.size() < (2 ** (MAX_NODE_ID_BYTES * 8)))
 		
 		var property_variant := var_to_bytes(node_properties) if not mp.configuration.allow_object_decoding else var_to_bytes_with_objects(node_properties)
@@ -584,7 +578,7 @@ func _compress_visibility_data(added_node_data: Array, removed_node_data: Array)
 		stream.allocate(
 			MAX_NODE_ID_BYTES
 			+ MAX_NODE_OWNER_BYTES
-			+ MAX_SCENE_BYTES
+			+ 8
 			+ property_variant.size()
 			+ MAX_NODE_ID_BYTES
 			+ (MAX_NODE_ID_BYTES * node_ids.size())
@@ -593,7 +587,7 @@ func _compress_visibility_data(added_node_data: Array, removed_node_data: Array)
 		
 		stream.write_unsigned(parent_idx, MAX_NODE_ID_BYTES)
 		stream.write_unsigned(node_owner, MAX_NODE_OWNER_BYTES)
-		stream.write_unsigned(scene_idx, MAX_SCENE_BYTES)
+		stream.write_unsigned(scene_uid, 8)
 		stream.write_bytes(property_variant)
 		stream.write_unsigned(node_ids.size(), MAX_NODE_ID_BYTES)
 		for node_id in node_ids:
@@ -612,7 +606,6 @@ func _compress_visibility_data(added_node_data: Array, removed_node_data: Array)
 	return stream.data
 
 func _decompress_visibility_data(data: PackedByteArray) -> Array:
-	const MAX_SCENE_BYTES := ReplicationCacheManager.cache_storage.MAX_BYTES
 	const MAX_NODE_ID_BYTES := mp.api.repository.MAX_BYTES
 	const MAX_NODE_OWNER_BYTES := 4
 	
@@ -628,7 +621,7 @@ func _decompress_visibility_data(data: PackedByteArray) -> Array:
 	for added_data_idx in added_node_count:
 		var parent_idx := stream.read_unsigned(MAX_NODE_ID_BYTES)
 		var node_owner := stream.read_unsigned(MAX_NODE_OWNER_BYTES)
-		var scene_idx := stream.read_unsigned(MAX_SCENE_BYTES)
+		var scene_uid := stream.read_unsigned(8)
 		var node_properties := stream.read_variant(mp.configuration.allow_object_decoding)
 		
 		var node_id_count := stream.read_unsigned(MAX_NODE_ID_BYTES)
@@ -638,7 +631,7 @@ func _decompress_visibility_data(data: PackedByteArray) -> Array:
 		
 		var deferred := bool(stream.read_unsigned(1))
 		
-		added_node_data.append([parent_idx, node_owner, scene_idx, node_properties, node_ids, deferred])
+		added_node_data.append([parent_idx, node_owner, scene_uid, node_properties, node_ids, deferred])
 	
 	# Decode removed node data.
 	var removed_node_data: Array = []

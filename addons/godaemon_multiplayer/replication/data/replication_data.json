@@ -1,0 +1,80 @@
+{
+	"6608134835668395677": {
+		"_name": "res://node_parent.gd",
+		"methods": [
+			{
+				"flags": 0,
+				"name": "french",
+				"ratelimit": 0.0,
+				"recv_filter": 7,
+				"reliable": true,
+				"send_filter": 1
+			},
+			{
+				"flags": 0,
+				"name": "BRAZIL",
+				"ratelimit": 0.0,
+				"recv_filter": 7,
+				"reliable": true,
+				"send_filter": 1
+			}
+		],
+		"properties": [],
+		"signals": [
+			{
+				"flags": 0,
+				"name": "renamed",
+				"recv_filter": 7,
+				"reliable": true,
+				"send_filter": 1
+			}
+		]
+	},
+	"8364924796397357817": {
+		"_name": "res://node.gd",
+		"methods": [
+			{
+				"flags": 0,
+				"name": "Moondoog",
+				"ratelimit": 0.0,
+				"recv_filter": 7,
+				"reliable": true,
+				"send_filter": 1
+			},
+			{
+				"flags": 0,
+				"name": "test",
+				"ratelimit": 0.0,
+				"recv_filter": 7,
+				"reliable": true,
+				"send_filter": 1
+			}
+		],
+		"properties": [
+			{
+				"flags": 0,
+				"name": "process_mode",
+				"recv_filter": 7,
+				"reliable": true,
+				"send_filter": 1,
+				"sync": 0
+			}
+		],
+		"signals": [
+			{
+				"flags": 0,
+				"name": "freak",
+				"recv_filter": 7,
+				"reliable": true,
+				"send_filter": 1
+			},
+			{
+				"flags": 0,
+				"name": "friday",
+				"recv_filter": 7,
+				"reliable": true,
+				"send_filter": 1
+			}
+		]
+	}
+}

@@ -2,9 +2,9 @@
 extends Object
 class_name ReplicationCacheManager
 
-const REPCO = preload("res://addons/godaemon_multiplayer/replication/constants.gd")
-const CACHE_PATH: String = "res://addons/godaemon_multiplayer/replication/cache/replication_storage.tres"
-const CACHE_STORAGE := preload("res://addons/godaemon_multiplayer/replication/cache/replication_storage_resource.gd")
+const REPCO = preload("res://addons/godaemon_multiplayer/replication/old/constants.gd")
+const CACHE_PATH: String = "res://addons/godaemon_multiplayer/replication/old/cache/replication_storage.tres"
+const CACHE_STORAGE := preload("res://addons/godaemon_multiplayer/replication/old/cache/replication_storage_resource.gd")
 const PATH_LOADER = preload("res://addons/godaemon_multiplayer/util/path_loader.gd")
 
 static var cache_storage: CACHE_STORAGE = null

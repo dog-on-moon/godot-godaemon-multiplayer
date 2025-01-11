@@ -1,6 +1,6 @@
 [gd_resource type="Resource" load_steps=2 format=3 uid="uid://co8gq6g34tqq0"]
 
-[ext_resource type="Script" uid="uid://rm0ic3slu83b" path="res://addons/godaemon_multiplayer/replication/cache/replication_storage_resource.gd" id="1_fbk7m"]
+[ext_resource type="Script" uid="uid://rm0ic3slu83b" path="res://addons/godaemon_multiplayer/replication/old/cache/replication_storage_resource.gd" id="1_fbk7m"]
 
 [resource]
 script = ExtResource("1_fbk7m")
