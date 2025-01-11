@@ -9,9 +9,6 @@ class_name PeerAuthenticator
 ## respective processes at the start of authentication.
 ## Calling [method send_auth] on the server sends it to [method client_receive_auth] on the client,
 ## and vice-versa for the client (where [method server_receive_auth] is received instead).
-##
-## [b]While this can be used to exchange sensitive information (such as passwords),
-## you must enable and properly configure DTLS encryption to do it securely.[/b]
 
 var api: GodaemonMultiplayerAPI
 var mp: MultiplayerRoot

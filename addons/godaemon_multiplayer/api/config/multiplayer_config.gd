@@ -76,15 +76,6 @@ const DEFAULT_SERVICES := [
 @export_range(0, 1, 1, "or_greater") var version: int = 1
 #endregion
 
-@export_group("Security")
-#region
-## Determines if DTLS encryption is enabled.
-@export var use_dtls_encryption := false:
-	set(x):
-		use_dtls_encryption = x
-		notify_property_list_changed()
-#endregion
-
 @export_group("Peer Timeout")
 #region
 ## A base factor that, multiplied by a value based on the average round trip time,

@@ -18,29 +18,6 @@ const InternalServer = preload("res://addons/godaemon_multiplayer/api/nodes/inte
 ## The port that the server is listening on.
 @export var port := 27027
 
-@export_group("DTLS Encryption")
-## The hostname which the server certificate is validated against.
-@export var dtls_hostname := ""
-
-## A custom trusted_chain of certification authorities
-## (the default CA list will be used if null).
-@export var dtls_trusted_chain: X509Certificate = null
-
-## If you expect the certificate to have a common name other than the server FQDN,
-## you can specify an override here.
-@export var dtls_common_name_override := ""
-
-## Determines if we should create an unsafe DTLS client, bypassing certificate verification.
-## [b]Using this for anything other than testing is not recommended.[/b]
-@export var dtls_unsafe_client := false:
-	set(x):
-		dtls_unsafe_client = x
-		update_configuration_warnings()
-	get:
-		if OS.has_feature('release') and not Engine.is_editor_hint():
-			return false
-		return dtls_unsafe_client
-
 @export_group("Internal Server")
 #region
 
@@ -92,18 +69,6 @@ func start_connection() -> bool:
 	api.scene_multiplayer.auth_timeout = configuration.authentication_timeout
 	get_tree().set_multiplayer(api, get_path())
 	var peer = ENetMultiplayerPeer.new()
-	
-	# Setup DTLS.
-	## NOTE: this is unused for now
-	## https://github.com/godotengine/godot-proposals/issues/10627
-	@warning_ignore("unused_variable")
-	var client_options: TLSOptions = null
-	if configuration.use_dtls_encryption:
-		assert(dtls_hostname)
-		if not dtls_unsafe_client:
-			client_options = TLSOptions.client(dtls_trusted_chain, dtls_common_name_override)
-		else:
-			client_options = TLSOptions.client_unsafe()
 	
 	# Create client connection.
 	if get_total_channel_count() > MAX_ENET_CHANNELS:
@@ -283,15 +248,6 @@ func is_client() -> bool:
 #endregion
 
 func _validate_property(property: Dictionary) -> void:
-	if not configuration or not configuration.use_dtls_encryption:
-		if property.name in [
-			'DTLS Configuration',
-			'dtls_hostname',
-			'dtls_trusted_chain',
-			'dtls_common_name_override',
-			'dtls_unsafe_client',
-				]:
-			property.usage ^= PROPERTY_USAGE_EDITOR
 	if not use_internal_server:
 		if property.name in [
 			'internal_server_scene',
@@ -310,15 +266,6 @@ func _get_configuration_warnings() -> PackedStringArray:
 	var warnings := PackedStringArray()
 	if not configuration:
 		warnings.append("A MultiplayerConfiguration must be defined.")
-	else:
-		if configuration.use_dtls_encryption:
-			warnings.append("DTLS encryption is currently disabled.\nhttps://github.com/godotengine/godot-proposals/issues/10627")
-			if dtls_unsafe_client:
-				warnings.append("dtls_unsafe_client is currently enabled. This is for testing only. It will be disabled in release builds.")
-			if not dtls_hostname:
-				warnings.append("dtls_hostname must be specified for DTLS encryption.")
-			if use_internal_server:
-				warnings.append("DTLS encryption is not supported with internal servers.")
-		if use_internal_server and configuration.resource_path.contains('::'):
+	elif use_internal_server and configuration.resource_path.contains('::'):
 			warnings.append("The MultiplayerConfiguration must be saved as a unique resource for use in an internal server.")
 	return warnings
