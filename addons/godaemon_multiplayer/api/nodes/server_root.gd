@@ -33,7 +33,7 @@ func start_connection() -> bool:
 		return false
 	var error := peer.create_server(
 		port, configuration.max_clients, get_total_channel_count(),
-		configuration.in_bandwidth, configuration.out_bandwidth
+		configuration.server_in_bandwidth, configuration.server_out_bandwidth
 	)
 	if error != OK:
 		push_warning("ServerRoot.end_connection had error: %s" % error_string(error))

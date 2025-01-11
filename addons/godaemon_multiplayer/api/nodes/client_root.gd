@@ -76,7 +76,7 @@ func start_connection() -> bool:
 		return false
 	var error := peer.create_client(
 		address, port, get_total_channel_count(),
-		configuration.in_bandwidth, configuration.out_bandwidth,
+		configuration.client_in_bandwidth, configuration.client_out_bandwidth,
 		local_port
 	)
 	if error != OK:

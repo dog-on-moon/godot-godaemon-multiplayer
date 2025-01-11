@@ -41,7 +41,7 @@ const DEFAULT_SERVICES := [
 ## between peers to ensure the peer's bandwidth is not overwhelmed.
 ## The bandwidth parameters also determine the window size of a connection,
 ## which limits the amount of reliable packets that may be in transit at any given time.
-@export_range(0, 65536, 1, "or_greater") var in_bandwidth := 0
+@export_range(0, 65536, 1, "or_greater") var client_in_bandwidth := 0
 
 ## Set to limit the outgoing bandwidth in bytes per second.
 ## The default of 0 means unlimited bandwidth.
@@ -50,7 +50,25 @@ const DEFAULT_SERVICES := [
 ## between peers to ensure the peer's bandwidth is not overwhelmed.
 ## The bandwidth parameters also determine the window size of a connection,
 ## which limits the amount of reliable packets that may be in transit at any given time.
-@export_range(0, 65536, 1, "or_greater") var out_bandwidth := 0
+@export_range(0, 65536, 1, "or_greater") var client_out_bandwidth := 0
+
+## Set to limit the incoming bandwidth in bytes per second.
+## The default of 0 means unlimited bandwidth.
+##
+## Note that ENet will strategically drop packets on specific sides of a connection
+## between peers to ensure the peer's bandwidth is not overwhelmed.
+## The bandwidth parameters also determine the window size of a connection,
+## which limits the amount of reliable packets that may be in transit at any given time.
+@export_range(0, 65536, 1, "or_greater") var server_in_bandwidth := 0
+
+## Set to limit the outgoing bandwidth in bytes per second.
+## The default of 0 means unlimited bandwidth.
+##
+## Note that ENet will strategically drop packets on specific sides of a connection
+## between peers to ensure the peer's bandwidth is not overwhelmed.
+## The bandwidth parameters also determine the window size of a connection,
+## which limits the amount of reliable packets that may be in transit at any given time.
+@export_range(0, 65536, 1, "or_greater") var server_out_bandwidth := 0
 #endregion
 
 @export_group("Authentication")
