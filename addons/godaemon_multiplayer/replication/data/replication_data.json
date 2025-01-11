@@ -1,73 +1,174 @@
 {
+	"834969481055583037": {
+		"_name": "res://demos/2d_platformer/player/player.gd",
+		"methods": [],
+		"properties": [
+			{
+				"flags": 2,
+				"name": "position",
+				"recv_filter": 7,
+				"reliable": true,
+				"send_filter": 2,
+				"sync": 2
+			},
+			{
+				"flags": 0,
+				"name": "color",
+				"recv_filter": 7,
+				"reliable": true,
+				"send_filter": 1,
+				"sync": 0
+			}
+		],
+		"signals": []
+	},
+	"3549453775036803907": {
+		"_name": "res://demos/visitation/zones/zone_swapper.gd",
+		"methods": [
+			{
+				"flags": 0,
+				"name": "_request_zone",
+				"ratelimit": 0.1,
+				"recv_filter": 1,
+				"reliable": true,
+				"send_filter": 6
+			},
+			{
+				"flags": 0,
+				"name": "_request_zone_callback",
+				"ratelimit": 0.0,
+				"recv_filter": 6,
+				"reliable": true,
+				"send_filter": 1
+			}
+		],
+		"properties": [],
+		"signals": []
+	},
 	"5643041355025873573": {
 		"_class": "SyncService",
 		"_name": "res://addons/godaemon_multiplayer/services/sync_service.gd",
-		"methods": [],
+		"methods": [
+			{
+				"flags": 0,
+				"name": "_cl_receive_reliable_properties",
+				"ratelimit": 0.0,
+				"recv_filter": 6,
+				"reliable": true,
+				"send_filter": 1
+			},
+			{
+				"flags": 0,
+				"name": "_cl_receive_unreliable_properties",
+				"ratelimit": 0.0,
+				"recv_filter": 6,
+				"reliable": false,
+				"send_filter": 1
+			},
+			{
+				"flags": 0,
+				"name": "_sv_receive_reliable_properties",
+				"ratelimit": 0.0,
+				"recv_filter": 1,
+				"reliable": true,
+				"send_filter": 6
+			},
+			{
+				"flags": 0,
+				"name": "_sv_receive_unreliable_properties",
+				"ratelimit": 0.0,
+				"recv_filter": 1,
+				"reliable": false,
+				"send_filter": 6
+			}
+		],
 		"properties": [],
+		"signals": []
+	},
+	"5848342373569808564": {
+		"methods": [],
+		"properties": [
+			{
+				"flags": 0,
+				"name": "modulate",
+				"recv_filter": 7,
+				"reliable": true,
+				"send_filter": 1,
+				"sync": 0
+			}
+		],
 		"signals": []
 	},
 	"6442654088861148762": {
 		"_class": "ReplicationService",
 		"_name": "res://addons/godaemon_multiplayer/services/replication_service.gd",
-		"methods": [],
-		"properties": [],
-		"signals": []
-	},
-	"6608134835668395677": {
-		"_name": "res://node_parent.gd",
 		"methods": [
 			{
 				"flags": 0,
-				"name": "french",
+				"name": "_set_node_owner",
 				"ratelimit": 0.0,
-				"recv_filter": 7,
+				"recv_filter": 6,
 				"reliable": true,
 				"send_filter": 1
 			},
 			{
 				"flags": 0,
-				"name": "BRAZIL",
+				"name": "update_visibility",
 				"ratelimit": 0.0,
-				"recv_filter": 7,
+				"recv_filter": 6,
 				"reliable": true,
 				"send_filter": 1
 			}
 		],
 		"properties": [],
-		"signals": [
-			{
-				"flags": 0,
-				"name": "renamed",
-				"recv_filter": 7,
-				"reliable": true,
-				"send_filter": 1
-			}
-		]
+		"signals": []
 	},
-	"8364924796397357817": {
-		"_name": "res://node.gd",
+	"7582279969319796838": {
+		"_name": "res://demos/visitation/zones/button.gd",
 		"methods": [
 			{
 				"flags": 0,
-				"name": "Moondoog",
+				"name": "_request_pressed",
 				"ratelimit": 0.0,
-				"recv_filter": 7,
+				"recv_filter": 1,
 				"reliable": true,
-				"send_filter": 1
-			},
-			{
-				"flags": 0,
-				"name": "test",
-				"ratelimit": 0.0,
-				"recv_filter": 7,
-				"reliable": true,
-				"send_filter": 1
+				"send_filter": 6
 			}
 		],
 		"properties": [
 			{
 				"flags": 0,
-				"name": "process_mode",
+				"name": "press_count",
+				"recv_filter": 7,
+				"reliable": true,
+				"send_filter": 1,
+				"sync": 1
+			},
+			{
+				"flags": 0,
+				"name": "position",
+				"recv_filter": 7,
+				"reliable": true,
+				"send_filter": 1,
+				"sync": 0
+			}
+		],
+		"signals": []
+	},
+	"8269759586463036538": {
+		"methods": [],
+		"properties": [
+			{
+				"flags": 0,
+				"name": "position",
+				"recv_filter": 7,
+				"reliable": true,
+				"send_filter": 1,
+				"sync": 0
+			},
+			{
+				"flags": 0,
+				"name": "rotation",
 				"recv_filter": 7,
 				"reliable": true,
 				"send_filter": 1,

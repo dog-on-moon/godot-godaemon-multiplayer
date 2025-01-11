@@ -20,10 +20,6 @@ func _enter_tree() -> void:
 	process_priority = 100000
 	replication_service.enter_replicated_scene.connect(enter_replicated_scene)
 	replication_service.exit_replicated_scene.connect(exit_replicated_scene)
-	
-	if mp.is_server():
-		Godaemon.rpcs(self).set_rpc_server_receive_only(self, &"_sv_receive_reliable_properties")
-		Godaemon.rpcs(self).set_rpc_server_receive_only(self, &"_sv_receive_unreliable_properties")
 
 #region Caches
 
@@ -265,19 +261,19 @@ func _get_receive_rpc(reliable: bool) -> Callable:
 		else:
 			return _sv_receive_unreliable_properties
 
-@rpc("reliable")
+@rpc
 func _cl_receive_reliable_properties(data: PackedByteArray):
 	_receive_properties(data)
 
-@rpc("unreliable_ordered")
+@rpc
 func _cl_receive_unreliable_properties(data: PackedByteArray):
 	_receive_properties(data)
 
-@rpc("any_peer", "reliable")
+@rpc
 func _sv_receive_reliable_properties(data: PackedByteArray):
 	_receive_properties(data)
 
-@rpc("any_peer", "unreliable_ordered")
+@rpc
 func _sv_receive_unreliable_properties(data: PackedByteArray):
 	_receive_properties(data)
 

@@ -16,16 +16,13 @@ var server_zones: Array[Zone] = []
 @onready var zone_service := Godaemon.zone_service(self)
 
 func _ready() -> void:
-	Godaemon.rpcs(self).set_rpc_server_receive_only(self, &"_request_zone")
-	Godaemon.rpcs(self).set_rpc_ratelimit(self, &"_request_zone", 1, 0.1)
-	
 	if mp.is_client():
 		for idx in zone_buttons:
 			zone_buttons[idx].pressed.connect(_request_zone.rpc.bind(idx))
 	else:
 		hide()
 
-@rpc("any_peer")
+@rpc
 func _request_zone(idx: int):
 	var peer := multiplayer.get_remote_sender_id()
 	var zone: Zone = server_zones[idx]
@@ -36,7 +33,7 @@ func _request_zone(idx: int):
 		zone_service.add_interest(peer, zone)
 		_request_zone_callback.rpc_id(peer, idx, true)
 
-@rpc("authority")
+@rpc
 func _request_zone_callback(idx: int, active: bool):
 	assert(mp.is_client())
 	zone_buttons[idx].flat = active

@@ -16,7 +16,6 @@ func _ready() -> void:
 	press_count = press_count
 	if mp.is_server():
 		position = (get_parent().size - size) * Vector2(randf(), randf())
-		Godaemon.rpcs(self).set_rpc_server_receive_only(self, &"_request_pressed")
 	else:
 		pressed.connect(_request_pressed.rpc)
 

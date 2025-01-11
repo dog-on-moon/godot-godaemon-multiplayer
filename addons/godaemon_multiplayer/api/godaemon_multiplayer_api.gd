@@ -108,6 +108,9 @@ func recv_command(id: int, bytes: PackedByteArray):
 var remote_sender: int:
 	get: return get_remote_sender_id()
 
+var local_peer: int:
+	get: return get_unique_id()
+
 ## Returns true if this is a client API.
 func is_client() -> bool:
 	return get_unique_id() != 1

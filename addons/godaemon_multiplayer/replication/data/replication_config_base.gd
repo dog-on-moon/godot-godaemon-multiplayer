@@ -48,6 +48,9 @@ func get_send_filter_flag(filter: Filter) -> bool:
 func get_recv_filter_flag(filter: Filter) -> bool:
 	return recv_filter & int(filter)
 
+func get_transfer_mode() -> MultiplayerPeer.TransferMode:
+	return MultiplayerPeer.TRANSFER_MODE_RELIABLE if reliable else MultiplayerPeer.TRANSFER_MODE_UNRELIABLE
+
 func serialize() -> Dictionary:
 	assert(false)
 	return {}

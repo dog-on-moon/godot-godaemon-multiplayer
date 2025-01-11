@@ -43,7 +43,7 @@ func _set_script(script: Script):
 			var config := get_tscn()
 			config.argument = arg
 			config._script = ReplicationData.get_script_replication(script)
-			config._config = arg_to_config(script, arg)
+			config._config = arg_to_config(script, arg, true)
 			add_child(config)
 			configs.append(config)
 			#print('adding %s' % arg_to_name(arg))

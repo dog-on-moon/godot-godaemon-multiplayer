@@ -38,9 +38,13 @@ var remote_sender: int = 0
 
 func _init(_api: GodaemonMultiplayerAPI):
 	api = _api
+	api.peer_disconnected.connect(_peer_disconnected)
 
 func cleanup():
 	api = null
+
+func _peer_disconnected(peer: int):
+	peer_config_ratelimits.erase(peer)
 
 #region RPCs
 
@@ -55,26 +59,39 @@ func outbound_rpc(peer: int, object: Object, method: StringName, args: Array) ->
 				Use mp.api.repository.add_object(obj, id), and ensure the id is matched on both server and client." % object)
 		return ERR_CANT_RESOLVE
 	
-	# Ensure there is a valid RPC config.
-	var config: Dictionary = {}
-	if object.get_script():
-		config.merge(object.get_script().get_rpc_config())
-	config.merge(object.get_rpc_config())
-	if method not in config:
-		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc could not find RPC config")
+	# Validate the config.
+	var script := object.get_script()
+	if not script:
+		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc attempted to send RPC on scriptless object....interesting.")
+		return ERR_BUG
+	var sr := ReplicationData.get_script_replication(script)
+	if not sr:
+		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc attempted to send RPC on script with no replication config: %s" % script.resource_path)
 		return ERR_UNCONFIGURED
-	var method_idx: int = config.keys().find(method)
+	
+	var config := sr.get_method_config(method)
+	if not config:
+		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc attempted to send RPC on configless method %s" % [method])
+		return ERR_UNCONFIGURED
+	
+	if object is Node:
+		if api.is_server():
+			if not config.get_send_filter_flag(ReplicationConfigBase.Filter.Server):
+				push_error("Could not RPC protected method %s for server (%s)" % [method, script.resource_path])
+				return ERR_UNCONFIGURED
+		elif api.local_peer == Godaemon.get_node_owner(object):
+			if not config.get_send_filter_flag(ReplicationConfigBase.Filter.Owner):
+				push_error("Could not RPC protected method %s for owner (%s)" % [method, script.resource_path])
+				return ERR_UNCONFIGURED
+		else:
+			if not config.get_send_filter_flag(ReplicationConfigBase.Filter.Client):
+				push_error("Could not RPC protected method %s for client (%s)" % [method, script.resource_path])
+				return ERR_UNCONFIGURED
+	
+	var method_idx: int = sr.get_idx_from_method_config(config)
 	if method_idx >= MAX_RPC_METHODS:
 		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc method idx was too high")
 		return ERR_UNCONFIGURED
-	config = config[method]
-	var rpc_mode: MultiplayerAPI.RPCMode = config.get("rpc_mode", MultiplayerAPI.RPC_MODE_AUTHORITY)
-	if (api.mp.is_client() and rpc_mode != MultiplayerAPI.RPC_MODE_ANY_PEER) or rpc_mode == MultiplayerAPI.RPC_MODE_DISABLED:
-		push_warning("GodaemonMultiplayerAPI.rpc.outbound_rpc Client attempted to send RPC on blocked method: %s.%s" % [object, method])
-		return ERR_UNAUTHORIZED
-	var transfer_mode: MultiplayerPeer.TransferMode = config.get("transfer_mode", MultiplayerPeer.TRANSFER_MODE_RELIABLE)
-	var call_local: bool = config.get("call_local", false)
-	var channel: int = config.get("channel", 0)
 	
 	# Validate object.
 	if not object.has_method(method):
@@ -86,17 +103,51 @@ func outbound_rpc(peer: int, object: Object, method: StringName, args: Array) ->
 	
 	# Process hooks.
 	var from_peer := srs_override if srs_override != 0 else api.get_unique_id()
-	channel = get_object_channel_override(object, channel)
+	var transfer_mode := config.get_transfer_mode()
+	var channel := get_object_channel_override(object, 0)
 	for modifier: Callable in channel_modifiers:
 		channel = modifier.call(channel, object, transfer_mode)
 	
+	# Determine target peers.
 	var target_peers: Array[int] = [peer]
+	if api.is_server():
+		# The server has to do receive-filtering now, so that we don't
+		# send an RPC to a client that they shouldn't be receiving --
+		# (we trust the client to accept all RPCs they receive from the server).
+		
+		# Update target peers to be broadcasting in the anticipated way.
+		if peer <= 0:
+			target_peers.assign(api.get_peers())
+			if peer < 0:
+				target_peers.erase(-peer)
+		
+		# Filter out peers depending on recv tags.
+		# We don't have to care about the server filter here.
+		if object is Node:
+			for p in target_peers.duplicate():
+				var p_is_owner: bool = (p == Godaemon.get_node_owner(object))
+				if p_is_owner:
+					if not config.get_recv_filter_flag(ReplicationConfigBase.Filter.Owner):
+						target_peers.erase(p)
+				else:
+					if not config.get_recv_filter_flag(ReplicationConfigBase.Filter.Client):
+						target_peers.erase(p)
+		else:
+			if not config.get_recv_filter_flag(ReplicationConfigBase.Filter.Client):
+				target_peers.clear()
+	
+	# Perform target peer mods.
 	for modifier: Callable in target_peer_modifiers:
 		modifier.call(from_peer, target_peers, object, method, args)
+	
+	# RPC to all determined target peers.
+	var debug_print := config.get_debug_print()
 	for to_peer in target_peers:
+		# Avoid calling the function to ourselves.
 		if to_peer == from_peer:
 			continue
 		
+		# Attempt to filter/block the RPC.
 		var filtered := false
 		for filter: Callable in outbound_filters:
 			if not filter.call(from_peer, to_peer, object, method, args):
@@ -105,17 +156,20 @@ func outbound_rpc(peer: int, object: Object, method: StringName, args: Array) ->
 		if filtered:
 			continue
 		
-		# Filter RPC through MultiplayerRoot.
+		# Compress and send the RPC.
 		var bytes := compress_rpc(from_peer, to_peer, object, method_idx, args)
 		if not bytes:
 			continue
 		var target_peer: int = 1 if api.is_client() else to_peer
 		api.profiler.rpc(false, object.get_instance_id(), bytes.size() + 1)
 		api.send_command(GodaemonMultiplayerAPI.NetCommand.RPC, bytes, target_peer, transfer_mode, channel)
+		
+		if debug_print:
+			Log.info(self, "(%s => %s) sending RPC %s" % [from_peer, to_peer, target_peer])
 	
 	# Perform local call (we do it late so this callback won't interrupt the expected RPCing).
 	# Also, if we're the server, only call local if SRS override is 0 (so the server doesnt also call local during forwarding)
-	if call_local and (api.is_client() or srs_override == 0):
+	if config.get_call_local() and (api.is_client() or srs_override == 0):
 		remote_sender = api.get_unique_id()
 		object[method].callv(args)
 		remote_sender = 0
@@ -127,7 +181,7 @@ func inbound_rpc(id: int, bytes: PackedByteArray):
 	# Read bytes.
 	var data := decompress_rpc(id, bytes)
 	if not data:
-		return
+		return ERR_UNCONFIGURED
 	var from_peer:  int = data[0]
 	var to_peer:    int = data[1]
 	var object_id:  int = data[2]
@@ -137,24 +191,47 @@ func inbound_rpc(id: int, bytes: PackedByteArray):
 	# Ensure object and callable can be found.
 	var object := api.repository.get_object(object_id)
 	if not object:
-		return
-	var config: Dictionary = {}
-	if object.get_script():
-		config.merge(object.get_script().get_rpc_config())
-	config.merge(object.get_rpc_config())
-	if method_idx < 0 or method_idx >= config.size():
-		return
-	var method: StringName = config.keys()[method_idx]
+		push_error("GodaemonMultiplayerAPI.rpc.inbound_rpc received RPC for untracked object")
+		return ERR_UNCONFIGURED
+	
+	# Validate the config.
+	var script := object.get_script()
+	if not script:
+		push_error("GodaemonMultiplayerAPI.rpc.inbound_rpc received to receive RPC on scriptless object....VERY interesting.")
+		return ERR_BUG
+	var sr := ReplicationData.get_script_replication(script)
+	if not sr:
+		push_error("GodaemonMultiplayerAPI.rpc.inbound_rpc received RPC on script with no replication config: %s" % script.resource_path)
+		return ERR_UNCONFIGURED
+	var config := sr.get_method_config_from_idx(method_idx)
+	if not config:
+		push_error("GodaemonMultiplayerAPI.rpc.inbound_rpc received RPC on configless method %s" % [method_idx])
+		return ERR_UNCONFIGURED
+	var method := config.name
 	if not object.has_method(method) or method not in config:
-		return
-	var rpc_mode: MultiplayerAPI.RPCMode = config[method].get("rpc_mode", MultiplayerAPI.RPC_MODE_DISABLED)
-	if (api.mp.is_server() and rpc_mode != MultiplayerAPI.RPC_MODE_ANY_PEER) or rpc_mode == MultiplayerAPI.RPC_MODE_DISABLED:
-		push_warning("GodaemonMultiplayerAPI.rpc.inbound_rpc Client attempted to send RPC on blocked method: %s.%s" % [object, method])
-		return
-	var callable: Callable = object[method].bindv(args)
+		return ERR_UNCONFIGURED
+	
+	var to_peer_is_owner := false
+	if object is Node:
+		to_peer_is_owner = to_peer == Godaemon.get_node_owner(object)
+	
+	# On the server, re-validate the send filters for this inbound RPC.
+	if api.is_server() and object is Node:
+		if from_peer == 1:
+			if not config.get_send_filter_flag(ReplicationConfigBase.Filter.Server):
+				push_error("Blocked received RPC %s for server (%s)" % [method, script.resource_path])
+				return ERR_UNCONFIGURED
+		elif to_peer_is_owner:
+			if not config.get_send_filter_flag(ReplicationConfigBase.Filter.Owner):
+				push_error("Blocked received RPC %s for owner (%s)" % [method, script.resource_path])
+				return ERR_UNCONFIGURED
+		else:
+			if not config.get_send_filter_flag(ReplicationConfigBase.Filter.Client):
+				push_error("Blocked received RPC %s for client (%s)" % [method, script.resource_path])
+				return ERR_UNCONFIGURED
 	
 	# Test ratelimit.
-	if not _check_rpc_ratelimit(from_peer, object, method):
+	if not _check_rpc_ratelimit(from_peer, config):
 		return
 	
 	# Test filters.
@@ -164,35 +241,56 @@ func inbound_rpc(id: int, bytes: PackedByteArray):
 	
 	api.profiler.rpc(true, object.get_instance_id(), bytes.size())
 	
-	var method_is_server_only: bool = method in _object_rpc_server_receive_only.get(object, {})
+	var method_is_server_only: bool = false
 	
 	# Call or re-route RPC.
+	var callable: Callable = object[method].bindv(args)
 	remote_sender = from_peer
-	if to_peer == 1 or id == 1:
-		# This RPC is specifically for the server (client => server),
-		# or this RPC is specifically from the server (server => client).
+	if to_peer == 1:
+		# This RPC is specifically for the server (client => server).
+		if config.get_recv_filter_flag(ReplicationConfigBase.Filter.Server):
+			callable.call()
+	elif id == 1:
+		# This RPC is specifically from the server (server => client).
+		# Server has already filtered recvs, so we can trust it.
 		callable.call()
 	elif to_peer > 0:
 		# This RPC is specifically from a client, but for another client (client => client)
 		# So we will have to forward it back to that peer.
-		if not method_is_server_only:
-			srs_override = from_peer
-			callable.rpc_id(to_peer)
-			srs_override = 0
+		if to_peer_is_owner:
+			if config.get_recv_filter_flag(ReplicationConfigBase.Filter.Owner):
+				srs_override = from_peer
+				callable.rpc_id(to_peer)
+				srs_override = 0
+		else:
+			if config.get_recv_filter_flag(ReplicationConfigBase.Filter.Client):
+				srs_override = from_peer
+				callable.rpc_id(to_peer)
+				srs_override = 0
 	else:
 		# This is a broadcast RPC from a client, so we accept it ourselves,
 		# and then forward it to all other clients.
 		var skip_peer := -to_peer
 		if skip_peer != 1:
 			# Call it locally (if the target peer ID wasn't -1)
-			callable.call()
+			if config.get_recv_filter_flag(ReplicationConfigBase.Filter.Server):
+				callable.call()
 		if not method_is_server_only:
 			srs_override = from_peer
 			for p in api.get_peers():
 				# Don't forward the RPC to the skipped peer, ourselves, or to the sender
 				if p == skip_peer or p == 1 or p == from_peer:
 					continue
-				callable.rpc_id(p)
+				if object is Node:
+					var p_is_owner := p == Godaemon.get_node_owner(object)
+					if p_is_owner:
+						if config.get_recv_filter_flag(ReplicationConfigBase.Filter.Owner):
+							callable.rpc_id(p)
+					else:
+						if config.get_recv_filter_flag(ReplicationConfigBase.Filter.Client):
+							callable.rpc_id(p)
+				else:
+					callable.rpc_id(p)
 			srs_override = 0
 	remote_sender = 0
 
@@ -307,45 +405,22 @@ func get_object_channel_override(object: Object, default_channel: int = 0) -> in
 
 #region RPC Ratelimits
 
-var _object_rpc_ratelimits := {}
-
-## Sets the ratelimit on a given RPC for a Object.
-func set_rpc_ratelimit(object: Object, method: StringName, count: int, duration: float):
-	var object_in_dict: bool = object in _object_rpc_ratelimits
-	_object_rpc_ratelimits.get_or_add(object, {})[method] = RateLimiter.new(api.mp, count, duration)
-	if not object_in_dict:
-		object.tree_exited.connect(_clear_rpc_ratelimit.bind(object), CONNECT_ONE_SHOT)
+var peer_config_ratelimits := {}
 
 ## Tests the ratelimit on a given RPC for a Object.
-func _check_rpc_ratelimit(peer: int, object: Object, method: StringName) -> bool:
-	if object not in _object_rpc_ratelimits:
+func _check_rpc_ratelimit(peer: int, config: ReplicationMethodConfig) -> bool:
+	if is_zero_approx(config.ratelimit):
 		return true
-	if method not in _object_rpc_ratelimits[object]:
-		return true
-	var rl: RateLimiter = _object_rpc_ratelimits[object][method]
+	
+	if peer not in peer_config_ratelimits:
+		peer_config_ratelimits[peer] = {}
+	if config not in peer_config_ratelimits[peer]:
+		peer_config_ratelimits[peer][config] = RateLimiter.new(api.mp, 1, config.ratelimit)
+	
+	var rl: RateLimiter = peer_config_ratelimits[peer][config]
 	var result := rl.check(peer)
 	if not result and OS.has_feature("editor"):
-		push_warning("GodaemonMultiplayerAPI: ratelimited RPC %s.%s() for peer %s" % [object.name, method, peer])
+		push_warning("GodaemonMultiplayerAPI: ratelimited RPC %s() for peer %s" % [config.name, peer])
 	return result
-
-func _clear_rpc_ratelimit(object: Object):
-	_object_rpc_ratelimits.erase(object)
-
-#endregion
-
-#region RPC Security
-
-var _object_rpc_server_receive_only := {}
-
-## Sets an RPC to only allow being received by the server.
-## This will prevent clients from being able to send the RPC to other clients.
-func set_rpc_server_receive_only(object: Object, method: StringName):
-	if object not in _object_rpc_server_receive_only:
-		_object_rpc_server_receive_only[object] = {}
-		object.tree_exited.connect(_clear_object_rpc_server_receive_only.bind(object), CONNECT_ONE_SHOT)
-	_object_rpc_server_receive_only[object][method] = null
-
-func _clear_object_rpc_server_receive_only(object: Object):
-	_object_rpc_server_receive_only.erase(object)
 
 #endregion

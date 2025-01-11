@@ -41,6 +41,8 @@ static func get_script_replication(script: Script) -> ScriptReplication:
 
 ## Toggles a script's replication.
 static func toggle_script_replication(script: Script, mode: bool) -> ScriptReplication:
+	if not script:
+		return null
 	var uid := path_to_uid(script.resource_path)
 	if not mode:
 		_data.script_replication_map.erase(uid)
