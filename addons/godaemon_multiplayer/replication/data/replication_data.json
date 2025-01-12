@@ -85,6 +85,53 @@
 		"properties": [],
 		"signals": []
 	},
+	"5848342373569808564": {
+		"_name": "res://demos/visitation/zones/visitation_zone.gd",
+		"methods": [],
+		"properties": [
+			{
+				"flags": 0,
+				"name": "modulate",
+				"recv_filter": "Everyone",
+				"reliable": true,
+				"send_filter": "Server",
+				"sync": "Once"
+			}
+		],
+		"signals": []
+	},
+	"6019584464297815614": {
+		"_class": "Zone",
+		"_name": "res://addons/godaemon_multiplayer/services/zone/zone.gd",
+		"methods": [],
+		"properties": [
+			{
+				"flags": 0,
+				"name": "interest",
+				"recv_filter": "Everyone",
+				"reliable": true,
+				"send_filter": "Server",
+				"sync": "Request"
+			}
+		],
+		"signals": []
+	},
+	"6150603280834099059": {
+		"_class": "ClientZone",
+		"_name": "res://addons/godaemon_multiplayer/services/zone/client_zone.gd",
+		"methods": [],
+		"properties": [
+			{
+				"flags": 0,
+				"name": "interest",
+				"recv_filter": "Everyone",
+				"reliable": true,
+				"send_filter": "Server",
+				"sync": "Request"
+			}
+		],
+		"signals": []
+	},
 	"6442654088861148762": {
 		"_class": "ReplicationService",
 		"_name": "res://addons/godaemon_multiplayer/services/replication_service.gd",

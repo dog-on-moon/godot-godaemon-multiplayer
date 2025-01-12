@@ -56,11 +56,20 @@ var _method_config_idx_cache := {}
 var _property_config_idx_cache := {}
 var _signal_config_idx_cache := {}
 
-var smooth_properties: Array[ReplicationPropertyConfig] = []
+var smooth_properties: Array[ReplicationPropertyConfig] = []:
+	get:
+		if not Engine.is_editor_hint():
+			setup_cache()
+		return smooth_properties
 
-func _init() -> void:
+var _cache_setup := false
+
+func setup_cache():
 	if Engine.is_editor_hint():
 		return
+	if _cache_setup:
+		return
+	_cache_setup = true
 	
 	for idx in method_config.size():
 		var m := method_config[idx]
@@ -81,6 +90,7 @@ func _init() -> void:
 
 func get_method_config(name: String) -> ReplicationMethodConfig:
 	if not Engine.is_editor_hint():
+		setup_cache()
 		return _method_cache.get(name)
 	for m in method_config:
 		if m.name == name:
@@ -89,6 +99,7 @@ func get_method_config(name: String) -> ReplicationMethodConfig:
 
 func get_property_config(name: String) -> ReplicationPropertyConfig:
 	if not Engine.is_editor_hint():
+		setup_cache()
 		return _property_cache.get(name)
 	for m in property_config:
 		if m.name == name:
@@ -97,6 +108,7 @@ func get_property_config(name: String) -> ReplicationPropertyConfig:
 
 func get_signal_config(name: String) -> ReplicationSignalConfig:
 	if not Engine.is_editor_hint():
+		setup_cache()
 		return _signal_cache.get(name)
 	for m in signal_config:
 		if m.name == name:
@@ -105,6 +117,7 @@ func get_signal_config(name: String) -> ReplicationSignalConfig:
 
 func get_idx_from_method_config(config: ReplicationMethodConfig) -> int:
 	if not Engine.is_editor_hint():
+		setup_cache()
 		return _method_config_idx_cache.get(config, -1)
 	for idx in _method_cache.size():
 		if _method_cache[idx] == config:
@@ -118,6 +131,7 @@ func get_method_config_from_idx(idx: int) -> ReplicationMethodConfig:
 
 func get_idx_from_property_config(config: ReplicationPropertyConfig) -> int:
 	if not Engine.is_editor_hint():
+		setup_cache()
 		return _property_config_idx_cache.get(config, -1)
 	for idx in _property_cache.size():
 		if _property_cache[idx] == config:
@@ -131,6 +145,7 @@ func get_property_config_from_idx(idx: int) -> ReplicationPropertyConfig:
 
 func get_idx_from_signal_config(config: ReplicationSignalConfig) -> int:
 	if not Engine.is_editor_hint():
+		setup_cache()
 		return _signal_config_idx_cache.get(config, -1)
 	for idx in _signal_cache.size():
 		if _signal_cache[idx] == config:

@@ -95,8 +95,9 @@ static func zone_scene(node: Node, required := true) -> Node:
 
 ## Returns the owner of a node.
 static func get_node_owner(node: Node) -> int:
-	while node is not MultiplayerRoot and not node.has_meta(META_OWNER):
-		node = node.get_parent()
+	if node.is_inside_tree():
+		while node is not MultiplayerRoot and not node.has_meta(META_OWNER):
+			node = node.get_parent()
 	return node.get_meta(META_OWNER, 1)
 
 ## Checks if we locally own a node.

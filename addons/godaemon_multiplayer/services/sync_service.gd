@@ -32,8 +32,8 @@ func request_sync(node: Node, property: StringName):
 	if config.sync != ReplicationPropertyConfig.Sync.Request:
 		assert(false, "Cannot sync property %s -- mode must be set to Request" % property)
 		return
-	if not config.can_we_send(node):
-		assert(false, "Cannot sync property %s -- request is filtered")
+	if not config.can_we_send(mp, node):
+		assert(false, "Cannot sync property %s -- request is filtered" % property)
 		return
 	var idx := sr.get_idx_from_property_config(config)
 	var value: Variant = node.get(property)
@@ -55,10 +55,11 @@ func _enter_tree() -> void:
 func _enter_replication(node: Node):
 	var script := node.get_script()
 	if script:
-		var sr := ReplicationData.get_script_replication(node.get_script())
+		var sr := ReplicationData.get_script_replication(script)
 		if sr and sr.smooth_properties:
 			_config_cache[node] = {}
 			for config in sr.smooth_properties:
+				_config_cache[node][config] = null
 				_get_new_value(node, config)
 
 func _exit_replication(node: Node):
@@ -69,13 +70,15 @@ var _config_cache := {}
 func _get_new_value(node: Node, config: ReplicationPropertyConfig) -> Variant:
 	var old_value: Variant = _config_cache[node][config]
 	var value: Variant = node.get(config.name)
-	if is_equal_approx(old_value, value):
+	if old_value == value:
 		return null
 	else:
 		_set_config_cache(node, config, value)
 		return value
 
 func _set_config_cache(node: Node, config: ReplicationPropertyConfig, value: Variant):
+	#if node not in _config_cache:
+		#_config_cache[node] = {}
 	_config_cache[node][config] = value
 
 func _process(delta: float) -> void:
@@ -101,7 +104,7 @@ func _process(delta: float) -> void:
 		# Update any properties that have smooth-changed.
 		var target_peers := [1] if mp.is_client() else replication_service.get_observing_peers(node)
 		for config in sr.smooth_properties:
-			if config.can_we_send(node):
+			if config.can_we_send(mp, node):
 				var value := _get_new_value(node, config)
 				if value != null:
 					var idx := sr.get_idx_from_property_config(config)
@@ -157,12 +160,12 @@ func _receive_properties(node_id: int, idx: int, value: Variant):
 	var config := sr.property_config[idx]
 	if config.sync == ReplicationPropertyConfig.Sync.Once:
 		return
-	if config.can_we_recv(node):
+	if config.can_we_recv(mp, node):
 		if config.sync == ReplicationPropertyConfig.Sync.Request:
 			node.set(config.name, value)
 		else:
 			_start_property_interpolation(node, config, value)
-		_set_config_cache(node, config, value)
+			_set_config_cache(node, config, value)
 	
 	# If we're the server, forward the updated properties to other peers.
 	if mp.is_server():

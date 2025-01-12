@@ -33,6 +33,8 @@ static func _static_init() -> void:
 ## Returns a script's replication data.
 ## Returns null if it does not exist.
 static func get_script_replication(script: Script) -> ScriptReplication:
+	if not script:
+		return null
 	var uid := path_to_uid(script.resource_path)
 	if uid == -1:
 		print('script %s has no uid?' % script.resource_path)

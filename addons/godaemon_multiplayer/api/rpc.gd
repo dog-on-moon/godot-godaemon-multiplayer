@@ -74,7 +74,7 @@ func outbound_rpc(peer: int, object: Object, method: StringName, args: Array) ->
 		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc attempted to send RPC on configless method %s" % [method])
 		return ERR_UNCONFIGURED
 	
-	if object is Node and not config.can_we_send(object):
+	if object is Node and not config.can_we_send(api.mp, object):
 		push_error("Could not RPC protected method %s for server (%s)" % [method, script.resource_path])
 		return ERR_UNCONFIGURED
 	
@@ -193,7 +193,7 @@ func inbound_rpc(id: int, bytes: PackedByteArray):
 		push_error("GodaemonMultiplayerAPI.rpc.inbound_rpc received RPC on configless method %s" % [method_idx])
 		return ERR_UNCONFIGURED
 	var method := config.name
-	if not object.has_method(method) or method not in config:
+	if not object.has_method(method):
 		return ERR_UNCONFIGURED
 	
 	var to_peer_is_owner := false

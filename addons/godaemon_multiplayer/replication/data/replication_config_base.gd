@@ -51,8 +51,8 @@ func get_recv_filter_flag(filter: Filter) -> bool:
 func get_transfer_mode() -> MultiplayerPeer.TransferMode:
 	return MultiplayerPeer.TRANSFER_MODE_RELIABLE if reliable else MultiplayerPeer.TRANSFER_MODE_UNRELIABLE
 
-func can_we_send(node: Node) -> bool:
-	return can_they_send(node, Godaemon.mp(node).local_peer)
+func can_we_send(mp: MultiplayerRoot, node: Node) -> bool:
+	return can_they_send(node, mp.local_peer)
 
 func can_they_send(node: Node, p: int) -> bool:
 	if p == 1:
@@ -62,8 +62,8 @@ func can_they_send(node: Node, p: int) -> bool:
 	else:
 		return get_send_filter_flag(ReplicationConfigBase.Filter.Client)
 
-func can_we_recv(node: Node) -> bool:
-	return can_they_recv(node, Godaemon.mp(node).local_peer)
+func can_we_recv(mp: MultiplayerRoot, node: Node) -> bool:
+	return can_they_recv(node, mp.local_peer)
 
 func can_they_recv(node: Node, p: int) -> bool:
 	if p == 1:

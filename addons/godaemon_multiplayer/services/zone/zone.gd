@@ -28,7 +28,7 @@ var old_interest := {}
 					interest_removed.emit(peer)
 			old_interest = x.duplicate()
 		if sync_service:
-			sync_service.mark_dirty(self)
+			sync_service.request_sync(self, &"interest")
 
 @export var zone_index := 0
 
@@ -47,7 +47,6 @@ var scene: Node
 @onready var sync_service := Godaemon.sync_service(self)
 
 func setup(sync_service: SyncService):
-	sync_service.set_manual_tracking(self)
 	world_2d = World2D.new()
 	world_3d = World3D.new()
 

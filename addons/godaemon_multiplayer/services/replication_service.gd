@@ -29,6 +29,8 @@ func _peer_connected(peer: int):
 	# Peers need to know what initial scenes must be replicated to them.
 	var added_nodes: Array[Node] = []
 	for node in get_visible_nodes_for_peer(peer):
+		if node is MultiplayerRoot or node is ServiceBase:
+			continue
 		added_nodes.append(node)
 	_update_visibility(peer, added_nodes, [])
 
@@ -145,6 +147,8 @@ var _visibility_cache := {}
 ## Returns true if a node is absolutely visible for a peer, false if not.
 func get_true_visibility(node: Node, peer: int) -> bool:
 	assert(mp.is_server())
+	if node is MultiplayerRoot or node is ServiceBase:
+		return true
 	if peer in _visibility_cache.get(node, {}):
 		return _visibility_cache[node][peer]
 	var visible := true
@@ -220,7 +224,7 @@ func _get_replicated_descendants(node: Node) -> Dictionary:
 ## Sets up signal replication for a node. Called on server and client.
 func _setup_signal_replication(node: Node, sr: ScriptReplication):
 	for c in sr.signal_config:
-		if c.can_we_send(node):
+		if c.can_we_send(mp, node):
 			node.connect(StringName(c.name), _on_signal_emit.bind(node, sr, c))
 
 var _signal_loop_block := {}
@@ -273,7 +277,7 @@ func _signal_replicate(node_id: int, idx: int, args: Array):
 	if idx < 0 or idx >= sr.signal_config.size():
 		return
 	var c := sr.signal_config[idx]
-	if not c.can_we_recv(node):
+	if not c.can_we_recv(mp, node):
 		return
 	_set_signal_loop_block(node, c, true)
 	match args.size():
@@ -469,9 +473,6 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 		# Get the replication data for this node.
 		var script := node.get_script()
 		var sr := ReplicationData.get_script_replication(script)
-		if not sr:
-			assert(false, "This should not happen")
-			continue
 		
 		# Determine the UID we spawn for it.
 		# If it is a scene, we spawn the whole damn scene!!
@@ -485,14 +486,15 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 		var property_values := []
 		var node_owner := Godaemon.get_node_owner(node)
 		
-		for config in sr.property_config:
-			# We replicate all listed properties to the client initially.
-			# Though, only be sure to replicate those that they care about.
-			if not config.can_they_recv(node, peer):
-				continue
-			
-			# Get the property value for this node.
-			property_values.append(node.get(config.name))
+		if sr:
+			for config in sr.property_config:
+				# We replicate all listed properties to the client initially.
+				# Though, only be sure to replicate those that they care about.
+				if not config.can_they_recv(node, peer):
+					continue
+				
+				# Get the property value for this node.
+				property_values.append(node.get(config.name))
 		
 		var node_ids := []
 		if node.scene_file_path:
@@ -587,19 +589,17 @@ func update_visibility(data: PackedByteArray):
 			var script: Script = resource
 			var node: Node = script.new()
 			node.set_meta(Godaemon.META_OWNER, node_owner)
+			mp.api.repository.add_object(node, node_ids[0])
 			
 			# Load the root node's script replication.
 			var sr: ScriptReplication = ReplicationData.get_script_replication(script)
-			if not sr:
-				assert(false, "How")
-				continue
-			
-			var true_idx := -1
-			for config in sr.property_config:
-				if not config.can_we_recv(node):
-					continue
-				true_idx += 1
-				node.set(config.name, property_values[true_idx])
+			if sr:
+				var true_idx := -1
+				for config in sr.property_config:
+					if not config.can_we_recv(mp, node):
+						continue
+					true_idx += 1
+					node.set(config.name, property_values[true_idx])
 		
 			# Finally, add node.
 			if deferred:
@@ -617,11 +617,6 @@ func update_visibility(data: PackedByteArray):
 			var scene_state := packed_scene.get_state()
 			var scene: Node = packed_scene.instantiate()
 			scene.set_meta(Godaemon.META_OWNER, node_owner)
-			
-			var script := scene.get_script()
-			if not script:
-				push_warning("Could not replicate scene %s (root node missing replicated script)." % resource_path)
-				continue
 			
 			# Load owners/IDs first.
 			for node_idx in scene_state.get_node_count():
@@ -649,14 +644,16 @@ func update_visibility(data: PackedByteArray):
 					continue
 			
 			# Optionally load the root node's script replication.
-			var sr: ScriptReplication = ReplicationData.get_script_replication(script)
-			if sr:
-				var true_idx := -1
-				for config in sr.property_config:
-					if not config.can_we_recv(scene):
-						continue
-					true_idx += 1
-					scene.set(config.name, property_values[true_idx])
+			var script := scene.get_script()
+			if script:
+				var sr: ScriptReplication = ReplicationData.get_script_replication(script)
+				if sr:
+					var true_idx := -1
+					for config in sr.property_config:
+						if not config.can_we_recv(mp, scene):
+							continue
+						true_idx += 1
+						scene.set(config.name, property_values[true_idx])
 		
 			# Finally, add scene.
 			if deferred:

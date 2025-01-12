@@ -2,14 +2,17 @@ extends Button
 
 const ICON = preload("res://demos/visitation/zones/icon.tscn")
 
-@onready var initial_text := text
+@onready var initial_text := "Presses: %s"
 
 @export var press_count := 0:
 	set(x):
 		press_count = x
 		if is_node_ready():
-			text = initial_text % press_count
+			text = initial_text % [press_count]
+			if mp.is_server():
+				sync.request_sync(self, &"press_count")
 
+@onready var sync := Godaemon.sync_service(self)
 @onready var mp := Godaemon.mp(self)
 
 func _ready() -> void:
