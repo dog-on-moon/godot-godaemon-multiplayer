@@ -27,6 +27,7 @@ func _ready() -> void:
 	# Setup viewport container visuals.
 	stretch = true
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	
 	propagated_inputs = PropagatedInputs.ALL
 	if mp.is_server() and get_viewport() == get_window():

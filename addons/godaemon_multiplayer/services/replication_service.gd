@@ -76,7 +76,8 @@ func _replication_search(node: Node):
 	if node.child_entered_tree.is_connected(_replication_search):
 		return
 	
-	var sr := ReplicationData.get_script_replication(node.get_script())
+	var script := node.get_script()
+	var sr := ReplicationData.get_script_replication(script)
 	
 	# Setup signal replication.
 	if sr:
@@ -91,8 +92,8 @@ func _replication_search(node: Node):
 			mp.api.repository.add_object(node)
 		
 		# Does this node have replicated properties?
-		if (sr or node.scene_file_path) and node not in replication_visibility:
-			# Visibility exists for all scenes & all nodes with a replicated script.
+		if (script or node.scene_file_path) and node not in replication_visibility:
+			# Visibility exists for all scenes & all nodes with a script.
 			# However, there is a certain case where we should mark them as
 			# "visible" by default -- if their "owner" is already being tracked.
 			# This is specifically for instantiating packed scenes correctly,
@@ -100,7 +101,7 @@ func _replication_search(node: Node):
 			# (Also, the root/service are always visible, since theyre generated naturally,
 			#  but DONT SET THEIR VISIBILITY, PLEASE!!)
 			var visible_by_default := node.owner in replication_visibility or node is MultiplayerRoot or node is ServiceBase
-			replication_visibility[node] = {1: node.owner in replication_visibility}
+			replication_visibility[node] = {1: visible_by_default}
 			
 			# In addition to nodes being visible by default,
 			# we also defer their instantiation on the client in a complex way.
@@ -320,12 +321,18 @@ func _is_signal_loop_blocked(node: Node, c: ReplicationSignalConfig) -> bool:
 #region Client Scene Remap
 
 var _client_scene_remaps: Dictionary[PackedScene, PackedScene] = {}
+var _client_script_remaps: Dictionary[Script, Script] = {}
 
 ## Tells the ReplicationService to transform a received scene into
 ## another one, who must be identical in structure.
 func remap_scene(from_scene: PackedScene, into_scene: PackedScene):
 	assert(mp.is_client())
 	_client_scene_remaps[from_scene] = into_scene
+
+## Tells the ReplicationService to transform a received script into another.
+func remap_script(from_script: Script, to_script: Script):
+	assert(mp.is_client())
+	_client_script_remaps[from_script] = to_script
 
 #endregion
 
@@ -587,6 +594,7 @@ func update_visibility(data: PackedByteArray):
 		if resource is Script:
 			# Create script, set properties.
 			var script: Script = resource
+			script = _client_script_remaps.get(script, script)
 			var node: Node = script.new()
 			node.set_meta(Godaemon.META_OWNER, node_owner)
 			mp.api.repository.add_object(node, node_ids[0])
@@ -627,7 +635,7 @@ func update_visibility(data: PackedByteArray):
 				var subnode := scene.get_node_or_null(node_path)
 				if subnode:
 					var subnode_script := subnode.get_script()
-					if subnode != scene and ReplicationData.get_script_replication(subnode_script):
+					if subnode != scene and subnode_script:
 						# Delete sub-replicated scripts of the initial scene,
 						# replication for them will happen separately.
 						subnode.queue_free()

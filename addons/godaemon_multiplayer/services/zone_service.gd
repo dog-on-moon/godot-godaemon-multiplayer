@@ -15,9 +15,6 @@ signal cl_removed_interest(zone: ClientZone)
 
 signal cl_has_svc()
 
-const ZONE = preload("res://addons/godaemon_multiplayer/services/zone/zone.tscn")
-const CLIENT_ZONE = preload("res://addons/godaemon_multiplayer/services/zone/client_zone.tscn")
-const ZONE_SVC = preload("res://addons/godaemon_multiplayer/services/zone/zone_svc.tscn")
 const ZoneSvc = preload("res://addons/godaemon_multiplayer/services/zone/zone_svc.gd")
 var svc: SubViewportContainer
 
@@ -29,7 +26,7 @@ func _ready() -> void:
 	assert(replication_service)
 	if mp.is_server():
 		mp.peer_disconnected.connect(_peer_disconnected)
-		svc = ZONE_SVC.instantiate()
+		svc = ZoneSvc.new()
 		add_child(svc)
 		replication_service.set_visibility(svc, true)
 	else:
@@ -39,7 +36,7 @@ func _ready() -> void:
 					svc = n
 					cl_has_svc.emit()
 		)
-		replication_service.remap_scene(ZONE, CLIENT_ZONE)
+		replication_service.remap_script(Zone, ClientZone)
 
 func _peer_disconnected(peer: int):
 	clear_peer_interest(peer)
@@ -52,13 +49,11 @@ var zone_index := 0
 ## Set on the server and client.
 var zones := {}
 
-## Creates a new Zone. You can specify an instantiated scene to be added to it.
+## Creates a new Zone.
 ## Must be called on the server to function properly.
 func add_zone(node: Node) -> Zone:
 	assert(mp.is_server())
-	assert(node.scene_file_path, "Added zones must be from a PackedScene")
-	#assert(ReplicationCacheManager.get_index(node.scene_file_path) != -1, "Zone must have scene replication enabled")
-	var zone := ZONE.instantiate()
+	var zone := Zone.new()
 	zone.setup(sync_service)
 	zone.scene = node
 	zone.zone_index = zone_index
