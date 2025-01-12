@@ -46,19 +46,29 @@ func get_sync_text() -> String:
 func serialize() -> Dictionary:
 	return {
 		'name': name,
-		'send_filter': send_filter,
-		'recv_filter': recv_filter,
+		'send_filter': serialize_filter(send_filter),
+		'recv_filter': serialize_filter(recv_filter),
 		'reliable': reliable,
-		'sync': sync,
+		'sync': serialize_sync(),
 		'flags': flags,
 	}
 
 static func deserialize(d: Dictionary) -> ReplicationPropertyConfig:
 	var c := ReplicationPropertyConfig.new()
 	c.name = d.name
-	c.send_filter = int(d.send_filter)
-	c.recv_filter = int(d.recv_filter)
+	c.send_filter = deserialize_filter(d.send_filter)
+	c.recv_filter = deserialize_filter(d.recv_filter)
 	c.reliable = bool(d.reliable)
-	c.sync = int(d.sync) as Sync
+	c.sync = deserialize_sync(d.sync)
 	c.flags = int(d.flags)
 	return c
+
+func serialize_sync() -> String:
+	return get_sync_text()
+
+static func deserialize_sync(s: String) -> Sync:
+	match s:
+		"Once": 		return Sync.Once
+		"Request": 	return Sync.Request
+		"Smooth": 	return Sync.Smooth
+	return Sync.Once

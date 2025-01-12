@@ -56,6 +56,8 @@ var _method_config_idx_cache := {}
 var _property_config_idx_cache := {}
 var _signal_config_idx_cache := {}
 
+var smooth_properties: Array[ReplicationPropertyConfig] = []
+
 func _init() -> void:
 	if Engine.is_editor_hint():
 		return
@@ -69,6 +71,8 @@ func _init() -> void:
 		var m := property_config[idx]
 		_property_cache[m.name] = m
 		_property_config_idx_cache[m] = idx
+		if m.sync == ReplicationPropertyConfig.Sync.Smooth:
+			smooth_properties.append(m)
 	
 	for idx in signal_config.size():
 		var m := signal_config[idx]

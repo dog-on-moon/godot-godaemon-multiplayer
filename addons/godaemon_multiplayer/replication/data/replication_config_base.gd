@@ -51,6 +51,28 @@ func get_recv_filter_flag(filter: Filter) -> bool:
 func get_transfer_mode() -> MultiplayerPeer.TransferMode:
 	return MultiplayerPeer.TRANSFER_MODE_RELIABLE if reliable else MultiplayerPeer.TRANSFER_MODE_UNRELIABLE
 
+func can_we_send(node: Node) -> bool:
+	return can_they_send(node, Godaemon.mp(node).local_peer)
+
+func can_they_send(node: Node, p: int) -> bool:
+	if p == 1:
+		return get_send_filter_flag(ReplicationConfigBase.Filter.Server)
+	elif p == Godaemon.get_node_owner(node):
+		return get_send_filter_flag(ReplicationConfigBase.Filter.Owner)
+	else:
+		return get_send_filter_flag(ReplicationConfigBase.Filter.Client)
+
+func can_we_recv(node: Node) -> bool:
+	return can_they_recv(node, Godaemon.mp(node).local_peer)
+
+func can_they_recv(node: Node, p: int) -> bool:
+	if p == 1:
+		return get_recv_filter_flag(ReplicationConfigBase.Filter.Server)
+	elif p == Godaemon.get_node_owner(node):
+		return get_recv_filter_flag(ReplicationConfigBase.Filter.Owner)
+	else:
+		return get_recv_filter_flag(ReplicationConfigBase.Filter.Client)
+
 func serialize() -> Dictionary:
 	assert(false)
 	return {}
@@ -72,3 +94,18 @@ static func filter_flags_to_txt(filter: int) -> String:
 		6: return "All Clients"
 		7: return "Everyone"
 	return "Unknown"
+
+static func serialize_filter(filter: int) -> String:
+	return filter_flags_to_txt(filter)
+
+static func deserialize_filter(s: String) -> int:
+	match s:
+		"Nobody": 		return 0
+		"Server": 		return 1
+		"Owner": 			return 2
+		"Server+Owner": 	return 3
+		"Not Owner": 		return 4
+		"Server+Not Owner": return 5
+		"All Clients": 	return 6
+		"Everyone": 		return 7
+	return 0

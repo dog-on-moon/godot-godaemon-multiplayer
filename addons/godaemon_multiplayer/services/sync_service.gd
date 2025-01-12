@@ -11,242 +11,107 @@ var replication_service: ReplicationService
 
 var last_interpolate_t := 0.0
 
+## API for requesting a property sync upon changing a node's property value.
+func request_sync(node: Node, property: StringName):
+	var script := node.get_script()
+	if not script:
+		assert(false)
+		return
+	var sr := ReplicationData.get_script_replication(script)
+	if not sr:
+		assert(false)
+		return
+	var node_id := mp.api.repository.get_id(node)
+	if node_id == -1:
+		assert(false)
+		return
+	var config := sr.get_property_config(String(property))
+	if not config:
+		assert(false, "Property config %s does not exist for node." % property)
+		return
+	if config.sync != ReplicationPropertyConfig.Sync.Request:
+		assert(false, "Cannot sync property %s -- mode must be set to Request" % property)
+		return
+	if not config.can_we_send(node):
+		assert(false, "Cannot sync property %s -- request is filtered")
+		return
+	var idx := sr.get_idx_from_property_config(config)
+	var value: Variant = node.get(property)
+	var target_peers := [1] if mp.is_client() else replication_service.get_observing_peers(node)
+	for p in target_peers:
+		if config.can_they_recv(node, p):
+			_get_receive_rpc(config.reliable).rpc_id(p, node_id, idx, value)
+
+#region Smooth Processing
+
 func _enter_tree() -> void:
 	replication_service = Godaemon.replication_service(self)
 	
 	# Replicate property changes as the last event in the frame.
 	process_priority = 100000
-	replication_service.enter_replicated_scene.connect(enter_replicated_scene)
-	replication_service.exit_replicated_scene.connect(exit_replicated_scene)
+	replication_service.enter_replication.connect(_enter_replication)
+	replication_service.exit_replication.connect(_exit_replication)
 
-#region Caches
+func _enter_replication(node: Node):
+	var script := node.get_script()
+	if script:
+		var sr := ReplicationData.get_script_replication(node.get_script())
+		if sr and sr.smooth_properties:
+			_config_cache[node] = {}
+			for config in sr.smooth_properties:
+				_get_new_value(node, config)
 
-var _tracked_scenes: Dictionary[Node, Object] = {}
+func _exit_replication(node: Node):
+	_config_cache.erase(node)
 
-func enter_replicated_scene(scene: Node):
-	if get_scene_replication_data(scene):
-		_tracked_scenes[scene] = null
-		update_value_cache(scene)
+var _config_cache := {}
 
-func exit_replicated_scene(scene: Node):
-	_tracked_scenes.erase(scene)
-	_scene_replication_data_cache.erase(scene)
-	_replication_data_value_cache.erase(scene)
-
-var _scene_replication_data_cache := {}
-
-## Given a scene, returns an Array[[node, property path]].
-func get_scene_replication_data(scene: Node) -> Array:
-	if scene in _scene_replication_data_cache:
-		return _scene_replication_data_cache[scene]
-		
-	var replication_data := []
-	#var replication_dict: Dictionary = scene.get_meta(REPCO.META_SYNC_PROPERTIES, {})
-	#for property_path: NodePath in replication_dict:
-		## Skip property if not syncable.
-		#if replication_dict[property_path][2] == REPCO.SyncMode.ON_GENERATE:
-			#continue
-		#
-		## Find the node.
-		#var node_path := NodePath(property_path.get_concatenated_names())
-		#var node := scene.get_node(node_path) if node_path else scene
-		#assert(node, "SyncService tracking scene %s could not find node of path: %s" % [scene, node_path])
-		#
-		## Add to replication data.
-		#var prop_path := NodePath(property_path.get_concatenated_subnames())
-		#replication_data.append([node, prop_path, replication_dict[property_path]])
-	
-	# Return cached value.
-	_scene_replication_data_cache[scene] = replication_data
-	return replication_data
-
-
-#endregion
-
-#region Manual API
-
-## Sets a node to be manually tracked.
-func set_manual_tracking(node: Node, manual := true):
-	if manual:
-		_tracked_scenes.erase(node)
+func _get_new_value(node: Node, config: ReplicationPropertyConfig) -> Variant:
+	var old_value: Variant = _config_cache[node][config]
+	var value: Variant = node.get(config.name)
+	if is_equal_approx(old_value, value):
+		return null
 	else:
-		_tracked_scenes[node] = null
+		_set_config_cache(node, config, value)
+		return value
 
-var dirty_nodes: Dictionary = {}
-
-## Marks a node as dirty, syncservice will review its values the next frame.
-func mark_dirty(node: Node):
-	if not node or not node.is_inside_tree():
-		return
-	while node not in replication_service.replicated_scenes:
-		node = node.get_parent()
-		if node == mp or not node:
-			return
-	dirty_nodes[node] = null
-
-#endregion
-
-#region Sender Processing
-
-#const HARVEST_SYNCS: Array[REPCO.SyncMode] = [REPCO.SyncMode.ON_CHANGE, REPCO.SyncMode.INTERPOLATE_ON_CHANGE]
-#const HARVEST_RELIABLES: Array[bool] = [true, false]
-
-var _rpc_scene: Node  # used for ZoneService filtering
+func _set_config_cache(node: Node, config: ReplicationPropertyConfig, value: Variant):
+	_config_cache[node][config] = value
 
 func _process(delta: float) -> void:
 	if is_queued_for_deletion():
 		return
 	
-	# Check if we are communicating interpolation on this frame.
+	# Only interpolate on our relevant TPS frames.
 	var msec := Time.get_ticks_msec()
 	var is_interpolate_frame := msec > (last_interpolate_t + INTERPOLATE_MSPT)
-	if is_interpolate_frame:
-		last_interpolate_t = msec
-	
-	# Check every scene in the replication service.
-	for scene: Node in _tracked_scenes:
-		if is_instance_valid(scene):
-			_update_sync(scene, is_interpolate_frame)
-	for n in dirty_nodes.keys():
-		if not is_instance_valid(n) or n.is_queued_for_deletion():
-			dirty_nodes.erase(n)
-	for scene: Node in dirty_nodes:
-		_update_sync(scene, is_interpolate_frame)
-	dirty_nodes.clear()
-
-func _update_sync(scene: Node, is_interpolate_frame: bool):
-	var node_id := mp.api.repository.get_id(scene)
-	if node_id == -1:
-		Log.warning(self, "Could not sync values for node %s: ID missing" % [scene])
+	if not is_interpolate_frame:
 		return
+	last_interpolate_t = msec
 	
-	# Harvest each sync and reliable mode.
-	var changed := false
-	_rpc_scene = scene
-	#var target_peers := [1] if mp.is_client() else replication_service.get_observing_peers(scene)
-	#for sync in HARVEST_SYNCS:
-		#if sync == REPCO.SyncMode.INTERPOLATE_ON_CHANGE and not is_interpolate_frame:
-			#continue
-		#for reliable in HARVEST_RELIABLES:
-			#for to_peer in target_peers:
-				#var values := get_replication_data_values(scene, sync, to_peer, reliable)
-				#if not values:
-					#continue
-				#changed = true
-				#var data := _compress_values(node_id, sync, reliable, values)
-				#if not data:
-					#continue
-				#
-				#var rpc := _get_receive_rpc(reliable)
-				#rpc.rpc_id(to_peer, data)
-	
-	if changed:
-		update_value_cache(scene)
-	_rpc_scene = null
-
-## A map between scene to array of property value.
-var _replication_data_value_cache := {}
-
-func _get_replication_data_value_cache(scene: Node) -> Array:
-	var value_cache: Array = _replication_data_value_cache.get_or_add(scene, [])
-	#var size: int = scene.get_meta(REPCO.META_SYNC_PROPERTIES, {}).size()
-	#if value_cache.size() != size:
-		#value_cache.resize(size)
-		#value_cache.fill(null)
-	return value_cache
-
-## Given a whole bunch of area, harvest the current property values for replication.
-## If a value should not be replicated, its index will be null.
-#func get_replication_data_values(scene: Node, sync: REPCO.SyncMode, to_peer: int, reliable: bool) -> Dictionary:
-func get_replication_data_values(scene: Node, sync: int, to_peer: int, reliable: bool) -> Dictionary:
-	var replication_data := get_scene_replication_data(scene)
-	var values := {}
-	if not replication_data:
-		return values
-	var value_cache := _get_replication_data_value_cache(scene)
-	var test_peer := (mp.local_peer if mp.is_client() else to_peer)
-	for idx in replication_data.size():
-		# Skip if this isn't the right reliable/sync mode.
-		var replication_fields: Array = replication_data[idx][2]
-		if sync != replication_fields[2]:
-			continue
-		if reliable != replication_fields[3]:
-			continue
+	# Review and update the sync for all of our tracked nodes.
+	for node in _config_cache:
+		# Get its state.
+		var sr := ReplicationData.get_script_replication(node.get_script())
+		var node_id := mp.api.repository.get_id(node)
+		if node_id == -1:
+			Log.warning(self, "Could not sync values for node %s: ID missing" % [node])
+			return
 		
-		# Check for a valid node.
-		var node: Node = replication_data[idx][0]
-		if not (node and is_instance_valid(node)):
-			continue
-		
-		# If we're on client/server, avoid sending certain values.
-		#var filter: REPCO.PeerFilter = replication_fields[0] if mp.is_client() else replication_fields[1]
-		#var node_owner := Godaemon.get_node_owner(node)
-		#match filter:
-			#REPCO.PeerFilter.SERVER:
-				#continue
-			#REPCO.PeerFilter.OWNER_SERVER:
-				#if node_owner != test_peer:
-					#continue
-			#REPCO.PeerFilter.NOT_OWNER, REPCO.PeerFilter.OWNER_ONCE:
-				#if node_owner == test_peer:
-					#continue
-		
-		# If there's property interpolation active on this value,
-		# we definitely don't want to re-write it on accident.
-		var property_path: NodePath = replication_data[idx][1]
-		if _has_property_interpolation(node, property_path):
-			continue
-		
-		# Add result, only if it differs from cache.
-		var cached_result: Variant = value_cache[idx]
-		var result: Variant = node.get_indexed(property_path)
-		if cached_result != result:
-			values[idx] = _compress_property_change(cached_result, result)
-	return values
-
-## Updates values in the value cache for replication data.
-func update_value_cache(scene: Node):
-	var value_cache := _get_replication_data_value_cache(scene)
-	var replication_data := get_scene_replication_data(scene)
-	for idx in replication_data.size():
-		var node: Node = replication_data[idx][0]
-		if node and is_instance_valid(node):
-			var property_path: NodePath = replication_data[idx][1]
-			var replication_fields: Array = replication_data[idx][2]
-			var value = node.get_indexed(property_path)
-			_set_value_cache(value_cache, idx, value)
-
-## Updates the value cache for a specific node.
-func update_node_value_cache(root: Node, properties: Array[NodePath]):
-	var scene: Node = root if root.scene_file_path else root.owner
-	var value_cache := _get_replication_data_value_cache(scene)
-	var replication_data := get_scene_replication_data(scene)
-	for idx in replication_data.size():
-		var node: Node = replication_data[idx][0]
-		if node == root and node and is_instance_valid(node):
-			var property_path: NodePath = replication_data[idx][1]
-			if property_path not in properties:
-				continue
-			var replication_fields: Array = replication_data[idx][2]
-			var value = node.get_indexed(property_path)
-			_set_value_cache(value_cache, idx, value)
-
-func _set_value_cache(value_cache: Array, idx: int, value: Variant):
-	if value is Array or value is Dictionary:
-		value_cache[idx] = value.duplicate()
-	else:
-		value_cache[idx] = value
-
-## For interpolation values, this updates the value cache so they're properly replicated.
-func reset_interpolation(scene: Node):
-	_cancel_all_property_interpolations(scene)
-	# scene.reset_physics_interpolation()
+		# Update any properties that have smooth-changed.
+		var target_peers := [1] if mp.is_client() else replication_service.get_observing_peers(node)
+		for config in sr.smooth_properties:
+			if config.can_we_send(node):
+				var value := _get_new_value(node, config)
+				if value != null:
+					var idx := sr.get_idx_from_property_config(config)
+					for p in target_peers:
+						if config.can_they_recv(node, p):
+							_get_receive_rpc(config.reliable).rpc_id(p, node_id, idx, value)
 
 #endregion
 
 #region Receiver Processing
-
-#region RPC Funnel
 
 func _get_receive_rpc(reliable: bool) -> Callable:
 	if mp.is_server():
@@ -261,208 +126,103 @@ func _get_receive_rpc(reliable: bool) -> Callable:
 			return _sv_receive_unreliable_properties
 
 @rpc
-func _cl_receive_reliable_properties(data: PackedByteArray):
-	_receive_properties(data)
+func _cl_receive_reliable_properties(node_id: int, idx: int, value: Variant):
+	_receive_properties(node_id, idx, value)
 
 @rpc
-func _cl_receive_unreliable_properties(data: PackedByteArray):
-	_receive_properties(data)
+func _cl_receive_unreliable_properties(node_id: int, idx: int, value: Variant):
+	_receive_properties(node_id, idx, value)
 
 @rpc
-func _sv_receive_reliable_properties(data: PackedByteArray):
-	_receive_properties(data)
+func _sv_receive_reliable_properties(node_id: int, idx: int, value: Variant):
+	_receive_properties(node_id, idx, value)
 
 @rpc
-func _sv_receive_unreliable_properties(data: PackedByteArray):
-	_receive_properties(data)
+func _sv_receive_unreliable_properties(node_id: int, idx: int, value: Variant):
+	_receive_properties(node_id, idx, value)
 
-#endregion
-
-func _receive_properties(data: PackedByteArray):
-	var properties := _decompress_values(data)
-	if not properties:
+func _receive_properties(node_id: int, idx: int, value: Variant):
+	var node := mp.api.repository.get_object(node_id)
+	if not node:
+		#push_warning("SyncService._receive_properties does not know node ID %s" % node_id)
 		return
-	var node_id: int = properties[0]
-	var scene := mp.api.repository.get_object(node_id)
-	if not scene:
-		push_warning("SyncService._receive_properties does not know node ID %s" % properties[0])
+	var script := node.get_script()
+	if not script:
 		return
-	#var sync: REPCO.SyncMode = properties[1]
-	var sync: int = properties[1]
-	var reliable: bool = properties[2]
-	var values: Dictionary = properties[3]
-	
-	var replication_data := get_scene_replication_data(scene)
-	var value_cache := _get_replication_data_value_cache(scene)
-	var updated_values := {}
-	for idx in values:
-		# Skip if this isn't the right reliable/sync mode.
-		var replication_fields: Array = replication_data[idx][2]
-		if sync != replication_fields[2]:
-			continue
-		if reliable != replication_fields[3]:
-			continue
-		
-		# Check for a valid node.
-		var node: Node = replication_data[idx][0]
-		if not node or not is_instance_valid(node):
-			continue
-		
-		# If we're reading from the server, skip client-blocked values.
-		#if mp.is_server():
-			#var filter: REPCO.PeerFilter = replication_fields[0]
-			#match filter:
-				#REPCO.PeerFilter.SERVER:
-					#continue
-				#REPCO.PeerFilter.OWNER_SERVER:
-					#var node_owner := Godaemon.get_node_owner(node)
-					#if node_owner != mp.remote_peer:
-						#continue
-				#REPCO.PeerFilter.NOT_OWNER, REPCO.PeerFilter.OWNER_ONCE:
-					#var node_owner := Godaemon.get_node_owner(node)
-					#if node_owner == mp.remote_peer:
-						#continue
-		
-		var value: Variant = values[idx]
-		updated_values[idx] = value
-		
-		# Get and set property value.
-		var property_path: NodePath = replication_data[idx][1]
-		var true_value: Variant = _decompress_property_change(values[idx], node, property_path)
-		#if sync == REPCO.SyncMode.ON_CHANGE:
-			#node.set_indexed(property_path, true_value)
-		#elif sync == REPCO.SyncMode.INTERPOLATE_ON_CHANGE:
-			#_start_property_interpolation(node, property_path, true_value)
-		_set_value_cache(value_cache, idx, value)
+	var sr := ReplicationData.get_script_replication(script)
+	if not script:
+		return
+	if idx < 0 or idx >= sr.property_config.size():
+		return
+	var config := sr.property_config[idx]
+	if config.sync == ReplicationPropertyConfig.Sync.Once:
+		return
+	if config.can_we_recv(node):
+		if config.sync == ReplicationPropertyConfig.Sync.Request:
+			node.set(config.name, value)
+		else:
+			_start_property_interpolation(node, config, value)
+		_set_config_cache(node, config, value)
 	
 	# If we're the server, forward the updated properties to other peers.
 	if mp.is_server():
-		var forward_data := _compress_values(node_id, sync, reliable, updated_values)
-		if not forward_data:
-			push_warning("Server could not forward property data")
-			return
-		var rpc := _get_receive_rpc(reliable)
-		for peer in replication_service.get_observing_peers(scene):
+		var rpc := _get_receive_rpc(config.reliable)
+		for peer in replication_service.get_observing_peers(node):
 			if peer == mp.remote_peer:
 				continue
-			
-			rpc.rpc_id(peer, forward_data)
-
-#region Compression
-
-#func _compress_values(node_id: int, sync: REPCO.SyncMode, reliable: bool, values: Dictionary) -> PackedByteArray:
-func _compress_values(node_id: int, sync: int, reliable: bool, values: Dictionary) -> PackedByteArray:
-	var stream := PackedByteStream.new()
-	stream.setup_write(mp.api.repository.MAX_BYTES + 3)
-	stream.write_unsigned(node_id, mp.api.repository.MAX_BYTES)
-	stream.write_u8(sync)
-	stream.write_u8(reliable)
-	assert(values.size() <= 255, "Property sync tried writing too many values, What are you doing??")
-	stream.write_u8(values.size())
-	for idx in values:
-		stream.allocate(1 + stream.get_var_size(values[idx]))
-		stream.write_u8(idx)
-		stream.write_variant(values[idx], false)
-	if not stream.valid:
-		push_warning("SyncService._compress_values was invalid")
-		return PackedByteArray()
-	return stream.data
-
-func _decompress_values(data: PackedByteArray) -> Array:
-	var results := []
-	var stream := PackedByteStream.new()
-	stream.setup_read(data)
-	results.append(stream.read_unsigned(mp.api.repository.MAX_BYTES))
-	results.append(stream.read_u8())
-	results.append(stream.read_u8())
-	var values_size := stream.read_u8()
-	var values := {}
-	for _i in values_size:
-		var idx := stream.read_u8()
-		var value := stream.read_variant(false)
-		values[idx] = value
-	results.append(values)
-	if not stream.valid:
-		push_warning("SyncService._decompress_values was invalid")
-		return []
-	return results
-
-func _compress_property_change(old_value: Variant, new_value: Variant) -> Variant:
-	var type := typeof(new_value)
-	match type:
-		TYPE_DICTIONARY:
-			var added_values := {}
-			var removed_keys := []
-			for new in new_value:
-				if new not in old_value:
-					added_values[new] = new_value[new]
-			for old in old_value:
-				if old not in new_value:
-					removed_keys.append(old)
-			return [added_values, removed_keys]
-		_:
-			return new_value
-
-func _decompress_property_change(variant: Variant, node: Node, property_path: NodePath) -> Variant:
-	var value := node.get_indexed(property_path)
-	var type := typeof(value)
-	match type:
-		TYPE_DICTIONARY:
-			var added_values: Dictionary = variant[0]
-			var removed_keys: Array = variant[1]
-			var result: Dictionary = value.duplicate()
-			for k in removed_keys:
-				result.erase(k)
-			result.merge(added_values)
-			return result
-		_:
-			return variant
-
-#endregion
+			if config.get_robns() and peer == Godaemon.get_node_owner(node):
+				continue
+			rpc.rpc_id(peer, node_id, idx, value)
 
 #region Interpolation
 
 var _property_interpolation_cache := {}
 
+## For interpolation values, this updates the value cache so they're properly replicated.
+func reset_interpolation(scene: Node):
+	_cancel_all_property_interpolations(scene)
+	# scene.reset_physics_interpolation()
+
 ## Begins a property interpolation tween.
-func _start_property_interpolation(node: Node, property_path: NodePath, value: Variant):
-	_end_property_interpolation(node, property_path)
+func _start_property_interpolation(node: Node, config: ReplicationPropertyConfig, value: Variant):
+	_end_property_interpolation(node, config)
 	var tween := get_tree().create_tween()
-	tween.tween_property(node, property_path, value, INTERPOLATE_DURATION).from_current()
-	tween.finished.connect(_end_property_interpolation.bind(node, property_path))
+	tween.tween_property(node, config.name, value, INTERPOLATE_DURATION).from_current()
+	tween.finished.connect(_end_property_interpolation.bind(node, config))
 	var cleanup_callback := _node_exit_in_property_callback.bind(node)
 	if not node.tree_exited.is_connected(cleanup_callback):
 		node.tree_exited.connect(cleanup_callback, CONNECT_ONE_SHOT)
-	_property_interpolation_cache.get_or_add(node, {})[property_path] = tween
+	_property_interpolation_cache.get_or_add(node, {})[config] = tween
 
 ## Kills a property interpolation tween.
-func _end_property_interpolation(node: Node, property_path: NodePath):
-	if _has_property_interpolation(node, property_path):
-		var tween: Tween = _property_interpolation_cache[node][property_path]
+func _end_property_interpolation(node: Node, config: ReplicationPropertyConfig):
+	if _has_property_interpolation(node, config):
+		var tween: Tween = _property_interpolation_cache[node][config]
 		tween.pause()
 		tween.kill()
-		_property_interpolation_cache[node].erase(property_path)
+		_property_interpolation_cache[node].erase(config)
 		# not necessary to clean this up based on what our callers are doing
 		#if not _property_interpolation_cache[node]:
 			#_property_interpolation_cache.erase(node)
 
 func _cancel_all_property_interpolations(node: Node, update := true):
-	var properties: Array[NodePath] = []
+	var configs: Array[ReplicationPropertyConfig] = []
 	if node in _property_interpolation_cache:
-		for property_path: NodePath in _property_interpolation_cache[node].keys():
-			properties.append(property_path)
-			_end_property_interpolation(node, property_path)
+		for config: ReplicationPropertyConfig in _property_interpolation_cache[node].keys():
+			configs.append(config)
+			_end_property_interpolation(node, config)
 		_property_interpolation_cache.erase(node)
-	if properties and update:
-		update_node_value_cache(node, properties)
+	if update:
+		for c in configs:
+			_set_config_cache(node, c, node.get(c.name))
 
 func _node_exit_in_property_callback(node: Node):
 	_cancel_all_property_interpolations(node, false)
 	_property_interpolation_cache.erase(node)
 
 ## Returns true if a property interpolation is active.
-func _has_property_interpolation(node: Node, property_path: NodePath) -> bool:
-	return node in _property_interpolation_cache and property_path in _property_interpolation_cache[node]
+func _has_property_interpolation(node: Node, config: ReplicationPropertyConfig) -> bool:
+	return node in _property_interpolation_cache and config in _property_interpolation_cache[node]
 
 #endregion
 

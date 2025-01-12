@@ -6,18 +6,18 @@
 			{
 				"flags": 2,
 				"name": "position",
-				"recv_filter": 7,
+				"recv_filter": "Everyone",
 				"reliable": true,
-				"send_filter": 2,
-				"sync": 2
+				"send_filter": "Owner",
+				"sync": "Smooth"
 			},
 			{
 				"flags": 0,
 				"name": "color",
-				"recv_filter": 7,
+				"recv_filter": "Everyone",
 				"reliable": true,
-				"send_filter": 1,
-				"sync": 0
+				"send_filter": "Server",
+				"sync": "Once"
 			}
 		],
 		"signals": []
@@ -29,17 +29,17 @@
 				"flags": 0,
 				"name": "_request_zone",
 				"ratelimit": 0.1,
-				"recv_filter": 1,
+				"recv_filter": "Server",
 				"reliable": true,
-				"send_filter": 6
+				"send_filter": "All Clients"
 			},
 			{
 				"flags": 0,
 				"name": "_request_zone_callback",
 				"ratelimit": 0.0,
-				"recv_filter": 6,
+				"recv_filter": "All Clients",
 				"reliable": true,
-				"send_filter": 1
+				"send_filter": "Server"
 			}
 		],
 		"properties": [],
@@ -53,33 +53,33 @@
 				"flags": 0,
 				"name": "_cl_receive_reliable_properties",
 				"ratelimit": 0.0,
-				"recv_filter": 7,
+				"recv_filter": "All Clients",
 				"reliable": true,
-				"send_filter": 1
+				"send_filter": "Server"
 			},
 			{
 				"flags": 0,
 				"name": "_cl_receive_unreliable_properties",
 				"ratelimit": 0.0,
-				"recv_filter": 7,
-				"reliable": true,
-				"send_filter": 1
+				"recv_filter": "All Clients",
+				"reliable": false,
+				"send_filter": "Server"
 			},
 			{
 				"flags": 0,
 				"name": "_sv_receive_reliable_properties",
 				"ratelimit": 0.0,
-				"recv_filter": 7,
+				"recv_filter": "Server",
 				"reliable": true,
-				"send_filter": 1
+				"send_filter": "All Clients"
 			},
 			{
 				"flags": 0,
 				"name": "_sv_receive_unreliable_properties",
 				"ratelimit": 0.0,
-				"recv_filter": 7,
-				"reliable": true,
-				"send_filter": 1
+				"recv_filter": "Server",
+				"reliable": false,
+				"send_filter": "All Clients"
 			}
 		],
 		"properties": [],
@@ -93,17 +93,33 @@
 				"flags": 0,
 				"name": "_set_node_owner",
 				"ratelimit": 0.0,
-				"recv_filter": 7,
+				"recv_filter": "All Clients",
 				"reliable": true,
-				"send_filter": 1
+				"send_filter": "Server"
 			},
 			{
 				"flags": 0,
 				"name": "update_visibility",
 				"ratelimit": 0.0,
-				"recv_filter": 7,
+				"recv_filter": "All Clients",
 				"reliable": true,
-				"send_filter": 1
+				"send_filter": "Server"
+			},
+			{
+				"flags": 0,
+				"name": "_signal_replicate_reliable",
+				"ratelimit": 0.0,
+				"recv_filter": "Everyone",
+				"reliable": true,
+				"send_filter": "Everyone"
+			},
+			{
+				"flags": 0,
+				"name": "_signal_replicate_unreliable",
+				"ratelimit": 0.0,
+				"recv_filter": "Everyone",
+				"reliable": false,
+				"send_filter": "Everyone"
 			}
 		],
 		"properties": [],
@@ -116,27 +132,27 @@
 				"flags": 0,
 				"name": "_request_pressed",
 				"ratelimit": 0.0,
-				"recv_filter": 1,
+				"recv_filter": "Server",
 				"reliable": true,
-				"send_filter": 6
+				"send_filter": "All Clients"
 			}
 		],
 		"properties": [
 			{
 				"flags": 0,
 				"name": "press_count",
-				"recv_filter": 7,
+				"recv_filter": "Everyone",
 				"reliable": true,
-				"send_filter": 1,
-				"sync": 1
+				"send_filter": "Server",
+				"sync": "Request"
 			},
 			{
 				"flags": 0,
 				"name": "position",
-				"recv_filter": 7,
+				"recv_filter": "Everyone",
 				"reliable": true,
-				"send_filter": 1,
-				"sync": 0
+				"send_filter": "Server",
+				"sync": "Once"
 			}
 		],
 		"signals": []
@@ -148,18 +164,18 @@
 			{
 				"flags": 0,
 				"name": "position",
-				"recv_filter": 7,
+				"recv_filter": "Everyone",
 				"reliable": true,
-				"send_filter": 1,
-				"sync": 0
+				"send_filter": "Server",
+				"sync": "Once"
 			},
 			{
 				"flags": 0,
 				"name": "rotation",
-				"recv_filter": 7,
+				"recv_filter": "Everyone",
 				"reliable": true,
-				"send_filter": 1,
-				"sync": 0
+				"send_filter": "Server",
+				"sync": "Once"
 			}
 		],
 		"signals": []

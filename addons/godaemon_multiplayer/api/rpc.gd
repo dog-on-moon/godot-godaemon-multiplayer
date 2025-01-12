@@ -74,19 +74,9 @@ func outbound_rpc(peer: int, object: Object, method: StringName, args: Array) ->
 		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc attempted to send RPC on configless method %s" % [method])
 		return ERR_UNCONFIGURED
 	
-	if object is Node:
-		if api.is_server():
-			if not config.get_send_filter_flag(ReplicationConfigBase.Filter.Server):
-				push_error("Could not RPC protected method %s for server (%s)" % [method, script.resource_path])
-				return ERR_UNCONFIGURED
-		elif api.local_peer == Godaemon.get_node_owner(object):
-			if not config.get_send_filter_flag(ReplicationConfigBase.Filter.Owner):
-				push_error("Could not RPC protected method %s for owner (%s)" % [method, script.resource_path])
-				return ERR_UNCONFIGURED
-		else:
-			if not config.get_send_filter_flag(ReplicationConfigBase.Filter.Client):
-				push_error("Could not RPC protected method %s for client (%s)" % [method, script.resource_path])
-				return ERR_UNCONFIGURED
+	if object is Node and not config.can_we_send(object):
+		push_error("Could not RPC protected method %s for server (%s)" % [method, script.resource_path])
+		return ERR_UNCONFIGURED
 	
 	var method_idx: int = sr.get_idx_from_method_config(config)
 	if method_idx >= MAX_RPC_METHODS:
@@ -125,13 +115,8 @@ func outbound_rpc(peer: int, object: Object, method: StringName, args: Array) ->
 		# We don't have to care about the server filter here.
 		if object is Node:
 			for p in target_peers.duplicate():
-				var p_is_owner: bool = (p == Godaemon.get_node_owner(object))
-				if p_is_owner:
-					if not config.get_recv_filter_flag(ReplicationConfigBase.Filter.Owner):
-						target_peers.erase(p)
-				else:
-					if not config.get_recv_filter_flag(ReplicationConfigBase.Filter.Client):
-						target_peers.erase(p)
+				if not config.can_they_recv(object, p):
+					target_peers.erase(p)
 		else:
 			if not config.get_recv_filter_flag(ReplicationConfigBase.Filter.Client):
 				target_peers.clear()
@@ -217,18 +202,9 @@ func inbound_rpc(id: int, bytes: PackedByteArray):
 	
 	# On the server, re-validate the send filters for this inbound RPC.
 	if api.is_server() and object is Node:
-		if from_peer == 1:
-			if not config.get_send_filter_flag(ReplicationConfigBase.Filter.Server):
-				push_error("Blocked received RPC %s for server (%s)" % [method, script.resource_path])
-				return ERR_UNCONFIGURED
-		elif to_peer_is_owner:
-			if not config.get_send_filter_flag(ReplicationConfigBase.Filter.Owner):
-				push_error("Blocked received RPC %s for owner (%s)" % [method, script.resource_path])
-				return ERR_UNCONFIGURED
-		else:
-			if not config.get_send_filter_flag(ReplicationConfigBase.Filter.Client):
-				push_error("Blocked received RPC %s for client (%s)" % [method, script.resource_path])
-				return ERR_UNCONFIGURED
+		if not config.can_they_send(object, from_peer):
+			push_error("Blocked received RPC %s for server (%s)" % [method, script.resource_path])
+			return ERR_UNCONFIGURED
 	
 	# Test ratelimit.
 	if not _check_rpc_ratelimit(from_peer, config):
@@ -257,8 +233,8 @@ func inbound_rpc(id: int, bytes: PackedByteArray):
 	elif to_peer > 0:
 		# This RPC is specifically from a client, but for another client (client => client)
 		# So we will have to forward it back to that peer.
-		if to_peer_is_owner:
-			if config.get_recv_filter_flag(ReplicationConfigBase.Filter.Owner):
+		if object is Node:
+			if config.can_they_recv(object, to_peer):
 				srs_override = from_peer
 				callable.rpc_id(to_peer)
 				srs_override = 0
@@ -282,13 +258,8 @@ func inbound_rpc(id: int, bytes: PackedByteArray):
 				if p == skip_peer or p == 1 or p == from_peer:
 					continue
 				if object is Node:
-					var p_is_owner := p == Godaemon.get_node_owner(object)
-					if p_is_owner:
-						if config.get_recv_filter_flag(ReplicationConfigBase.Filter.Owner):
-							callable.rpc_id(p)
-					else:
-						if config.get_recv_filter_flag(ReplicationConfigBase.Filter.Client):
-							callable.rpc_id(p)
+					if config.can_they_recv(object, p):
+						callable.rpc_id(p)
 				else:
 					callable.rpc_id(p)
 			srs_override = 0
@@ -313,7 +284,7 @@ func compress_rpc(from_peer: int, to_peer: int, object: Object, method_idx: int,
 	var packing_args := args.size() != 0
 	if packing_args:
 		header_data ^= 1
-	var dense_args := args and args[0] is PackedByteArray
+	var dense_args := (args.size() == 1) and (args[0] is PackedByteArray)
 	if dense_args:
 		header_data ^= 2
 	stream.write_u8(header_data)

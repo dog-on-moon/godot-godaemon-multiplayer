@@ -37,8 +37,8 @@ func get_call_local() -> bool:
 func serialize() -> Dictionary:
 	return {
 		'name': name,
-		'send_filter': send_filter,
-		'recv_filter': recv_filter,
+		'send_filter': serialize_filter(send_filter),
+		'recv_filter': serialize_filter(recv_filter),
 		'reliable': reliable,
 		'ratelimit': ratelimit,
 		'flags': flags,
@@ -47,8 +47,8 @@ func serialize() -> Dictionary:
 static func deserialize(d: Dictionary) -> ReplicationMethodConfig:
 	var c := ReplicationMethodConfig.new()
 	c.name = d.name
-	c.send_filter = int(d.send_filter)
-	c.recv_filter = int(d.recv_filter)
+	c.send_filter = deserialize_filter(d.send_filter)
+	c.recv_filter = deserialize_filter(d.recv_filter)
 	c.reliable = bool(d.reliable)
 	c.ratelimit = float(d.ratelimit)
 	c.flags = int(d.flags)

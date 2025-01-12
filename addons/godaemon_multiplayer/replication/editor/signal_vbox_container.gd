@@ -48,6 +48,7 @@ func _ready() -> void:
 						if not sr.get_signal_config(s.name):
 							var config := ReplicationSignalConfig.new()
 							config.name = s.name
+							update_config_arg_count(script, config)
 							sr.signal_config.append(config)
 							sr.signal_config = sr.signal_config
 							_set_script(script)
@@ -71,6 +72,7 @@ func _set_script(script: Script):
 				for a in args:
 					if config.name == arg_to_name(a):
 						found = true
+						update_config_arg_count(script, config)
 						break
 				if not found:
 					# This config is dead.
@@ -113,3 +115,16 @@ func get_tscn() -> SignalReplicationConfig:
 	var c := SIGNAL_REPLICATION_CONFIG.instantiate()
 	c.request_update.connect(request_update)
 	return c
+
+static func update_config_arg_count(s: Script, c: ReplicationSignalConfig):
+	var d := signal_name_to_dict(s, c.name)
+	if d:
+		c.arg_count = d.args.size()
+	else:
+		print('Could not update signal arg count')
+
+static func signal_name_to_dict(s: Script, n: String) -> Dictionary:
+	for asdf in s.get_script_signal_list():
+		if asdf.name == n:
+			return asdf
+	return {}

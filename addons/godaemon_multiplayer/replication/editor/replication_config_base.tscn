@@ -189,5 +189,6 @@ text = "Don't Sync to Owner"
 
 [node name="DebugPrint" type="CheckBox" parent="Contents/VBoxContainer/HFlowContainer"]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 text = "Debug Print"

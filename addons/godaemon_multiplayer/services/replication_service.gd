@@ -6,18 +6,19 @@ class_name ReplicationService
 
 signal node_owner_updated(node: Node)
 
-signal enter_replicated_scene(scene: Node)
-signal exit_replicated_scene(scene: Node)
+signal enter_replication(node: Node)
+signal exit_replication(node: Node)
 
-## A dictionary map of replicated scenes to their peer visibility states.
-var replicated_scenes := {}
+## A dictionary map of replicated nodes to their visibility states.
+## This contains every replicated script in the multiplayer tree.
+var replication_visibility := {}
 
-## A dictionary map of sub-replicated scenes -- replicated scenes defined as defaults within other ones.
-var default_sub_replicated_scenes := {}
+## A set of sub-replicated scenes -- replicated scenes defined as defaults within other ones.
+var default_replication_set := {}
 
 func _enter_tree() -> void:
 	# Look for existing replicated scenes, setup initial signals.
-	_replicated_scene_search(mp)
+	_replication_search(mp)
 	if mp.is_server():
 		mp.peer_connected.connect(_peer_connected)
 		mp.peer_disconnected.connect(_peer_disconnected)
@@ -32,7 +33,7 @@ func _peer_connected(peer: int):
 	_update_visibility(peer, added_nodes, [])
 
 func _peer_disconnected(peer: int):
-	for visibility_dict in replicated_scenes.values():
+	for visibility_dict in replication_visibility.values():
 		visibility_dict.erase(peer)
 	for visibility_dict in _visibility_cache.values():
 		visibility_dict.erase(peer)
@@ -40,7 +41,7 @@ func _peer_disconnected(peer: int):
 #region Service Internals
 
 func _target_peer_modifier(from_peer: int, target_peers: Array[int], node: Node, method: StringName, args: Array):
-	if node in replicated_scenes:
+	if node in replication_visibility:
 		var valid_peers := get_observing_peers(node)
 		if target_peers == [0]:
 			target_peers.clear()
@@ -55,7 +56,7 @@ func _target_peer_modifier(from_peer: int, target_peers: Array[int], node: Node,
 			target_peers.assign(target_peers.filter(func (p: int): return p in valid_peers and p != skip_peer))
 
 func _rpc_filter(from_peer: int, to_peer: int, node: Node, method: StringName, args: Array):
-	if node in replicated_scenes:
+	if node in replication_visibility:
 		var valid_peers := get_observing_peers(node)
 		if from_peer != 1 and from_peer not in valid_peers:
 			return false
@@ -67,57 +68,73 @@ func _rpc_filter(from_peer: int, to_peer: int, node: Node, method: StringName, a
 
 #region Replication Setup
 
-# Searches for replicated scenes.
-func _replicated_scene_search(node: Node):
-	# Only ever scan a node once
-	if node.child_entered_tree.is_connected(_node_child_entered_tree):
+# Searches for scenes & replicated scripts.
+func _replication_search(node: Node):
+	# Only ever scan a node once.
+	if node.child_entered_tree.is_connected(_replication_search):
 		return
+	
+	var sr := ReplicationData.get_script_replication(node.get_script())
+	
+	# Setup signal replication.
+	if sr:
+		_setup_signal_replication(node, sr)
 	
 	# Only the server will catalog IDs and replicated scenes,
 	# but will tell the client them during replication.
 	# The client will still use the exit trees below to cleanup leaving IDs
 	if mp.is_server():
-		# Setup RPC index.
+		# Setup unique networking ID.
 		if mp.api.repository.get_id(node) == -1:
 			mp.api.repository.add_object(node)
 		
 		# Does this node have replicated properties?
-		const key := &"1"  # REPCO.META_REPLICATE_SCENE
-		if node.has_meta(key) and node not in replicated_scenes:
-			# Register the node, and set its default global replication.
-			# Node.owner will only be set at this point if the replicated scene
-			# is instantiated within another replicated scene, so we assume
-			# those to be TRUE by default and then simply DELETE them later on client replication.
-			replicated_scenes[node] = {1: node.owner in replicated_scenes}
-			if node.owner in replicated_scenes:
-				default_sub_replicated_scenes[node] = true
-			enter_replicated_scene.emit(node)
+		if (sr or node.scene_file_path) and node not in replication_visibility:
+			# Visibility exists for all scenes & all nodes with a replicated script.
+			# However, there is a certain case where we should mark them as
+			# "visible" by default -- if their "owner" is already being tracked.
+			# This is specifically for instantiating packed scenes correctly,
+			# as we want the client to receive the entire replicated scene.
+			# (Also, the root/service are always visible, since theyre generated naturally,
+			#  but DONT SET THEIR VISIBILITY, PLEASE!!)
+			var visible_by_default := node.owner in replication_visibility or node is MultiplayerRoot or node is ServiceBase
+			replication_visibility[node] = {1: node.owner in replication_visibility}
+			
+			# In addition to nodes being visible by default,
+			# we also defer their instantiation on the client in a complex way.
+			# Node IDs are sorted in reverse when adding to the client,
+			# so this flag helps to ensure that the _ready order of nodes
+			# on the client matches how they are instantiated on the server.
+			if visible_by_default:
+				default_replication_set[node] = true
+			
+			enter_replication.emit(node)
 	
 	# Setup signals on this node.
-	node.child_entered_tree.connect(_node_child_entered_tree)
-	node.tree_exiting.connect(_node_tree_exiting.bind(node), CONNECT_ONE_SHOT)
+	node.child_entered_tree.connect(_replication_search)
+	node.tree_exiting.connect(_node_tree_exiting.bind(node))
 	
 	# Continue iteration.
 	if node.is_node_ready():
 		for child in node.get_children():
-			_replicated_scene_search(child)
+			_replication_search(child)
 
 func _node_tree_exiting(node: Node):
-	if node in replicated_scenes:
+	# Only cleanup a node when it is actually being deleted.
+	if not node.is_queued_for_deletion():
+		return
+	
+	if node in replication_visibility:
 		if mp.api:
 			for peer in get_observing_peers(node):
 				_update_visibility(peer, [], [node])
-		replicated_scenes.erase(node)
-		exit_replicated_scene.emit(node)
-	default_sub_replicated_scenes.erase(node)
+		replication_visibility.erase(node)
+		exit_replication.emit(node)
+	default_replication_set.erase(node)
 	if node in _visibility_cache:
 		_visibility_cache.erase(node)
-	node.child_entered_tree.disconnect(_node_child_entered_tree)
 	if mp.api and mp.api.repository and mp.api.repository.get_id(node) != -1:
 		mp.api.repository.remove_object(node)
-
-func _node_child_entered_tree(node: Node):
-	_replicated_scene_search(node)
 
 #endregion
 
@@ -131,11 +148,11 @@ func get_true_visibility(node: Node, peer: int) -> bool:
 	if peer in _visibility_cache.get(node, {}):
 		return _visibility_cache[node][peer]
 	var visible := true
-	var ancestry := _get_replicated_scene_ancestors(node)
+	var ancestry := _get_replicated_ancestors(node)
 	for n in ancestry:
 		# Check the visibility settings for the current node.
-		var default_visibility: bool = replicated_scenes[n][1]
-		var visibility: bool = replicated_scenes[n].get(peer, default_visibility)
+		var default_visibility: bool = replication_visibility[n][1]
+		var visibility: bool = replication_visibility[n].get(peer, default_visibility)
 		
 		# If not visible, then the base node is certainly not visible.
 		if not visibility:
@@ -146,7 +163,7 @@ func get_true_visibility(node: Node, peer: int) -> bool:
 
 func _clear_visibility_cache(node: Node, peer := 1):
 	if node in _visibility_cache:
-		for n in _get_replicated_scene_descendants(node):
+		for n in _get_replicated_descendants(node):
 			if peer == 1:
 				_visibility_cache.erase(n)
 			elif peer in _visibility_cache[n]:
@@ -155,7 +172,7 @@ func _clear_visibility_cache(node: Node, peer := 1):
 ## Returns a set of all nodes visible for this peer.
 func get_visible_nodes_for_peer(peer: int, root: Node = null) -> Dictionary:
 	var dict := {}
-	var search := replicated_scenes if not root else _get_replicated_scene_descendants(root)
+	var search := replication_visibility if not root else _get_replicated_descendants(root)
 	for node in search:
 		if get_true_visibility(node, peer):
 			dict[node] = null
@@ -180,21 +197,119 @@ func get_observing_peers(node: Node) -> Dictionary:
 			peers[peer] = null
 	return peers
 
-func _get_replicated_scene_ancestors(node: Node) -> Dictionary:
+func _get_replicated_ancestors(node: Node) -> Dictionary:
 	var ancestors := {node: null}
 	node = node.get_parent()
 	while node != mp:
-		if node in replicated_scenes:
+		if node in replication_visibility:
 			ancestors[node] = null
 		node = node.get_parent()
 	return ancestors
 
-func _get_replicated_scene_descendants(node: Node) -> Dictionary:
+func _get_replicated_descendants(node: Node) -> Dictionary:
 	var descendants := {node: null}
-	for n in replicated_scenes:
+	for n in replication_visibility:
 		if node.is_ancestor_of(n):
 			descendants[n] = null
 	return descendants
+
+#endregion
+
+#region Signal Replication
+
+## Sets up signal replication for a node. Called on server and client.
+func _setup_signal_replication(node: Node, sr: ScriptReplication):
+	for c in sr.signal_config:
+		if c.can_we_send(node):
+			node.connect(StringName(c.name), _on_signal_emit.bind(node, sr, c))
+
+var _signal_loop_block := {}
+
+func _on_signal_emit(
+		arg1: Variant = null, arg2: Variant = null, arg3: Variant = null, arg4: Variant = null,
+		arg5: Variant = null, arg6: Variant = null, arg7: Variant = null, arg8: Variant = null,
+		node: Node = null, sr: ScriptReplication = null, c: ReplicationSignalConfig = null
+		):
+	if _is_signal_loop_blocked(node, c):
+		return
+	
+	var args: Array = []
+	if c.arg_count >= 1: args.append(arg1)
+	if c.arg_count >= 2: args.append(arg2)
+	if c.arg_count >= 3: args.append(arg3)
+	if c.arg_count >= 4: args.append(arg4)
+	if c.arg_count >= 5: args.append(arg5)
+	if c.arg_count >= 6: args.append(arg6)
+	if c.arg_count >= 7: args.append(arg7)
+	if c.arg_count >= 8: args.append(arg8)
+	if c.arg_count >= 9: assert(false, "Replicated signal max argument reached")
+	
+	var idx := sr.get_idx_from_signal_config(c)
+	for p in get_observing_peers(node):
+		if c.can_they_recv(node, p):
+			if c.reliable:
+				_signal_replicate_reliable.rpc_id(p, idx, args)
+			else:
+				_signal_replicate_unreliable.rpc_id(p, idx, args)
+
+@rpc
+func _signal_replicate_reliable(node_id: int, idx: int, args: Array):
+	_signal_replicate(node_id, idx, args)
+
+@rpc
+func _signal_replicate_unreliable(node_id: int, idx: int, args: Array):
+	_signal_replicate(node_id, idx, args)
+
+func _signal_replicate(node_id: int, idx: int, args: Array):
+	var node := mp.api.repository.get_object(node_id)
+	if not node:
+		return
+	var script := node.get_script()
+	if not script:
+		return
+	var sr := ReplicationData.get_script_replication(script)
+	if not sr:
+		return
+	if idx < 0 or idx >= sr.signal_config.size():
+		return
+	var c := sr.signal_config[idx]
+	if not c.can_we_recv(node):
+		return
+	_set_signal_loop_block(node, c, true)
+	match args.size():
+		0: node.emit_signal(c.name)
+		1: node.emit_signal(c.name, args[0])
+		2: node.emit_signal(c.name, args[0], args[1])
+		3: node.emit_signal(c.name, args[0], args[1], args[2])
+		4: node.emit_signal(c.name, args[0], args[1], args[2], args[3])
+		5: node.emit_signal(c.name, args[0], args[1], args[2], args[3], args[4])
+		6: node.emit_signal(c.name, args[0], args[1], args[2], args[3], args[4], args[5])
+		7: node.emit_signal(c.name, args[0], args[1], args[2], args[3], args[4], args[5], args[6])
+		8: node.emit_signal(c.name, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7])
+		9: assert(false)
+	_set_signal_loop_block(node, c, false)
+
+func _set_signal_loop_block(node: Node, c: ReplicationSignalConfig, block: bool):
+	if block:
+		if node not in _signal_loop_block:
+			_signal_loop_block[node] = {}
+		if c not in _signal_loop_block[node]:
+			_signal_loop_block[node][c] = 0
+		_signal_loop_block[node][c] += 1
+	else:
+		if node in _signal_loop_block:
+			if c in _signal_loop_block[node]:
+				_signal_loop_block[node][c] -= 1
+				if _signal_loop_block[node][c] <= 0:
+					_signal_loop_block[node].erase(c)
+					if not _signal_loop_block[node]:
+						_signal_loop_block.erase(node)
+
+func _is_signal_loop_blocked(node: Node, c: ReplicationSignalConfig) -> bool:
+	if node in _signal_loop_block:
+		if c in _signal_loop_block[node]:
+			return true
+	return false
 
 #endregion
 
@@ -203,24 +318,22 @@ func _get_replicated_scene_descendants(node: Node) -> Dictionary:
 var _client_scene_remaps: Dictionary[PackedScene, PackedScene] = {}
 
 ## Tells the ReplicationService to transform a received scene into
-## another one, who is presumably nearly identical.
+## another one, who must be identical in structure.
 func remap_scene(from_scene: PackedScene, into_scene: PackedScene):
 	assert(mp.is_client())
-	#assert(ReplicationCacheManager.get_index(from_scene.resource_path) != -1)
-	#assert(ReplicationCacheManager.get_index(into_scene.resource_path) != -1)
 	_client_scene_remaps[from_scene] = into_scene
 
 #endregion
 
 #region Visibility
 
-## Sets the networked visibility of a scene.
+## Sets the networked visibility of a replicated script.
 func set_visibility(node: Node, visibility: bool):
 	assert(mp.is_server())
 	assert(node.is_node_ready())
-	assert(node in replicated_scenes, "Node was not registered as a replicated scene.")
+	assert(node in replication_visibility, "Node was not a scene, nor registered as a replicated script.")
 	var old_visibility := get_visible_nodes(node)
-	replicated_scenes[node][1] = visibility
+	replication_visibility[node][1] = visibility
 	_clear_visibility_cache(node)
 	var new_visibility := get_visible_nodes(node)
 	_update_nodes(old_visibility, new_visibility)
@@ -228,9 +341,9 @@ func set_visibility(node: Node, visibility: bool):
 ## Overrides the networked visibility of a scene per peer.
 func set_peer_visibility(node: Node, peer: int, visibility: bool):
 	assert(mp.is_server())
-	assert(node in replicated_scenes, "Node was not registered as a replicated scene.")
+	assert(node in replication_visibility, "Node was not a scene, nor registered as a replicated script.")
 	var old_peer_visibility := get_visible_nodes_for_peer(peer, node)
-	replicated_scenes[node][peer] = visibility
+	replication_visibility[node][peer] = visibility
 	_clear_visibility_cache(node, peer)
 	var new_peer_visibility := get_visible_nodes_for_peer(peer, node)
 	_update_peer_nodes(peer, old_peer_visibility, new_peer_visibility)
@@ -238,9 +351,9 @@ func set_peer_visibility(node: Node, peer: int, visibility: bool):
 ## Clears the networked visibility's peer override.
 func clear_peer_visibility(node: Node, peer: int):
 	assert(mp.is_server())
-	assert(node in replicated_scenes, "Node was not registered as a replicated scene.")
+	assert(node in replication_visibility, "Node was not a scene, nor registered as a replicated script.")
 	var old_peer_visibility := get_visible_nodes_for_peer(peer, node)
-	replicated_scenes[node].erase(peer)
+	replication_visibility[node].erase(peer)
 	_clear_visibility_cache(node, peer)
 	var new_peer_visibility := get_visible_nodes_for_peer(peer, node)
 	_update_peer_nodes(peer, old_peer_visibility, new_peer_visibility)
@@ -253,11 +366,11 @@ func clear_peer_visibility(node: Node, peer: int):
 ## This is a special peer ID that is replicated across clients.
 func set_node_owner(node: Node, peer: int = 1):
 	assert(mp.is_server())
-	#node.set_meta(REPCO.META_OWNER, peer)
+	node.set_meta(Godaemon.META_OWNER, peer)
 	
 	# Tell each observing peer who the new owner is.
 	if node.is_node_ready():
-		assert(node in replicated_scenes)
+		assert(node in replication_visibility)
 		var stream := PackedByteStream.new()
 		stream.setup_write(4 + mp.api.repository.MAX_BYTES)
 		stream.write_unsigned(mp.api.repository.get_id(node), mp.api.repository.MAX_BYTES)
@@ -276,28 +389,8 @@ func _set_node_owner(bytes: PackedByteArray):
 	if not node_id:
 		push_warning("ReplicationService._set_node_owner could not find node ID %s" % node_id)
 		return
-	#node.set_meta(REPCO.META_OWNER, peer)
+	node.set_meta(Godaemon.META_OWNER, peer)
 	node_owner_updated.emit(node)
-
-#endregion
-
-#region Node Operations
-
-## Reparents a replicated scene to a target parent, keeping visibility information persistent.
-func reparent_scene(node: Node, parent: Node):
-	assert(mp.is_server())
-	assert(node in replicated_scenes)
-	assert(mp.api.repository.get_id(parent))
-	# TODO - Better keep replication information for sub-replicated scenes,
-	#        and probably even try to keep the node ID as well
-	var visibility_dict: Dictionary = replicated_scenes[node].duplicate()
-	var global_visible: bool = visibility_dict[1]
-	visibility_dict.erase(1)
-	node.get_parent().remove_child(node)
-	parent.add_child(node)
-	set_visibility(node, global_visible)
-	for peer in visibility_dict:
-		set_peer_visibility(node, peer, visibility_dict[peer])
 
 #endregion
 
@@ -328,18 +421,26 @@ func _update_peer_nodes(peer: int, old_peer_visibility: Dictionary, new_peer_vis
 var _rpc_added_nodes: Array[Node] = []
 var _rpc_removed_nodes: Array[Node] = []
 
+func np_sort_func(a: Node, b: Node):
+	return mp.api.repository.get_id(a) < mp.api.repository.get_id(b)
+
 func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Array[Node]):
 	if peer not in mp.api.get_peers() or not is_inside_tree():
 		return
+	
 	# Ensure nodes are inside tree.
-	added_nodes.assign(added_nodes.filter(func (n: Node): return n.is_inside_tree()))
-	removed_nodes.assign(removed_nodes.filter(func (n: Node): return n.is_inside_tree()))
+	for idx in range(added_nodes.size() - 1, -1, -1):
+		if not added_nodes[idx].is_inside_tree():
+			added_nodes.pop_at(idx)
+	for idx in range(removed_nodes.size() - 1, -1, -1):
+		if not removed_nodes[idx].is_inside_tree():
+			removed_nodes.pop_at(idx)
 	
 	# Cull removed nodes that are the child of other removed nodes.
 	var culled_removed_nodes: Array[Node] = []
 	for node in removed_nodes:
 		var is_child := false
-		var ancestors := _get_replicated_scene_ancestors(node)
+		var ancestors := _get_replicated_ancestors(node)
 		for other in removed_nodes:
 			if node == other:
 				continue
@@ -351,9 +452,7 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 		culled_removed_nodes.append(node)
 	removed_nodes = culled_removed_nodes
 	
-	# Sort nodepaths by shortest to longest.
-	var np_sort_func := func (a: Node, b: Node):
-		return mp.api.repository.get_id(a) < mp.api.repository.get_id(b)
+	# Sort node IDs by largest to smallest.
 	if added_nodes:
 		added_nodes.sort_custom(np_sort_func)
 	if removed_nodes:
@@ -366,51 +465,60 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 		if parent_id == -1:
 			push_warning("Could not replicate node %s to peer (parent missing repository ID).\nEnsure the parent is in a replicated scene." % node)
 			continue
-		var scene_uid := ReplicationData.path_to_uid(node.scene_file_path)
-		if scene_uid == -1:
-			push_warning("Could not replicate node to peer (scene '%s' missing UID)" % [node.scene_file_path])
+		
+		# Get the replication data for this node.
+		var script := node.get_script()
+		var sr := ReplicationData.get_script_replication(script)
+		if not sr:
+			assert(false, "This should not happen")
 			continue
+		
+		# Determine the UID we spawn for it.
+		# If it is a scene, we spawn the whole damn scene!!
+		# Otherwise, spawn the individual script.
+		var node_uid: int = -1
+		if node.scene_file_path:
+			node_uid = ReplicationData.path_to_uid(node.scene_file_path)
+		else:
+			node_uid = ReplicationData.path_to_uid(node.get_script().resource_path)
 		
 		var property_values := []
 		var node_owner := Godaemon.get_node_owner(node)
 		
-		#var replication_data: Dictionary = node.get_meta(REPCO.META_SYNC_PROPERTIES, {})
-		#for property_path: NodePath in replication_data:
-			#var property_data: Array = replication_data[property_path]
-			#match property_data[1]:  # match receive filter
-				#REPCO.PeerFilter.SERVER:
-					#continue
-				#REPCO.PeerFilter.OWNER_SERVER:
-					#if peer != node_owner:
-						#continue
-				#REPCO.PeerFilter.NOT_OWNER:
-					#if peer == node_owner:
-						#continue
-			#var node_path := NodePath(property_path.get_concatenated_names())
-			#var prop_path := NodePath(property_path.get_concatenated_subnames())
-			#var target_node := node.get_node(node_path) if node_path else node
-			#var value := target_node.get_indexed(prop_path)
-			#property_values.append(value)
-		
-		var packed_scene: PackedScene = load(node.scene_file_path)
-		var scene_state := packed_scene.get_state()
+		for config in sr.property_config:
+			# We replicate all listed properties to the client initially.
+			# Though, only be sure to replicate those that they care about.
+			if not config.can_they_recv(node, peer):
+				continue
+			
+			# Get the property value for this node.
+			property_values.append(node.get(config.name))
 		
 		var node_ids := []
-		for node_idx in scene_state.get_node_count():
-			var node_path := scene_state.get_node_path(node_idx)
-			var subnode := node.get_node_or_null(node_path)
-			if subnode:
-				var subnode_id := mp.api.repository.get_id(subnode)
-				node_ids.append(subnode_id if subnode_id != -1 else 0)
-			else:
-				node_ids.append(0)
+		if node.scene_file_path:
+			# Scenes will track all node IDs for all the nodes they are
+			# expected to respawn on the client.
+			var packed_scene: PackedScene = load(node.scene_file_path)
+			var scene_state := packed_scene.get_state()
+			for node_idx in scene_state.get_node_count():
+				var node_path := scene_state.get_node_path(node_idx)
+				var subnode := node.get_node_or_null(node_path)
+				if subnode:
+					var subnode_id := mp.api.repository.get_id(subnode)
+					node_ids.append(subnode_id if subnode_id != -1 else 0)
+				else:
+					node_ids.append(0)
+		else:
+			# This is just a script, so only track its own ID.
+			node_ids.append(mp.api.repository.get_id(node))
 		
-		var deferred := node in default_sub_replicated_scenes
+		# Defer node recreation on the client.
+		var deferred := node in default_replication_set
 		
 		var add_data := [
 			parent_id,
 			node_owner,
-			scene_uid,
+			node_uid,
 			property_values,
 			node_ids,
 			deferred,
@@ -455,15 +563,15 @@ func update_visibility(data: PackedByteArray):
 	for add_data in added_node_data:
 		var parent_id: int = add_data[0]
 		var node_owner: int = add_data[1]
-		var scene_uid: int = add_data[2]
+		var node_uid: int = add_data[2]
 		var property_values: Array = add_data[3]
 		var node_ids: Array = add_data[4]
 		var deferred: bool = add_data[5]
 		
 		# Create scene.
-		var sfp := ReplicationData.uid_to_path(scene_uid)
-		if not sfp:
-			push_warning("Received invalid scene path in visibility update.")
+		var resource_path := ReplicationData.uid_to_path(node_uid)
+		if not resource_path:
+			push_warning("Received invalid resource path in visibility update.")
 			continue
 		
 		# Find parent.
@@ -472,79 +580,101 @@ func update_visibility(data: PackedByteArray):
 			push_warning("Received unknown parent node ID %s in visibility update.\nThe server must communicate the replicated scene's parent node ID to the client in advance." % parent_id)
 			continue
 		
-		# Load scene, set properties.
-		var packed_scene: PackedScene = load(sfp)
-		packed_scene = _client_scene_remaps.get(packed_scene, packed_scene)
+		# Load resource path.
+		var resource: Resource = load(resource_path)
+		if resource is Script:
+			# Create script, set properties.
+			var script: Script = resource
+			var node: Node = script.new()
+			node.set_meta(Godaemon.META_OWNER, node_owner)
+			
+			# Load the root node's script replication.
+			var sr: ScriptReplication = ReplicationData.get_script_replication(script)
+			if not sr:
+				assert(false, "How")
+				continue
+			
+			var true_idx := -1
+			for config in sr.property_config:
+				if not config.can_we_recv(node):
+					continue
+				true_idx += 1
+				node.set(config.name, property_values[true_idx])
 		
-		var scene_state := packed_scene.get_state()
-		var scene: Node = packed_scene.instantiate()
-		#scene.set_meta(REPCO.META_OWNER, node_owner)
+			# Finally, add node.
+			if deferred:
+				deferred_entries.append([parent, node])
+			else:
+				replication_visibility[node] = {}
+				enter_replication.emit(node)
+				parent.add_child(node)
+			
+		elif resource is PackedScene:
+			# Load scene, set properties.
+			var packed_scene: PackedScene = resource
+			packed_scene = _client_scene_remaps.get(packed_scene, packed_scene)
+			
+			var scene_state := packed_scene.get_state()
+			var scene: Node = packed_scene.instantiate()
+			scene.set_meta(Godaemon.META_OWNER, node_owner)
+			
+			var script := scene.get_script()
+			if not script:
+				push_warning("Could not replicate scene %s (root node missing replicated script)." % resource_path)
+				continue
+			
+			# Load owners/IDs first.
+			for node_idx in scene_state.get_node_count():
+				if node_idx >= node_ids.size():
+					push_warning("Received out of bounds node ids on scene.")
+					break
+				var node_path := scene_state.get_node_path(node_idx)
+				var subnode := scene.get_node_or_null(node_path)
+				if subnode:
+					var subnode_script := subnode.get_script()
+					if subnode != scene and ReplicationData.get_script_replication(subnode_script):
+						# Delete sub-replicated scripts of the initial scene,
+						# replication for them will happen separately.
+						subnode.queue_free()
+						subnode.get_parent().remove_child(subnode)
+					else:
+						var node_id: int = node_ids[node_idx]
+						if node_id == 0:
+							subnode.queue_free()
+							subnode.get_parent().remove_child(subnode)
+						else:
+							mp.api.repository.add_object(subnode, node_id)
+				else:
+					push_warning("Could not find subnode %s on received scene %s. Weird" % [node_path, packed_scene.resource_path])
+					continue
+			
+			# Optionally load the root node's script replication.
+			var sr: ScriptReplication = ReplicationData.get_script_replication(script)
+			if sr:
+				var true_idx := -1
+				for config in sr.property_config:
+					if not config.can_we_recv(scene):
+						continue
+					true_idx += 1
+					scene.set(config.name, property_values[true_idx])
 		
-		# Load owners/IDs first.
-		for node_idx in scene_state.get_node_count():
-			if node_idx >= node_ids.size():
-				push_warning("Received out of bounds node ids on scene.")
-				break
-			var node_path := scene_state.get_node_path(node_idx)
-			var subnode := scene.get_node_or_null(node_path)
-			#if subnode:
-				#if subnode != scene and subnode.has_meta(REPCO.META_REPLICATE_SCENE):
-					## Delete sub-replicated scenes of the initial scene,
-					## replication for them will happen separately.
-					#subnode.queue_free()
-					#subnode.get_parent().remove_child(subnode)
-				#else:
-					#var node_id: int = node_ids[node_idx]
-					#if node_id == 0:
-						#subnode.queue_free()
-						#subnode.get_parent().remove_child(subnode)
-					#else:
-						#mp.api.repository.add_object(subnode, node_id)
-			#else:
-				#push_warning("Could not find subnode %s on received scene %s. Weird" % [node_path, packed_scene.resource_path])
-				#continue
-		
-		# Now load properties.
-		#var scene_owner := scene.get_meta(REPCO.META_OWNER, 1)
-		#var replication_data: Dictionary = scene.get_meta(REPCO.META_SYNC_PROPERTIES, {})
-		#var replication_data_keys := replication_data.keys()
-		#var true_idx := -1
-		#for idx: int in replication_data_keys.size():
-			#var property_path: NodePath = replication_data_keys[idx]
-			#var property_data: Array = replication_data[property_path]
-			#match property_data[1]:  # match receive filter
-				#REPCO.PeerFilter.SERVER:
-					#continue
-				#REPCO.PeerFilter.OWNER_SERVER:
-					#if mp.local_peer != scene_owner:
-						#continue
-				#REPCO.PeerFilter.NOT_OWNER:
-					#if mp.local_peer == scene_owner:
-						#continue
-			#true_idx += 1
-			#
-			#var prop_node_path := NodePath(property_path.get_concatenated_names())
-			#var prop_path := NodePath(property_path.get_concatenated_subnames())
-			#
-			#var prop_node := scene.get_node_or_null(prop_node_path) if prop_node_path else scene
-			#if prop_node:
-				#var value: Variant = property_values[true_idx]
-				#prop_node.set_indexed(prop_path, value)
-		
-		# Finally, add scene.
-		if deferred:
-			deferred_entries.append([parent, scene])
+			# Finally, add scene.
+			if deferred:
+				deferred_entries.append([parent, scene])
+			else:
+				replication_visibility[scene] = {}
+				enter_replication.emit(scene)
+				parent.add_child(scene)
 		else:
-			replicated_scenes[scene] = {}
-			enter_replicated_scene.emit(scene)
-			parent.add_child(scene)
+			push_warning("Received invalid UID in visibility update (%s neither script nor scene)" % resource_path)
+			continue
 	
 	for d in deferred_entries:
 		var parent: Node = d[0]
 		var scene: Node = d[1]
 		#scene.print_tree_pretty()
-		replicated_scenes[scene] = {}
-		enter_replicated_scene.emit(scene)
+		replication_visibility[scene] = {}
+		enter_replication.emit(scene)
 		parent.add_child(scene)
 
 func _compress_visibility_data(added_node_data: Array, removed_node_data: Array) -> PackedByteArray:
@@ -564,7 +694,7 @@ func _compress_visibility_data(added_node_data: Array, removed_node_data: Array)
 	for added_data in added_node_data:
 		var parent_idx: int = added_data[0]
 		var node_owner: int = added_data[1]
-		var scene_uid: int = added_data[2]
+		var node_uid: int = added_data[2]
 		var node_properties: Array = added_data[3]
 		var node_ids: Array = added_data[4]
 		var deferred: bool = added_data[5]
@@ -585,7 +715,7 @@ func _compress_visibility_data(added_node_data: Array, removed_node_data: Array)
 		
 		stream.write_unsigned(parent_idx, MAX_NODE_ID_BYTES)
 		stream.write_unsigned(node_owner, MAX_NODE_OWNER_BYTES)
-		stream.write_unsigned(scene_uid, 8)
+		stream.write_unsigned(node_uid, 8)
 		stream.write_bytes(property_variant)
 		stream.write_unsigned(node_ids.size(), MAX_NODE_ID_BYTES)
 		for node_id in node_ids:
@@ -619,7 +749,7 @@ func _decompress_visibility_data(data: PackedByteArray) -> Array:
 	for added_data_idx in added_node_count:
 		var parent_idx := stream.read_unsigned(MAX_NODE_ID_BYTES)
 		var node_owner := stream.read_unsigned(MAX_NODE_OWNER_BYTES)
-		var scene_uid := stream.read_unsigned(8)
+		var node_uid := stream.read_unsigned(8)
 		var node_properties := stream.read_variant(false)
 		
 		var node_id_count := stream.read_unsigned(MAX_NODE_ID_BYTES)
@@ -629,7 +759,7 @@ func _decompress_visibility_data(data: PackedByteArray) -> Array:
 		
 		var deferred := bool(stream.read_unsigned(1))
 		
-		added_node_data.append([parent_idx, node_owner, scene_uid, node_properties, node_ids, deferred])
+		added_node_data.append([parent_idx, node_owner, node_uid, node_properties, node_ids, deferred])
 	
 	# Decode removed node data.
 	var removed_node_data: Array = []
