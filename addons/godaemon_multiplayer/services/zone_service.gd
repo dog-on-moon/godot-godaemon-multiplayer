@@ -61,6 +61,7 @@ func add_zone(node: Node) -> Zone:
 	zones[zone] = null
 	zone.add_child(node)
 	svc.add_child(zone)
+	replication_service.set_visibility(zone, false)
 	replication_service.set_visibility(zone.scene, true)
 	return zone
 

@@ -157,6 +157,27 @@ func get_signal_config_from_idx(idx: int) -> ReplicationSignalConfig:
 		return null
 	return signal_config[idx]
 
+func get_node_property_values(node: Node, peer: int) -> Array:
+	# Calculate the property values for this script.
+	var node_property_values := []
+	for config in property_config:
+		# We replicate all listed properties to the client initially.
+		# Though, only be sure to replicate those that they care about.
+		if not config.can_they_recv(node, peer):
+			continue
+		
+		# Get the property value for this node.
+		node_property_values.append(node.get(config.name))
+	return node_property_values
+
+func apply_node_property_values(mp: MultiplayerRoot, node: Node, node_property_values: Array):
+	var true_idx := -1
+	for config in property_config:
+		if not config.can_we_recv(mp, node):
+			continue
+		true_idx += 1
+		node.set(config.name, node_property_values[true_idx])
+
 func serialize(uid: int) -> Dictionary:
 	var path := ReplicationData.uid_to_path(uid)
 	var d := {
