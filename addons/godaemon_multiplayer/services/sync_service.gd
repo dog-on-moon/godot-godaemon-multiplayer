@@ -13,19 +13,11 @@ var last_interpolate_t := 0.0
 
 ## API for requesting a property sync upon changing a node's property value.
 func request_sync(node: Node, property: StringName):
-	var script := node.get_script()
-	if not script:
-		assert(false)
-		return
-	var sr := ReplicationData.get_script_replication(script)
-	if not sr:
-		assert(false)
-		return
 	var node_id := mp.api.repository.get_id(node)
 	if node_id == -1:
 		assert(false)
 		return
-	var config := sr.get_property_config(String(property))
+	var config := ReplicationData.object_property_to_config(node, String(property))
 	if not config:
 		assert(false, "Property config %s does not exist for node." % property)
 		return
@@ -35,7 +27,7 @@ func request_sync(node: Node, property: StringName):
 	if not config.can_we_send(mp, node):
 		assert(false, "Cannot sync property %s -- request is filtered" % property)
 		return
-	var idx := sr.get_idx_from_property_config(config)
+	var idx := ReplicationData.object_property_to_idx(node, config)
 	var value: Variant = node.get(property)
 	var target_peers := [1] if mp.is_client() else replication_service.get_observing_peers(node)
 	for p in target_peers:
@@ -107,7 +99,7 @@ func _process(delta: float) -> void:
 			if config.can_we_send(mp, node):
 				var value := _get_new_value(node, config)
 				if value != null:
-					var idx := sr.get_idx_from_property_config(config)
+					var idx := ReplicationData.object_property_to_idx(node, config)
 					for p in target_peers:
 						if config.can_they_recv(node, p):
 							_get_receive_rpc(config.reliable).rpc_id(p, node_id, idx, value)
@@ -155,9 +147,9 @@ func _receive_properties(node_id: int, idx: int, value: Variant):
 	var sr := ReplicationData.get_script_replication(script)
 	if not script:
 		return
-	if idx < 0 or idx >= sr.property_config.size():
+	var config := ReplicationData.object_idx_to_property(node, idx)
+	if not config:
 		return
-	var config := sr.property_config[idx]
 	if config.sync == ReplicationPropertyConfig.Sync.Once:
 		return
 	if config.can_we_recv(mp, node):

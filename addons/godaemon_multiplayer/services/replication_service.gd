@@ -73,13 +73,9 @@ func _replication_search(node: Node):
 	if node.child_entered_tree.is_connected(_replication_search):
 		return
 	
-	# If this node has a replicated script, set up its signal replication,
-	# and tell the world that it Exists:tm:.
-	var script := node.get_script()
-	var sr := ReplicationData.get_script_replication(script)
-	if sr:
-		_setup_signal_replication(node, sr)
-		enter_replication.emit(node)
+	# Setup signal replication for the node.
+	# Also emits enter_replication.
+	_setup_signal_replication(node)
 	
 	# Only the server will catalog IDs and replicated scenes,
 	# but will tell the client them during replication.
@@ -218,10 +214,24 @@ func _get_replicated_descendants(node: Node) -> Dictionary:
 #region Signal Replication
 
 ## Sets up signal replication for a node. Called on server and client.
-func _setup_signal_replication(node: Node, sr: ScriptReplication):
-	for c in sr.signal_config:
-		if c.can_we_send(mp, node):
-			node.connect(StringName(c.name), _on_signal_emit.bind(node, sr, c))
+func _setup_signal_replication(node: Node):
+	# Setup initial replication.
+	var base_sr := ReplicationData.get_script_replication(node.get_script())
+	if not base_sr:
+		return
+	enter_replication.emit(node)  # kinda lazily merged into here, but fast
+	
+	# Now setup signal replication.
+	var parent_depth := -1
+	while true:
+		parent_depth += 1
+		var sr := ReplicationData.get_script_replication(node.get_script(), parent_depth)
+		if not sr:
+			break
+	
+		for c in sr.signal_config:
+			if c.can_we_send(mp, node):
+				node.connect(StringName(c.name), _on_signal_emit.bind(node, base_sr, c))
 
 var _signal_loop_block := {}
 
@@ -244,7 +254,10 @@ func _on_signal_emit(
 	if c.arg_count >= 8: args.append(arg8)
 	if c.arg_count >= 9: assert(false, "Replicated signal max argument reached")
 	
-	var idx := sr.get_idx_from_signal_config(c)
+	var idx := ReplicationData.object_signal_to_idx(node, c)
+	if idx == -1:
+		assert(false)
+		return
 	for p in get_observing_peers(node):
 		if c.can_they_recv(node, p):
 			if c.reliable:
@@ -264,15 +277,7 @@ func _signal_replicate(node_id: int, idx: int, args: Array):
 	var node := mp.api.repository.get_object(node_id)
 	if not node:
 		return
-	var script := node.get_script()
-	if not script:
-		return
-	var sr := ReplicationData.get_script_replication(script)
-	if not sr:
-		return
-	if idx < 0 or idx >= sr.signal_config.size():
-		return
-	var c := sr.signal_config[idx]
+	var c := ReplicationData.object_idx_to_signal(node, idx)
 	if not c.can_we_recv(mp, node):
 		return
 	_set_signal_loop_block(node, c, true)
@@ -476,8 +481,6 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 		if not node.scene_file_path:
 			# The node is not a scene -- it is just an individual script.
 			# Get all of its information.
-			var script := node.get_script()
-			var sr := ReplicationData.get_script_replication(script)
 			var node_id: int = mp.api.repository.get_id(node)
 			
 			# Add the data for this script.
@@ -485,7 +488,7 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 				parent_id,
 				Godaemon.get_node_owner(node),
 				ReplicationData.path_to_uid(node.get_script().resource_path),
-				{node_id: sr.get_node_property_values(node, peer)} if sr else {},
+				{node_id: ReplicationData.get_object_property_values(node, peer)},
 				[node_id],
 			]
 			added_node_data.append(add_data)
@@ -513,10 +516,9 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 						node_ids.append(subnode_id)
 						
 						# Also, determine the node's property values for replication here.
-						var script := subnode.get_script()
-						var sr := ReplicationData.get_script_replication(script)
-						if sr:
-							property_values[subnode_id] = sr.get_node_property_values(subnode, peer)
+						var node_property_values := ReplicationData.get_object_property_values(subnode, peer)
+						if node_property_values:
+							property_values[subnode_id] = node_property_values
 					else:
 						# We tried replicating a node without a node id -- what?
 						# This should never happen.
@@ -604,13 +606,7 @@ func update_visibility(data: PackedByteArray):
 			
 			# Load the root node's script replication.
 			if property_values:
-				var sr: ScriptReplication = ReplicationData.get_script_replication(script)
-				if not sr:
-					assert(false, "Received property values for a script without SR.. how?")
-					continue
-				else:
-					var node_property_values: Array = property_values[node_ids[0]]
-					sr.apply_node_property_values(mp, node, node_property_values)
+				ReplicationData.apply_object_property_values(mp, node, property_values[node_ids[0]])
 		
 			# Finally, add node.
 			replication_visibility[node] = {}
@@ -641,14 +637,7 @@ func update_visibility(data: PackedByteArray):
 						
 						# Set this node's properties.
 						if node_id in property_values:
-							var subnode_script := subnode.get_script()
-							var sr: ScriptReplication = ReplicationData.get_script_replication(subnode_script)
-							if not sr:
-								assert(false, "Received property values for a scene node without SR.. how?")
-								continue
-							else:
-								var node_property_values: Array = property_values[node_id]
-								sr.apply_node_property_values(mp, subnode, node_property_values)
+							ReplicationData.apply_object_property_values(mp, subnode, property_values[node_id])
 					else:
 						# If the node ID is zero, then we do not add it in the tree.
 						subnode.queue_free()

@@ -97,6 +97,12 @@ func get_method_config(name: String) -> ReplicationMethodConfig:
 			return m
 	return null
 
+func has_method_config(c: ReplicationMethodConfig) -> bool:
+	if not Engine.is_editor_hint():
+		setup_cache()
+		return c.name in _method_cache
+	return c in method_config
+
 func get_property_config(name: String) -> ReplicationPropertyConfig:
 	if not Engine.is_editor_hint():
 		setup_cache()
@@ -106,6 +112,12 @@ func get_property_config(name: String) -> ReplicationPropertyConfig:
 			return m
 	return null
 
+func has_property_config(c: ReplicationPropertyConfig) -> bool:
+	if not Engine.is_editor_hint():
+		setup_cache()
+		return c.name in _property_cache
+	return c in property_config
+
 func get_signal_config(name: String) -> ReplicationSignalConfig:
 	if not Engine.is_editor_hint():
 		setup_cache()
@@ -114,6 +126,12 @@ func get_signal_config(name: String) -> ReplicationSignalConfig:
 		if m.name == name:
 			return m
 	return null
+
+func has_signal_config(c: ReplicationSignalConfig) -> bool:
+	if not Engine.is_editor_hint():
+		setup_cache()
+		return c.name in _signal_cache
+	return c in signal_config
 
 func get_idx_from_method_config(config: ReplicationMethodConfig) -> int:
 	if not Engine.is_editor_hint():
@@ -156,27 +174,6 @@ func get_signal_config_from_idx(idx: int) -> ReplicationSignalConfig:
 	if idx < 0 or idx >= signal_config.size():
 		return null
 	return signal_config[idx]
-
-func get_node_property_values(node: Node, peer: int) -> Array:
-	# Calculate the property values for this script.
-	var node_property_values := []
-	for config in property_config:
-		# We replicate all listed properties to the client initially.
-		# Though, only be sure to replicate those that they care about.
-		if not config.can_they_recv(node, peer):
-			continue
-		
-		# Get the property value for this node.
-		node_property_values.append(node.get(config.name))
-	return node_property_values
-
-func apply_node_property_values(mp: MultiplayerRoot, node: Node, node_property_values: Array):
-	var true_idx := -1
-	for config in property_config:
-		if not config.can_we_recv(mp, node):
-			continue
-		true_idx += 1
-		node.set(config.name, node_property_values[true_idx])
 
 func serialize(uid: int) -> Dictionary:
 	var path := ReplicationData.uid_to_path(uid)

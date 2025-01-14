@@ -64,12 +64,8 @@ func outbound_rpc(peer: int, object: Object, method: StringName, args: Array) ->
 	if not script:
 		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc attempted to send RPC on scriptless object....interesting.")
 		return ERR_BUG
-	var sr := ReplicationData.get_script_replication(script)
-	if not sr:
-		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc attempted to send RPC on script with no replication config: %s" % script.resource_path)
-		return ERR_UNCONFIGURED
 	
-	var config := sr.get_method_config(method)
+	var config := ReplicationData.object_method_to_config(object, String(method))
 	if not config:
 		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc attempted to send RPC on configless method %s" % [method])
 		return ERR_UNCONFIGURED
@@ -78,9 +74,9 @@ func outbound_rpc(peer: int, object: Object, method: StringName, args: Array) ->
 		push_error("Could not RPC protected method %s for server (%s)" % [method, script.resource_path])
 		return ERR_UNCONFIGURED
 	
-	var method_idx: int = sr.get_idx_from_method_config(config)
-	if method_idx >= MAX_RPC_METHODS:
-		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc method idx was too high")
+	var method_idx: int = ReplicationData.object_method_to_idx(object, config)
+	if method_idx >= MAX_RPC_METHODS or method_idx == -1:
+		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc method idx was invalid")
 		return ERR_UNCONFIGURED
 	
 	# Validate object.
@@ -184,11 +180,7 @@ func inbound_rpc(id: int, bytes: PackedByteArray):
 	if not script:
 		push_error("GodaemonMultiplayerAPI.rpc.inbound_rpc received to receive RPC on scriptless object....VERY interesting.")
 		return ERR_BUG
-	var sr := ReplicationData.get_script_replication(script)
-	if not sr:
-		push_error("GodaemonMultiplayerAPI.rpc.inbound_rpc received RPC on script with no replication config: %s" % script.resource_path)
-		return ERR_UNCONFIGURED
-	var config := sr.get_method_config_from_idx(method_idx)
+	var config := ReplicationData.object_idx_to_method(object, method_idx)
 	if not config:
 		push_error("GodaemonMultiplayerAPI.rpc.inbound_rpc received RPC on configless method %s" % [method_idx])
 		return ERR_UNCONFIGURED
