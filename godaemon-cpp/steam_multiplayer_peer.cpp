@@ -268,25 +268,33 @@ Error SteamMultiplayerPeer::create_loopback_client(SteamMultiplayerPeer *host) {
 	if (SteamNetworkingSockets() == NULL) {
 		return Error::ERR_UNAVAILABLE;
 	}
-	unique_id = generate_unique_id();
 	SteamNetworkingUtils()->InitRelayNetworkAccess();
 
+	host->loopback_idx += 1;
+	CSteamID hostId(host->loopback_idx, k_EUniversePublic, k_EAccountTypeIndividual);
+	CSteamID clientId(1, k_EUniversePublic, k_EAccountTypeIndividual);
+	const uint64_t hostId64 = hostId.ConvertToUint64();
+	const uint64_t clientId64 = clientId.ConvertToUint64();
+
+	SteamNetworkingIdentity iHost, iClient;
+	iHost.SetSteamID64(hostId64);
+	iClient.SetSteamID64(clientId64);
+
 	HSteamNetConnection hHost, hClient;
-	if (!SteamNetworkingSockets()->CreateSocketPair(&hHost, &hClient, false, nullptr, nullptr)) {
-		unique_id = 0;
+	if (!SteamNetworkingSockets()->CreateSocketPair(&hHost, &hClient, false, &iHost, &iClient)) {
 		return Error::ERR_CANT_CONNECT;
 	}
 
-	int steam_id = SteamUser()->GetSteamID().ConvertToUint64();
 	connection = hClient;
 	configs->apply_options(hClient);
-	add_loopback_connection(steam_id, hClient);
 	host->configs->apply_options(hHost);
-	host->add_loopback_connection(steam_id, hHost);
+	setup_loopback_connection_client(clientId64, hClient);
+	host->setup_loopback_connection_host(hostId64, hHost);
 
 	active_mode = MODE_CLIENT;
 	connection_status = ConnectionStatus::CONNECTION_CONNECTED;
-	connections_by_steamId64[steam_id]->send_peer(unique_id);
+	unique_id = generate_unique_id();
+	connections_by_steamId64[clientId64]->send_peer(unique_id);
 	return Error::OK;
 }
 
@@ -445,9 +453,15 @@ void SteamMultiplayerPeer::add_connection(const uint64_t steam_id, HSteamNetConn
 	connections_by_steamId64[steam_id] = connection_data;
 }
 
-void SteamMultiplayerPeer::add_loopback_connection(const uint64_t identity, HSteamNetConnection connection) {
+void SteamMultiplayerPeer::setup_loopback_connection_client(const uint64_t identity, HSteamNetConnection hClient) {
 	Ref<SteamConnection> connection_data = Ref<SteamConnection>(memnew(SteamConnection(identity)));
-	connection_data->steam_connection = connection;
+	connection_data->steam_connection = hClient;
+	connections_by_steamId64[identity] = connection_data;
+}
+
+void SteamMultiplayerPeer::setup_loopback_connection_host(const uint64_t identity, HSteamNetConnection hHost) {
+	Ref<SteamConnection> connection_data = Ref<SteamConnection>(memnew(SteamConnection(identity)));
+	connection_data->steam_connection = hHost;
 	connections_by_steamId64[identity] = connection_data;
 }
 

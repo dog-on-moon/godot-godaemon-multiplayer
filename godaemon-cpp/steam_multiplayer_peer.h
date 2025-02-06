@@ -178,7 +178,10 @@ public:
 	const SteamNetworkingConfigValue_t *convert_options_array(Array options);
 	Ref<SteamConnection> get_connection_by_peer(int peer_id);
 	void add_connection(const uint64_t steam_id, HSteamNetConnection connection);
-	void add_loopback_connection(const uint64_t identity, HSteamNetConnection connection);
+
+	int loopback_idx = 0;
+	void setup_loopback_connection_client(const uint64_t identity, HSteamNetConnection hClient);
+	void setup_loopback_connection_host(const uint64_t identity, HSteamNetConnection hHost);
 
 	void _process_message(const SteamNetworkingMessage_t *msg);
 	void _process_ping(const SteamNetworkingMessage_t *msg);
