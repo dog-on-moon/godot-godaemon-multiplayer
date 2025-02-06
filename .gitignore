@@ -1,0 +1,18 @@
+**/.vs/
+**/*.sdf
+**/*.VC.opendb
+**/Debug/
+**/Generated\ Files/
+**/Release/
+**/ipch/
+**/*.obj
+**/*.VC.db
+**/*.os
+
+.vscode/
+.sconsign.dblite
+godaemon-cpp/steam-sdk/public
+godaemon-cpp/steam-sdk/redistributable_bin
+compile_commands.json
+run.bat
+src/gen
