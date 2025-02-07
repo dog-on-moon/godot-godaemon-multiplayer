@@ -154,6 +154,7 @@ void SteamMultiplayerPeer::_close() {
 
 	peerId_to_steamId.clear();
 	connections_by_steamId64.clear();
+	loopback_connections_by_steamId64.clear();
 	active_mode = MODE_NONE;
 	unique_id = 0;
 	connection_status = CONNECTION_DISCONNECTED;
@@ -170,6 +171,9 @@ void SteamMultiplayerPeer::_disconnect_peer(int32_t p_peer, bool p_force) {
 
 	connection->flush();
 	connections_by_steamId64.erase(connection->steam_id);
+	if (loopback_connections_by_steamId64.has(connection->steam_id)) {
+		loopback_connections_by_steamId64.erase(connection->steam_id);
+	}
 	peerId_to_steamId.erase(p_peer);
 	if (active_mode == MODE_CLIENT || active_mode == MODE_SERVER) {
 		get_connection_by_peer(0)->flush();
@@ -185,6 +189,7 @@ void SteamMultiplayerPeer::_disconnect_peer(int32_t p_peer, bool p_force) {
 		// }
 		if (active_mode == MODE_CLIENT) {
 			connections_by_steamId64.clear(); // Avoid flushing again.
+			loopback_connections_by_steamId64.clear();
 			close();
 		}
 	}
@@ -288,8 +293,8 @@ Error SteamMultiplayerPeer::create_loopback_client(SteamMultiplayerPeer *host) {
 	connection = hClient;
 	configs->apply_options(hClient);
 	host->configs->apply_options(hHost);
-	setup_loopback_connection_client(clientId64, hClient);
-	host->setup_loopback_connection_host(hostId64, hHost);
+	setup_loopback_connection(clientId64, hClient);
+	host->setup_loopback_connection(hostId64, hHost);
 
 	active_mode = MODE_CLIENT;
 	connection_status = ConnectionStatus::CONNECTION_CONNECTED;
@@ -306,6 +311,7 @@ void SteamMultiplayerPeer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("create_host", "n_local_virtual_port"), &SteamMultiplayerPeer::create_host, DEFVAL(nullptr));
 	ClassDB::bind_method(D_METHOD("create_client", "identity_remote", "n_local_virtual_port"), &SteamMultiplayerPeer::create_client, DEFVAL(nullptr));
 	ClassDB::bind_method(D_METHOD("create_loopback_client", "host"), &SteamMultiplayerPeer::create_loopback_client, DEFVAL(nullptr));
+	ClassDB::bind_method(D_METHOD("is_peer_loopback", "peer"), &SteamMultiplayerPeer::is_peer_loopback);
 	ClassDB::bind_method(D_METHOD("set_listen_socket", "listen_socket"), &SteamMultiplayerPeer::set_listen_socket);
 	ClassDB::bind_method(D_METHOD("get_listen_socket"), &SteamMultiplayerPeer::get_listen_socket);
 	ClassDB::bind_method(D_METHOD("get_steam64_from_peer_id", "peer_id"), &SteamMultiplayerPeer::get_steam64_from_peer_id);
@@ -408,6 +414,9 @@ void SteamMultiplayerPeer::network_connection_status_changed(SteamNetConnectionS
 					peerId_to_steamId.erase(peer_id);
 				}
 				connections_by_steamId64.erase(steam_id);
+				if (loopback_connections_by_steamId64.has(steam_id)) {
+					loopback_connections_by_steamId64.erase(steam_id);
+				}
 			}
 		}
 		return;
@@ -431,6 +440,9 @@ void SteamMultiplayerPeer::network_connection_status_changed(SteamNetConnectionS
 					peerId_to_steamId.erase(peer_id);
 				}
 				connections_by_steamId64.erase(steam_id);
+				if (loopback_connections_by_steamId64.has(steam_id)) {
+					loopback_connections_by_steamId64.erase(steam_id);
+				}
 			}
 		}
 		return;
@@ -453,16 +465,11 @@ void SteamMultiplayerPeer::add_connection(const uint64_t steam_id, HSteamNetConn
 	connections_by_steamId64[steam_id] = connection_data;
 }
 
-void SteamMultiplayerPeer::setup_loopback_connection_client(const uint64_t identity, HSteamNetConnection hClient) {
+void SteamMultiplayerPeer::setup_loopback_connection(const uint64_t identity, HSteamNetConnection connection) {
 	Ref<SteamConnection> connection_data = Ref<SteamConnection>(memnew(SteamConnection(identity)));
-	connection_data->steam_connection = hClient;
+	connection_data->steam_connection = connection;
 	connections_by_steamId64[identity] = connection_data;
-}
-
-void SteamMultiplayerPeer::setup_loopback_connection_host(const uint64_t identity, HSteamNetConnection hHost) {
-	Ref<SteamConnection> connection_data = Ref<SteamConnection>(memnew(SteamConnection(identity)));
-	connection_data->steam_connection = hHost;
-	connections_by_steamId64[identity] = connection_data;
+	loopback_connections_by_steamId64[identity] = connection_data;
 }
 
 void SteamMultiplayerPeer::_process_message(const SteamNetworkingMessage_t *msg) {
@@ -546,6 +553,11 @@ Dictionary SteamMultiplayerPeer::get_peer_map() {
 		output[E->value->peer_id] = E->value->steam_id;
 	}
 	return output;
+}
+
+bool SteamMultiplayerPeer::is_peer_loopback(int peer) {
+	uint64_t steam_id = get_steam64_from_peer_id(peer);
+	return loopback_connections_by_steamId64.has(steam_id);
 }
 
 void SteamMultiplayerPeer::set_no_nagle(const bool new_no_nagle) {

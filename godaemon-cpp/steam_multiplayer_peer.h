@@ -180,8 +180,7 @@ public:
 	void add_connection(const uint64_t steam_id, HSteamNetConnection connection);
 
 	int loopback_idx = 0;
-	void setup_loopback_connection_client(const uint64_t identity, HSteamNetConnection hClient);
-	void setup_loopback_connection_host(const uint64_t identity, HSteamNetConnection hHost);
+	void setup_loopback_connection(const uint64_t identity, HSteamNetConnection connection);
 
 	void _process_message(const SteamNetworkingMessage_t *msg);
 	void _process_ping(const SteamNetworkingMessage_t *msg);
@@ -194,6 +193,7 @@ public:
 	int get_listen_socket() const;
 
 	Dictionary get_peer_map();
+	bool is_peer_loopback(int peer);
 	// Nagle's Algorithm: Inhibit the sending of new TCP segments, when new outgoing data arrives from the user,
 	// if any previously transmitted data on the connection remains unacknowledged
 	//
@@ -214,6 +214,7 @@ public:
 private:
 	HashMap<uint64_t, Ref<SteamConnection>> connections_by_steamId64;
 	HashMap<int, Ref<SteamConnection>> peerId_to_steamId;
+	HashMap<uint64_t, Ref<SteamConnection>> loopback_connections_by_steamId64;
 	HSteamListenSocket listen_socket;
 	HSteamNetConnection connection;
 
