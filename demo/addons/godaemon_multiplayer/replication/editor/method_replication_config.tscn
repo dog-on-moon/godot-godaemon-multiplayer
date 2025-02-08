@@ -32,3 +32,6 @@ visible = false
 
 [node name="DontSyncToOwner" parent="Contents/VBoxContainer/HFlowContainer" index="4"]
 visible = false
+
+[node name="DebugPrint" parent="Contents/VBoxContainer/HFlowContainer" index="5"]
+visible = true

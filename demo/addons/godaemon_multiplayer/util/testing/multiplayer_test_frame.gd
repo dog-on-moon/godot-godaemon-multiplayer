@@ -112,11 +112,10 @@ func _update_nodes():
 	_update_position()
 
 func _update_properties():
-	server_svc.mp.port = port
+	server_svc.mp.configure_enet(port)
 	server_svc.config = configuration
 	for svc in client_svcs:
-		svc.mp.address = "127.0.0.1"
-		svc.mp.port = port
+		svc.mp.configure_enet("127.0.0.1", port)
 		svc.config = configuration
 
 func _update_position():

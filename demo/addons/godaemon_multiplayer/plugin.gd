@@ -5,14 +5,14 @@ var replication_editor: Control
 var replication_editor_button: Button
 
 func _enter_tree() -> void:
-	add_autoload_singleton("SubprocessServer", "res://addons/godaemon_multiplayer/util/subprocess_server.gd")
+	add_autoload_singleton("Godaemon", "res://addons/godaemon_multiplayer/godaemon.gd")
 	add_custom_type("MultiplayerConfig", "Resource", preload("res://addons/godaemon_multiplayer/api/config/multiplayer_config.gd"), preload("res://addons/godaemon_multiplayer/icons/GDScript.svg"))
 	add_custom_type("ServiceBase", "Node", preload("res://addons/godaemon_multiplayer/services/service_base.gd"), preload("res://addons/godaemon_multiplayer/icons/GDScript.svg"))
 	add_custom_type("MultiplayerRoot", "Node", preload("res://addons/godaemon_multiplayer/api/nodes/multiplayer_root.gd"), preload("res://addons/godaemon_multiplayer/icons/SignalsAndGroups.svg"))
 	_load_editor()
 
 func _exit_tree() -> void:
-	remove_autoload_singleton("SubprocessServer")
+	remove_autoload_singleton("Godaemon")
 	remove_custom_type("MultiplayerRoot")
 	remove_custom_type("ServiceBase")
 	remove_custom_type("MultiplayerConfig")

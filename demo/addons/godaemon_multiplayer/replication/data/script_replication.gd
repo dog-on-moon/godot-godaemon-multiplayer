@@ -7,46 +7,49 @@ const RPCS = preload("res://addons/godaemon_multiplayer/api/rpc.gd")
 
 signal updated
 
+func emit_updated() -> void:
+	updated.emit()
+
 @export var method_config: Array[ReplicationMethodConfig] = []:
 	set(x):
 		for y in method_config:
 			if not y: continue
-			if y.updated.is_connected(updated.emit):
-				y.updated.disconnect(updated.emit)
+			if y.updated.is_connected(emit_updated):
+				y.updated.disconnect(emit_updated)
 		method_config = x
 		if method_config.size() > RPCS.MAX_RPC_METHODS:
 			push_warning("MethodConfig size has too many methods, not all can be RPCed.")
 		for y in method_config:
 			if not y: continue
-			if not y.updated.is_connected(updated.emit):
-				y.updated.connect(updated.emit)
-		updated.emit()
+			if not y.updated.is_connected(emit_updated):
+				y.updated.connect(emit_updated)
+		emit_updated()
 
 @export var property_config: Array[ReplicationPropertyConfig] = []:
 	set(x):
 		for y in property_config:
 			if not y: continue
-			if y.updated.is_connected(updated.emit):
-				y.updated.disconnect(updated.emit)
+			if y.updated.is_connected(emit_updated):
+				y.updated.disconnect(emit_updated)
 		property_config = x
 		for y in property_config:
 			if not y: continue
-			if not y.updated.is_connected(updated.emit):
-				y.updated.connect(updated.emit)
-		updated.emit()
+			if not y.updated.is_connected(emit_updated):
+				y.updated.connect(emit_updated)
+		emit_updated()
 
 @export var signal_config: Array[ReplicationSignalConfig] = []:
 	set(x):
 		for y in signal_config:
 			if not y: continue
-			if y.updated.is_connected(updated.emit):
-				y.updated.disconnect(updated.emit)
+			if y.updated.is_connected(emit_updated):
+				y.updated.disconnect(emit_updated)
 		signal_config = x
 		for y in signal_config:
 			if not y: continue
-			if not y.updated.is_connected(updated.emit):
-				y.updated.connect(updated.emit)
-		updated.emit()
+			if not y.updated.is_connected(emit_updated):
+				y.updated.connect(emit_updated)
+		emit_updated()
 
 var _method_cache := {}
 var _property_cache := {}
@@ -193,8 +196,11 @@ static func deserialize(d: Dictionary) -> ScriptReplication:
 	var r := ScriptReplication.new()
 	if d.has('methods'):
 		r.method_config   .assign(d.methods   .map(func (x): return ReplicationMethodConfig.deserialize(x)))
+		r.method_config = r.method_config
 	if d.has('properties'):
 		r.property_config .assign(d.properties.map(func (x): return ReplicationPropertyConfig.deserialize(x)))
+		r.property_config = r.property_config
 	if d.has('signals'):
 		r.signal_config   .assign(d.signals   .map(func (x): return ReplicationSignalConfig.deserialize(x)))
+		r.signal_config = r.signal_config
 	return r

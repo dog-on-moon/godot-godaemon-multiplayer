@@ -15,16 +15,16 @@ static func _static_init() -> void:
 	
 	if Engine.is_editor_hint():
 		var changed := false
-		for uid in _data.script_replication_map.keys():
+		for rep: ScriptReplication in _data.script_replication_map.values():
 			# Check if the script still exists.
-			var path := uid_to_path(uid)
-			if not (path and FileAccess.file_exists(path)):
-				_data.script_replication_map.erase(uid)
-				changed = true
-				continue
-			
+			# These checks seem to kill stuff incessantly?
+			#var path := uid_to_path(uid)
+			#if not (path and FileAccess.file_exists(path)):
+				#_data.script_replication_map.erase(uid)
+				#changed = true
+				#continue
+
 			# Setup script autosave.
-			var rep: ScriptReplication = _data.script_replication_map[uid]
 			if not rep.updated.is_connected(save):
 				rep.updated.connect(save)
 		if changed:
@@ -34,6 +34,7 @@ static func _static_init() -> void:
 
 ## Returns a script's replication data.
 ## Returns null if it does not exist.
+## Note that parent classes may have replication, though -- check get_replication_parent_depth()
 static func get_script_replication(script: Script, parent_depth := 0) -> ScriptReplication:
 	if not script:
 		return null
@@ -43,9 +44,56 @@ static func get_script_replication(script: Script, parent_depth := 0) -> ScriptR
 			return null
 	var uid := path_to_uid(script.resource_path)
 	if uid == -1:
-		print('script %s has no uid?' % script.resource_path)
+		#print('script %s has no uid?' % script.resource_path)
 		return null
-	return _data.script_replication_map.get(uid, null)
+	var sr: ScriptReplication = _data.script_replication_map.get(uid, null)
+	if sr:
+		sr.setup_cache()
+	return sr
+
+static func get_base_script_replication(script: Script) -> ScriptReplication:
+	var d := get_replication_parent_depth(script)
+	if d == -1:
+		return null
+	return get_script_replication(script, d)
+
+static func has_script_replication(script: Script) -> bool:
+	return get_replication_parent_depth(script) != -1
+
+static var _parent_depth_cache: Dictionary[Script, int] = {}
+
+## Returns the initial replication parent depth for a script's replication.
+## If -1, the script in question certainly has no script replication whatsoever.
+static func get_replication_parent_depth(script: Script) -> int:
+	if not script:
+		return -1
+	if script in _parent_depth_cache:
+		return _parent_depth_cache[script]
+	var parent_depth := -1
+	while true:
+		parent_depth += 1
+		if get_script_replication(script):
+			_parent_depth_cache[script] = parent_depth
+			return parent_depth
+		script = script.get_base_script()
+		if not script:
+			break
+	_parent_depth_cache[script] = -1
+	return -1
+
+## Returns all script replications for a given script.
+static func get_all_script_replications(script: Script) -> Array[ScriptReplication]:
+	var srs: Array[ScriptReplication] = []
+	if not script:
+		return srs
+	while true:
+		var sr := get_script_replication(script)
+		if sr:
+			srs.append(sr)
+		script = script.get_base_script()
+		if not script:
+			break
+	return srs
 
 ## Toggles a script's replication.
 static func toggle_script_replication(script: Script, mode: bool) -> ScriptReplication:
@@ -87,37 +135,27 @@ static func validate_script_replication(script: Script, make_exist := false):
 #region Property Harvest API
 
 ## Harvests a object's property values for a target peer.
-static func get_object_property_values(object: Node, peer: int) -> Array:
+static func get_object_property_values(object: Node, peer := 0) -> Array:
 	# Calculate the property values for this script.
 	var object_property_values := []
-	var parent_depth := -1
-	while true:
-		parent_depth += 1
-		var sr := get_script_replication(object.get_script(), parent_depth)
-		if not sr:
-			break
-		
+	for sr in get_all_script_replications(object.get_script()):
 		for config in sr.property_config:
 			# We replicate all listed properties to the client initially.
 			# Though, only be sure to replicate those that they care about.
-			if not config.can_they_recv(object, peer):
+			if not config.can_they_recv(object, peer) and peer != 0:
 				continue
 			# Get the property value for this object.
 			object_property_values.append(object.get(config.name))
 	return object_property_values
 
 ## Applies a object's property values for the local peer.
-static func apply_object_property_values(mp: MultiplayerRoot, object: Node, object_property_values: Array):
+static func apply_object_property_values(mp: MultiplayerRoot, object: Node, object_property_values: Array, peer := -1):
 	var true_idx := -1
-	var parent_depth := -1
-	while true:
-		parent_depth += 1
-		var sr := get_script_replication(object.get_script(), parent_depth)
-		if not sr:
-			break
-		
+	if peer == -1:
+		peer = mp.local_peer
+	for sr in get_all_script_replications(object.get_script()):
 		for config in sr.property_config:
-			if not config.can_we_recv(mp, object):
+			if not config.can_they_recv(object, peer) and peer != 0:
 				continue
 			true_idx += 1
 			object.set(config.name, object_property_values[true_idx])
@@ -128,27 +166,18 @@ static func apply_object_property_values(mp: MultiplayerRoot, object: Node, obje
 
 ## Gets a object's method name to its config.
 static func object_method_to_config(object: Node, n: String) -> ReplicationMethodConfig:
-	# Check if cached.
-	var base_sr := get_script_replication(object.get_script())
-	if not base_sr:
-		assert(false)
-		return null
-	var cache := _get_object_method_to_config(base_sr, n)
+	# Check cache.
+	var script: Script = object.get_script()
+	var cache := _get_object_method_to_config(script, n)
 	if cache:
 		return cache
 	
-	# Calculate the SR for this parent depth.
-	var parent_depth := -1
-	while true:
-		parent_depth += 1
-		var sr := get_script_replication(object.get_script(), parent_depth)
-		if not sr:
-			break
-		
+	# Begin looping.
+	for sr in get_all_script_replications(script):
 		# Look for the config.
 		var c := sr.get_method_config(n)
 		if c:
-			_put_object_method_to_config(base_sr, n, c)
+			_put_object_method_to_config(script, n, c)
 			return c
 	
 	# Could not find.
@@ -156,28 +185,19 @@ static func object_method_to_config(object: Node, n: String) -> ReplicationMetho
 
 ## Converts a object's method name to an index.
 static func object_method_to_idx(object: Node, c: ReplicationMethodConfig) -> int:
-	# Check if cached.
-	var base_sr := get_script_replication(object.get_script())
-	if not base_sr:
-		assert(false)
-		return -1
-	var cache := _get_object_method_to_idx(base_sr, c)
+	# Check cache.
+	var script: Script = object.get_script()
+	var cache := _get_object_method_to_idx(script, c)
 	if cache != -1:
 		return cache
 	
-	# Calculate the SR for this parent depth.
-	var parent_depth := -1
+	# Begin looping.
 	var current_idx := 0
-	while true:
-		parent_depth += 1
-		var sr := get_script_replication(object.get_script(), parent_depth)
-		if not sr:
-			break
-		
+	for sr in get_all_script_replications(script):
 		# Look for the config in this SR.
 		if sr.has_method_config(c):
 			var result_idx := current_idx + sr.get_idx_from_method_config(c)
-			_put_object_method_to_idx(base_sr, c, result_idx)
+			_put_object_method_to_idx(script, c, result_idx)
 			return result_idx
 		else:
 			current_idx += sr.method_config.size()
@@ -187,28 +207,23 @@ static func object_method_to_idx(object: Node, c: ReplicationMethodConfig) -> in
 
 ## Converts a object's method index back into its config.
 static func object_idx_to_method(object: Node, idx: int) -> ReplicationMethodConfig:
-	# Check if cached.
-	var base_sr := get_script_replication(object.get_script())
-	if not base_sr or idx < 0:
-		assert(false)
-		return null
-	var cache := _get_object_idx_to_method(base_sr, idx)
+	# Check cache.
+	var script: Script = object.get_script()
+	var cache := _get_object_idx_to_method(script, idx)
 	if cache:
 		return cache
+	var base_sr := get_base_script_replication(script)
+	if not base_sr:
+		return null
 	
-	# Calculate the SR for this parent depth.
-	var parent_depth := -1
-	while true:
-		parent_depth += 1
-		var sr := get_script_replication(object.get_script(), parent_depth)
-		if not sr:
-			break
-		
+	# Begin looping.
+	var start_idx := idx
+	for sr in get_all_script_replications(script):
 		# Look for the config in this SR.
 		var config_count := sr.method_config.size()
 		if idx < config_count:
 			var config := sr.get_method_config_from_idx(idx)
-			_put_object_idx_to_method(base_sr, idx, config)
+			_put_object_idx_to_method(script, start_idx, config)
 			return config
 		else:
 			idx -= config_count
@@ -220,36 +235,36 @@ static func object_idx_to_method(object: Node, idx: int) -> ReplicationMethodCon
 
 static var _object_method_to_config_cache := {}
 
-static func _put_object_method_to_config(sr: ScriptReplication, n: String, c: ReplicationMethodConfig):
+static func _put_object_method_to_config(sr: Script, n: String, c: ReplicationMethodConfig):
 	if sr not in _object_method_to_config_cache:
 		_object_method_to_config_cache[sr] = {}
 	_object_method_to_config_cache[sr][n] = c
 
-static func _get_object_method_to_config(sr: ScriptReplication, n: String) -> ReplicationMethodConfig:
+static func _get_object_method_to_config(sr: Script, n: String) -> ReplicationMethodConfig:
 	if sr not in _object_method_to_config_cache:
 		return null
 	return _object_method_to_config_cache[sr].get(n, null)
 
 static var _object_method_to_idx_cache := {}
 
-static func _put_object_method_to_idx(sr: ScriptReplication, c: ReplicationMethodConfig, idx: int):
+static func _put_object_method_to_idx(sr: Script, c: ReplicationMethodConfig, idx: int):
 	if sr not in _object_method_to_idx_cache:
 		_object_method_to_idx_cache[sr] = {}
 	_object_method_to_idx_cache[sr][c] = idx
 
-static func _get_object_method_to_idx(sr: ScriptReplication, c: ReplicationMethodConfig) -> int:
+static func _get_object_method_to_idx(sr: Script, c: ReplicationMethodConfig) -> int:
 	if sr not in _object_method_to_idx_cache:
 		return -1
 	return _object_method_to_idx_cache[sr].get(c, -1)
 
 static var _object_idx_to_method_cache := {}
 
-static func _put_object_idx_to_method(sr: ScriptReplication, idx: int, c: ReplicationMethodConfig):
+static func _put_object_idx_to_method(sr: Script, idx: int, c: ReplicationMethodConfig):
 	if sr not in _object_idx_to_method_cache:
 		_object_idx_to_method_cache[sr] = {}
 	_object_idx_to_method_cache[sr][idx] = c
 
-static func _get_object_idx_to_method(sr: ScriptReplication, idx: int) -> ReplicationMethodConfig:
+static func _get_object_idx_to_method(sr: Script, idx: int) -> ReplicationMethodConfig:
 	if sr not in _object_idx_to_method_cache:
 		return null
 	return _object_idx_to_method_cache[sr].get(idx, null)
@@ -260,27 +275,21 @@ static func _get_object_idx_to_method(sr: ScriptReplication, idx: int) -> Replic
 
 ## Gets a object's property name to its config.
 static func object_property_to_config(object: Node, n: String) -> ReplicationPropertyConfig:
-	# Check if cached.
-	var base_sr := get_script_replication(object.get_script())
-	if not base_sr:
-		assert(false)
-		return null
-	var cache := _get_object_property_to_config(base_sr, n)
+	# Check cache.
+	var script: Script = object.get_script()
+	var cache := _get_object_property_to_config(script, n)
 	if cache:
 		return cache
+	var base_sr := get_base_script_replication(script)
+	if not base_sr:
+		return null
 	
-	# Calculate the SR for this parent depth.
-	var parent_depth := -1
-	while true:
-		parent_depth += 1
-		var sr := get_script_replication(object.get_script(), parent_depth)
-		if not sr:
-			break
-		
+	# Begin looping.
+	for sr in get_all_script_replications(script):
 		# Look for the config.
 		var c := sr.get_property_config(n)
 		if c:
-			_put_object_property_to_config(base_sr, n, c)
+			_put_object_property_to_config(script, n, c)
 			return c
 	
 	# Could not find.
@@ -288,28 +297,22 @@ static func object_property_to_config(object: Node, n: String) -> ReplicationPro
 
 ## Converts a object's property name to an index.
 static func object_property_to_idx(object: Node, c: ReplicationPropertyConfig) -> int:
-	# Check if cached.
-	var base_sr := get_script_replication(object.get_script())
-	if not base_sr:
-		assert(false)
-		return -1
-	var cache := _get_object_property_to_idx(base_sr, c)
+	# Check cache.
+	var script: Script = object.get_script()
+	var cache := _get_object_property_to_idx(script, c)
 	if cache != -1:
 		return cache
+	var base_sr := get_base_script_replication(script)
+	if not base_sr:
+		return -1
 	
-	# Calculate the SR for this parent depth.
-	var parent_depth := -1
+	# Begin looping.
 	var current_idx := 0
-	while true:
-		parent_depth += 1
-		var sr := get_script_replication(object.get_script(), parent_depth)
-		if not sr:
-			break
-		
+	for sr in get_all_script_replications(script):
 		# Look for the config in this SR.
 		if sr.has_property_config(c):
 			var result_idx := current_idx + sr.get_idx_from_property_config(c)
-			_put_object_property_to_idx(base_sr, c, result_idx)
+			_put_object_property_to_idx(script, c, result_idx)
 			return result_idx
 		else:
 			current_idx += sr.property_config.size()
@@ -319,28 +322,20 @@ static func object_property_to_idx(object: Node, c: ReplicationPropertyConfig) -
 
 ## Converts a object's property index back into its config.
 static func object_idx_to_property(object: Node, idx: int) -> ReplicationPropertyConfig:
-	# Check if cached.
-	var base_sr := get_script_replication(object.get_script())
-	if not base_sr or idx < 0:
-		assert(false)
-		return null
-	var cache := _get_object_idx_to_property(base_sr, idx)
+	# Check cache.
+	var script: Script = object.get_script()
+	var cache := _get_object_idx_to_property(script, idx)
 	if cache:
 		return cache
 	
-	# Calculate the SR for this parent depth.
-	var parent_depth := -1
-	while true:
-		parent_depth += 1
-		var sr := get_script_replication(object.get_script(), parent_depth)
-		if not sr:
-			break
-		
+	# Begin looping.
+	var start_idx := idx
+	for sr in get_all_script_replications(script):
 		# Look for the config in this SR.
 		var config_count := sr.property_config.size()
 		if idx < config_count:
 			var config := sr.get_property_config_from_idx(idx)
-			_put_object_idx_to_property(base_sr, idx, config)
+			_put_object_idx_to_property(script, start_idx, config)
 			return config
 		else:
 			idx -= config_count
@@ -352,36 +347,36 @@ static func object_idx_to_property(object: Node, idx: int) -> ReplicationPropert
 
 static var _object_property_to_config_cache := {}
 
-static func _put_object_property_to_config(sr: ScriptReplication, n: String, c: ReplicationPropertyConfig):
+static func _put_object_property_to_config(sr: Script, n: String, c: ReplicationPropertyConfig):
 	if sr not in _object_property_to_config_cache:
 		_object_property_to_config_cache[sr] = {}
 	_object_property_to_config_cache[sr][n] = c
 
-static func _get_object_property_to_config(sr: ScriptReplication, n: String) -> ReplicationPropertyConfig:
+static func _get_object_property_to_config(sr: Script, n: String) -> ReplicationPropertyConfig:
 	if sr not in _object_property_to_config_cache:
 		return null
 	return _object_property_to_config_cache[sr].get(n, null)
 
 static var _object_property_to_idx_cache := {}
 
-static func _put_object_property_to_idx(sr: ScriptReplication, c: ReplicationPropertyConfig, idx: int):
+static func _put_object_property_to_idx(sr: Script, c: ReplicationPropertyConfig, idx: int):
 	if sr not in _object_property_to_idx_cache:
 		_object_property_to_idx_cache[sr] = {}
 	_object_property_to_idx_cache[sr][c] = idx
 
-static func _get_object_property_to_idx(sr: ScriptReplication, c: ReplicationPropertyConfig) -> int:
+static func _get_object_property_to_idx(sr: Script, c: ReplicationPropertyConfig) -> int:
 	if sr not in _object_property_to_idx_cache:
 		return -1
 	return _object_property_to_idx_cache[sr].get(c, -1)
 
 static var _object_idx_to_property_cache := {}
 
-static func _put_object_idx_to_property(sr: ScriptReplication, idx: int, c: ReplicationPropertyConfig):
+static func _put_object_idx_to_property(sr: Script, idx: int, c: ReplicationPropertyConfig):
 	if sr not in _object_idx_to_property_cache:
 		_object_idx_to_property_cache[sr] = {}
 	_object_idx_to_property_cache[sr][idx] = c
 
-static func _get_object_idx_to_property(sr: ScriptReplication, idx: int) -> ReplicationPropertyConfig:
+static func _get_object_idx_to_property(sr: Script, idx: int) -> ReplicationPropertyConfig:
 	if sr not in _object_idx_to_property_cache:
 		return null
 	return _object_idx_to_property_cache[sr].get(idx, null)
@@ -392,27 +387,18 @@ static func _get_object_idx_to_property(sr: ScriptReplication, idx: int) -> Repl
 
 ## Gets a object's signal name to its config.
 static func object_signal_to_config(object: Node, n: String) -> ReplicationSignalConfig:
-	# Check if cached.
-	var base_sr := get_script_replication(object.get_script())
-	if not base_sr:
-		assert(false)
-		return null
-	var cache := _get_object_signal_to_config(base_sr, n)
+	# Check cache.
+	var script: Script = object.get_script()
+	var cache := _get_object_signal_to_config(script, n)
 	if cache:
 		return cache
 	
-	# Calculate the SR for this parent depth.
-	var parent_depth := -1
-	while true:
-		parent_depth += 1
-		var sr := get_script_replication(object.get_script(), parent_depth)
-		if not sr:
-			break
-		
+	# Begin looping.
+	for sr in get_all_script_replications(script):
 		# Look for the config.
 		var c := sr.get_signal_config(n)
 		if c:
-			_put_object_signal_to_config(base_sr, n, c)
+			_put_object_signal_to_config(script, n, c)
 			return c
 	
 	# Could not find.
@@ -420,28 +406,19 @@ static func object_signal_to_config(object: Node, n: String) -> ReplicationSigna
 
 ## Converts a object's signal name to an index.
 static func object_signal_to_idx(object: Node, c: ReplicationSignalConfig) -> int:
-	# Check if cached.
-	var base_sr := get_script_replication(object.get_script())
-	if not base_sr:
-		assert(false)
-		return -1
-	var cache := _get_object_signal_to_idx(base_sr, c)
+	# Check cache.
+	var script: Script = object.get_script()
+	var cache := _get_object_signal_to_idx(script, c)
 	if cache != -1:
 		return cache
 	
-	# Calculate the SR for this parent depth.
-	var parent_depth := -1
+	# Begin looping.
 	var current_idx := 0
-	while true:
-		parent_depth += 1
-		var sr := get_script_replication(object.get_script(), parent_depth)
-		if not sr:
-			break
-		
+	for sr in get_all_script_replications(script):
 		# Look for the config in this SR.
 		if sr.has_signal_config(c):
 			var result_idx := current_idx + sr.get_idx_from_signal_config(c)
-			_put_object_signal_to_idx(base_sr, c, result_idx)
+			_put_object_signal_to_idx(script, c, result_idx)
 			return result_idx
 		else:
 			current_idx += sr.signal_config.size()
@@ -451,28 +428,20 @@ static func object_signal_to_idx(object: Node, c: ReplicationSignalConfig) -> in
 
 ## Converts a object's signal index back into its config.
 static func object_idx_to_signal(object: Node, idx: int) -> ReplicationSignalConfig:
-	# Check if cached.
-	var base_sr := get_script_replication(object.get_script())
-	if not base_sr or idx < 0:
-		assert(false)
-		return null
-	var cache := _get_object_idx_to_signal(base_sr, idx)
+	# Check cache.
+	var script: Script = object.get_script()
+	var cache := _get_object_idx_to_signal(script, idx)
 	if cache:
 		return cache
 	
-	# Calculate the SR for this parent depth.
-	var parent_depth := -1
-	while true:
-		parent_depth += 1
-		var sr := get_script_replication(object.get_script(), parent_depth)
-		if not sr:
-			break
-		
+	# Begin looping.
+	var start_idx := idx
+	for sr in get_all_script_replications(script):
 		# Look for the config in this SR.
 		var config_count := sr.signal_config.size()
 		if idx < config_count:
 			var config := sr.get_signal_config_from_idx(idx)
-			_put_object_idx_to_signal(base_sr, idx, config)
+			_put_object_idx_to_signal(script, start_idx, config)
 			return config
 		else:
 			idx -= config_count
@@ -484,36 +453,36 @@ static func object_idx_to_signal(object: Node, idx: int) -> ReplicationSignalCon
 
 static var _object_signal_to_config_cache := {}
 
-static func _put_object_signal_to_config(sr: ScriptReplication, n: String, c: ReplicationSignalConfig):
+static func _put_object_signal_to_config(sr: Script, n: String, c: ReplicationSignalConfig):
 	if sr not in _object_signal_to_config_cache:
 		_object_signal_to_config_cache[sr] = {}
 	_object_signal_to_config_cache[sr][n] = c
 
-static func _get_object_signal_to_config(sr: ScriptReplication, n: String) -> ReplicationSignalConfig:
+static func _get_object_signal_to_config(sr: Script, n: String) -> ReplicationSignalConfig:
 	if sr not in _object_signal_to_config_cache:
 		return null
 	return _object_signal_to_config_cache[sr].get(n, null)
 
 static var _object_signal_to_idx_cache := {}
 
-static func _put_object_signal_to_idx(sr: ScriptReplication, c: ReplicationSignalConfig, idx: int):
+static func _put_object_signal_to_idx(sr: Script, c: ReplicationSignalConfig, idx: int):
 	if sr not in _object_signal_to_idx_cache:
 		_object_signal_to_idx_cache[sr] = {}
 	_object_signal_to_idx_cache[sr][c] = idx
 
-static func _get_object_signal_to_idx(sr: ScriptReplication, c: ReplicationSignalConfig) -> int:
+static func _get_object_signal_to_idx(sr: Script, c: ReplicationSignalConfig) -> int:
 	if sr not in _object_signal_to_idx_cache:
 		return -1
 	return _object_signal_to_idx_cache[sr].get(c, -1)
 
 static var _object_idx_to_signal_cache := {}
 
-static func _put_object_idx_to_signal(sr: ScriptReplication, idx: int, c: ReplicationSignalConfig):
+static func _put_object_idx_to_signal(sr: Script, idx: int, c: ReplicationSignalConfig):
 	if sr not in _object_idx_to_signal_cache:
 		_object_idx_to_signal_cache[sr] = {}
 	_object_idx_to_signal_cache[sr][idx] = c
 
-static func _get_object_idx_to_signal(sr: ScriptReplication, idx: int) -> ReplicationSignalConfig:
+static func _get_object_idx_to_signal(sr: Script, idx: int) -> ReplicationSignalConfig:
 	if sr not in _object_idx_to_signal_cache:
 		return null
 	return _object_idx_to_signal_cache[sr].get(idx, null)

@@ -47,7 +47,7 @@ func _poll():
 func _rpc(peer: int, object: Object, method: StringName, args: Array) -> Error:
 	if object is not Node:
 		return ERR_UNCONFIGURED
-	return rpc.outbound_rpc(peer, object, method, args)
+	return await rpc.outbound_rpc(peer, object, method, args)
 
 func _object_configuration_add(object, config: Variant) -> Error:
 	return scene_multiplayer.object_configuration_add(object, config)

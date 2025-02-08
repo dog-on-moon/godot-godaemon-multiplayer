@@ -27,8 +27,8 @@ func _ready() -> void:
 	if mp.is_server():
 		mp.peer_disconnected.connect(_peer_disconnected)
 		svc = ZoneSvc.new()
-		add_child(svc)
 		replication_service.set_visibility(svc, true)
+		add_child(svc)
 	else:
 		child_entered_tree.connect(
 			func (n: Node):
@@ -59,10 +59,10 @@ func add_zone(node: Node) -> Zone:
 	zone.zone_index = zone_index
 	zone_index += 1
 	zones[zone] = null
-	zone.add_child(node)
-	svc.add_child(zone)
 	replication_service.set_visibility(zone, false)
 	replication_service.set_visibility(zone.scene, true)
+	zone.add_child(node)
+	svc.add_child(zone)
 	return zone
 
 ## Removes a Zone and frees it. Returns true on successful removal.

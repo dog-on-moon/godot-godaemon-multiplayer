@@ -4,63 +4,49 @@ class_name ClientRoot
 ## The client node for a multiplayer session.
 ## Establishes a connection with a ServerRoot.
 
-const InternalServer = preload("res://addons/godaemon_multiplayer/api/nodes/internal_server/internal_server.gd")
+var enet_address := "127.0.0.1"  # ip address
+var enet_port := 27027  # ip port
+var enet_local_port := 0  # useful for some NAT traversal techniques
 
-#region Exports
-
-## A fully qualified domain name (e.g. "www.example.com")
-## or an IP address in IPv4 or IPv6 format (e.g. "192.168.1.1")
-## that the server is hosting on.
-@export var address := "127.0.0.1":
-	get:
-		return address if not use_internal_server else "127.0.0.1"
-
-## The port that the server is listening on.
-@export var port := 27027
-
-@export_group("Internal Server")
-#region
-
-## When true, this client will run a separate, background process of Godot
-## running a ServerRoot node of the same multiplayer configuration.
-## This is similar to running a ServerRoot elsewhere in the scene tree.
-@export var use_internal_server := false:
-	set(x):
-		use_internal_server = x
-		update_configuration_warnings()
-		notify_property_list_changed()
-
-## When true, the internal server will run as a background process (headless).
-@export var headless_internal_server := true
-
-#endregion
-
-@export_group("Advanced")
-#region
-
-## When specified, the client will also listen to the given port.
-## This is useful for some NAT traversal techniques. Only for the brave.
-@export var local_port := 0
-
-#endregion
-
-#endregion
+var steam_id := 0  # target steam ID
+var steam_port := 0  # target steam port
+var steam_loopback_server: ServerRoot  # adjacent loopback server for connecting
 
 #region Connection
 
+## Configures the connection to use the ENet implementation.
+func configure_enet(address := "127.0.0.1", port := 27027, local_port := 0):
+	connection_config = ConnectionConfig.ENet
+	enet_address = address
+	enet_port = port
+	enet_local_port = local_port
+
+## Configures the connection to use a Steam implementation.
+## Note that if Steam is inactive, ENet will be used as a fallback.
+func configure_steam(_steam_id: int, port := 0):
+	connection_config = ConnectionConfig.Steam
+	steam_id = _steam_id
+	steam_port = port
+	steam_loopback_server = null
+
+## Configures the connection to use a Steam loopback connection.
+## Note that if Steam is inactive, ENet will be used as a fallback.
+func configure_steam_loopback(server: ServerRoot):
+	connection_config = ConnectionConfig.Steam
+	steam_id = 0
+	steam_port = 0
+	steam_loopback_server = server
+
 ## Attempts a connection to the server.
 func start_connection() -> bool:
+	if connection_config == ConnectionConfig.None:
+		assert(false, "ClientRoot must be configured before connection begins")
+		return false
 	# Ensure we are not currently connecting.
 	if connection_state in [ConnectionState.WAITING, ConnectionState.AUTHENTICATING, ConnectionState.CONNECTED]:
 		push_warning("ClientRoot.attempt_connect was still connecting")
 		return false
 	connection_state = ConnectionState.DISCONNECTED
-	
-	# Attempt creating an internal server.
-	if not await _start_internal_server():
-		push_warning("ClientRoot.attempt_connect could not make internal server")
-		connection_failed.emit(connection_state)
-		return false
 	
 	# Setup GodaemonMultiplayerAPI and peer.
 	var api := GodaemonMultiplayerAPI.new()
@@ -68,25 +54,44 @@ func start_connection() -> bool:
 	api.scene_multiplayer.allow_object_decoding = false
 	api.scene_multiplayer.auth_timeout = configuration.authentication_timeout
 	get_tree().set_multiplayer(api, get_path())
-	var peer = ENetMultiplayerPeer.new()
 	
-	# Create client connection.
-	if get_total_channel_count() > MAX_ENET_CHANNELS:
-		push_error("ClientRoot.start_connection exceeded channel limit, max is %s (currently %s)" % [MAX_ENET_CHANNELS, get_total_channel_count()])
-		return false
-	var error := peer.create_client(
-		address, port, get_total_channel_count(),
-		configuration.client_in_bandwidth, configuration.client_out_bandwidth,
-		local_port
-	)
+	var peer: MultiplayerPeer
+	var error: Error
+	if connection_config == ConnectionConfig.Steam:
+		if not Godaemon.is_steam_active():
+			push_warning("ServerRoot.start_connection could not start steam connection")
+			return false
+		var steam_peer := SteamMultiplayerPeer.new()
+		peer = steam_peer
+		if not steam_loopback_server:
+			error = steam_peer.create_client(steam_id, steam_port)
+		else:
+			var host_peer: SteamMultiplayerPeer = steam_loopback_server.multiplayer.multiplayer_peer
+			if host_peer:
+				error = steam_peer.create_loopback_client(host_peer)
+			else:
+				assert(false)
+				error = ERR_CANT_CONNECT
+	else:
+		var enet_peer := ENetMultiplayerPeer.new()
+		peer = enet_peer
+		
+		# Create client connection.
+		if get_total_channel_count() > MAX_ENET_CHANNELS:
+			push_error("ClientRoot.start_connection exceeded channel limit, max is %s (currently %s)" % [MAX_ENET_CHANNELS, get_total_channel_count()])
+			return false
+		error = enet_peer.create_client(
+			enet_address, enet_port, get_total_channel_count(),
+			configuration.client_in_bandwidth, configuration.client_out_bandwidth,
+			enet_local_port
+		)
 	if error != OK:
 		push_warning("ClientRoot.attempt_connect had error: %s" % error_string(error))
-		_end_internal_server()
 		connection_failed.emit(connection_state)
 		return false
+	
 	if peer.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
-		push_warning("ClientRoot.attempt_connect could not create ENetMultiplayer peer")
-		_end_internal_server()
+		push_warning("ClientRoot.attempt_connect could not create peer")
 		connection_failed.emit(connection_state)
 		return false
 	
@@ -114,8 +119,6 @@ func start_connection() -> bool:
 		_:
 			peer.close()
 			connection_failed.emit(connection_state)
-			if not multiconnect_on_ready:
-				_end_internal_server()
 			return false
 
 #region Client Async Connect
@@ -201,42 +204,12 @@ func end_connection() -> bool:
 	if api.peer_disconnected.is_connected(peer_disconnected.emit):
 		api.peer_disconnected.disconnect(peer_disconnected.emit)
 	server_disconnected.emit()
-	_end_internal_server()
 	return true
 
 func _on_client_peer_disconnect(peer: int):
 	# Forces a disconnection whenever the server peer disconencts
 	if connection_state == ConnectionState.CONNECTED and peer == 1:
 		end_connection()
-
-func end_multi_connect():
-	super()
-	_end_internal_server()
-
-#endregion
-
-#region Internal Server
-
-## The process ID of the internal server.
-var internal_server_pid := -1
-
-# Attempts to create the internal server.
-# Note that this returns TRUE even when internal server is disabled
-# (since it technically didn't fail!)
-func _start_internal_server() -> bool:
-	if use_internal_server:
-		internal_server_pid = InternalServer.start_internal_server(
-			port, configuration, headless_internal_server
-		)
-		if internal_server_pid == -1:
-			return false
-		if not headless_internal_server:
-			await get_tree().create_timer(5.0).timeout
-	return true
-
-func _end_internal_server():
-	if internal_server_pid != -1:
-		SubprocessServer.kill_subprocess(internal_server_pid)
 
 #endregion
 
@@ -248,15 +221,6 @@ func is_client() -> bool:
 #endregion
 
 func _validate_property(property: Dictionary) -> void:
-	if not use_internal_server:
-		if property.name in [
-			'internal_server_scene',
-			'headless_internal_server'
-				]:
-			property.usage ^= PROPERTY_USAGE_EDITOR
-	else:
-		if property.name in ['address']:
-			property.usage ^= PROPERTY_USAGE_EDITOR
 	if property.name in [
 		'stretch'
 			]:
@@ -266,6 +230,4 @@ func _get_configuration_warnings() -> PackedStringArray:
 	var warnings := PackedStringArray()
 	if not configuration:
 		warnings.append("A MultiplayerConfiguration must be defined.")
-	elif use_internal_server and configuration.resource_path.contains('::'):
-			warnings.append("The MultiplayerConfiguration must be saved as a unique resource for use in an internal server.")
 	return warnings

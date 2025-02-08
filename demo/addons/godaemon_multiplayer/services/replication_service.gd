@@ -4,6 +4,8 @@ class_name ReplicationService
 ## replicated to clients and controlled using visibility.
 ## This also tracks added nodes for RPCs and replicates their IDs to clients.
 
+const KEY_REPLICATE_CURRENT_SCENE := &"_rcs"
+
 signal node_owner_updated(node: Node)
 
 signal enter_replication(node: Node)
@@ -40,19 +42,18 @@ func _peer_disconnected(peer: int):
 #region Service Internals
 
 func _target_peer_modifier(from_peer: int, target_peers: Array[int], node: Node, method: StringName, args: Array):
-	if node in replication_visibility:
-		var valid_peers := get_observing_peers(node)
-		if target_peers == [0]:
-			target_peers.clear()
-			for p in valid_peers:
-				target_peers.append(p)
-		elif not target_peers:
-			return
-		elif target_peers[0] > 0:
-			target_peers.assign(target_peers.filter(func (p: int): return p in valid_peers))
-		else:
-			var skip_peer: int = -target_peers[0]
-			target_peers.assign(target_peers.filter(func (p: int): return p in valid_peers and p != skip_peer))
+	var valid_peers := get_observing_peers(node)
+	if target_peers == [0]:
+		target_peers.clear()
+		for p in valid_peers:
+			target_peers.append(p)
+	elif not target_peers:
+		return
+	elif target_peers[0] > 0:
+		target_peers.assign(target_peers.filter(func (p: int): return p in valid_peers))
+	else:
+		var skip_peer: int = -target_peers[0]
+		target_peers.assign(target_peers.filter(func (p: int): return p in valid_peers and p != skip_peer))
 
 func _rpc_filter(from_peer: int, to_peer: int, node: Node, method: StringName, args: Array):
 	if node in replication_visibility:
@@ -82,10 +83,16 @@ func _replication_search(node: Node):
 	# The client will still use the exit trees below to cleanup leaving IDs.
 	if mp.is_server() and mp.api.repository.get_id(node) == -1:
 		mp.api.repository.add_object(node)
+		
+		if node.scene_file_path and node.has_meta(KEY_REPLICATE_CURRENT_SCENE):
+			set_visibility(node, false)
+			node.ready.connect(set_visibility.bind(node, true), CONNECT_ONE_SHOT)
 	
 	# Setup signals on this node.
 	node.child_entered_tree.connect(_replication_search)
-	node.tree_exiting.connect(_node_tree_exiting.bind(node))
+	node.set_emit_freeing(true)
+	node.freeing.connect(_node_tree_exiting.bind(node))
+	#node.tree_exiting.connect(_node_tree_exiting.bind(node))
 	
 	# Continue iteration.
 	if node.is_node_ready():
@@ -109,13 +116,7 @@ func _register_replication(node: Node):
 		replication_visibility[node] = {1: false}
 
 func _node_tree_exiting(node: Node):
-	# Only cleanup a node when it is actually being deleted.
-	if not node.is_queued_for_deletion():
-		return
-	
-	var script := node.get_script()
-	var sr := ReplicationData.get_script_replication(script)
-	if sr:
+	if ReplicationData.get_base_script_replication(node.get_script()):
 		exit_replication.emit(node)
 	
 	if node in replication_visibility:
@@ -126,8 +127,38 @@ func _node_tree_exiting(node: Node):
 	
 	if node in _visibility_cache:
 		_visibility_cache.erase(node)
-	if mp.api and mp.api.repository and mp.api.repository.get_id(node) != -1:
+	if mp and mp.api and mp.api.repository and mp.api.repository.get_id(node) != -1:
 		mp.api.repository.remove_object(node)
+
+#endregion
+
+#region Reparenting
+
+## Replicates a node reparent to clients.
+func reparent_node(node: Node, parent: Node):
+	if node in replication_visibility:
+		_clear_visibility_cache(node)
+	var node_id := mp.api.repository.get_id(node)
+	var parent_id := mp.api.repository.get_id(parent)
+	__node_reparent.rpc(node_id, parent_id)
+
+## Internal node reparent replication
+@rpc
+func __node_reparent(node_id: int, parent_id: int):
+	var node: Node = mp.api.repository.get_object(node_id)
+	var parent: Node = mp.api.repository.get_object(parent_id)
+	if not node:
+		return
+	elif node.get_parent() == parent:
+		# No reparenting has occurred
+		return
+	elif node and not parent:
+		# Node reparented to node we don't know, effectively cleanup
+		node.get_parent().remove_child(node)
+		node.queue_free()
+	elif node and parent:
+		# Node reparented to node we do know, replicate the reparent
+		node.reparent(parent)
 
 #endregion
 
@@ -158,7 +189,7 @@ func get_true_visibility(node: Node, peer: int) -> bool:
 
 func _clear_visibility_cache(node: Node, peer := 1):
 	if node in _visibility_cache:
-		for n in _get_replicated_descendants(node):
+		for n in _get_replicated_descendants(node, true):
 			if peer == 1:
 				_visibility_cache.erase(n)
 			elif peer in _visibility_cache[n]:
@@ -190,23 +221,35 @@ func get_observing_peers(node: Node) -> Dictionary:
 			continue
 		if get_true_visibility(node, peer):
 			peers[peer] = null
+	if node in _client_created_scenes:
+		peers[_client_created_scenes[node]] = null
 	return peers
 
 func _get_replicated_ancestors(node: Node) -> Dictionary:
 	var ancestors := {}
-	while node != mp:
+	while node != mp and node:
 		if node in replication_visibility:
 			ancestors[node] = null
 		node = node.get_parent()
 	return ancestors
 
-func _get_replicated_descendants(node: Node) -> Dictionary:
+func _get_replicated_descendants(node: Node, include_cache := false) -> Dictionary:
 	var descendants := {}
 	if node in replication_visibility:
 		descendants[node] = null
 	for n in replication_visibility:
+		if not is_instance_valid(n):
+			continue
 		if node.is_ancestor_of(n):
 			descendants[n] = null
+	if include_cache:
+		for n in _visibility_cache:
+			if not is_instance_valid(n):
+				continue
+			if n in descendants:
+				continue
+			if node.is_ancestor_of(n):
+				descendants[n] = null
 	return descendants
 
 #endregion
@@ -216,22 +259,27 @@ func _get_replicated_descendants(node: Node) -> Dictionary:
 ## Sets up signal replication for a node. Called on server and client.
 func _setup_signal_replication(node: Node):
 	# Setup initial replication.
-	var base_sr := ReplicationData.get_script_replication(node.get_script())
+	var base_sr := ReplicationData.get_base_script_replication(node.get_script())
 	if not base_sr:
 		return
 	enter_replication.emit(node)  # kinda lazily merged into here, but fast
 	
 	# Now setup signal replication.
-	var parent_depth := -1
-	while true:
-		parent_depth += 1
-		var sr := ReplicationData.get_script_replication(node.get_script(), parent_depth)
-		if not sr:
-			break
-	
+	for sr in ReplicationData.get_all_script_replications(node.get_script()):
 		for c in sr.signal_config:
 			if c.can_we_send(mp, node):
-				node.connect(StringName(c.name), _on_signal_emit.bind(node, base_sr, c))
+				node.connect(
+					StringName(c.name),
+					func (
+						arg1: Variant = null, arg2: Variant = null, arg3: Variant = null, arg4: Variant = null,
+						arg5: Variant = null, arg6: Variant = null, arg7: Variant = null, arg8: Variant = null
+						):
+						_on_signal_emit(
+							arg1, arg2, arg3, arg4,
+							arg5, arg6, arg7, arg8,
+							node, base_sr, c
+						)
+				)
 
 var _signal_loop_block := {}
 
@@ -258,6 +306,7 @@ func _on_signal_emit(
 	if idx == -1:
 		assert(false)
 		return
+	await mp.api.repository.await_for_id(get_tree(), node)
 	for p in get_observing_peers(node):
 		if c.can_they_recv(node, p):
 			if c.reliable:
@@ -318,6 +367,93 @@ func _is_signal_loop_blocked(node: Node, c: ReplicationSignalConfig) -> bool:
 
 #endregion
 
+#region Client Replicated Scene
+
+## Client replicated scenes take an interesting flow:
+## 1. Client calls ReplicationService.request_replication(node).
+## 2. The server will emit ReplicationService.replication_request_validation. Something must validate and call the callable.
+## 3. If valid, the server will replicate the node to other peers, and assign node IDs back to the calling client.
+
+## Emitted on the server when a replication request is made on a client.
+signal replication_request_validation(parent: Node, res: Resource, peer: int, cb: Callable)
+
+var client_queued_replication_tokens: Dictionary[int, Node] = {}
+var client_replication_token_idx := 0
+
+var _client_created_scenes: Dictionary[Node, int] = {}
+
+## A client can call this function to request a local script/scene to become replicated.
+## Note that the server must listen & emit the above signal to accept the request.
+func request_replication(node: Node):
+	if not mp.is_client():
+		assert(false, "cannot request replication on client")
+		return
+	if not node.is_inside_tree():
+		assert(false, "replicated node must be inside tree")
+		return
+	var parent := node.get_parent()
+	await mp.api.repository.await_for_id(get_tree(), parent)
+	var parent_id := mp.api.repository.get_id(parent)
+	if parent_id == -1:
+		assert(false, "replication parent must have ID")
+		return
+	var args := ReplicationData.get_object_property_values(node)
+	var token_idx := client_replication_token_idx
+	client_queued_replication_tokens[token_idx] = node
+	client_replication_token_idx += 1
+	mp.api.repository.add_object_id_await(node)
+	if node.scene_file_path:
+		var uid := ReplicationData.path_to_uid(node.scene_file_path)
+		_request_replication.rpc(parent_id, uid, args, token_idx)
+	elif node.get_script():
+		var uid := ReplicationData.path_to_uid(node.get_script().resource_path)
+		_request_replication.rpc(parent_id, uid, args, token_idx)
+	else:
+		assert(false, "unknown replication uid")
+
+@rpc
+func _request_replication(parent_id: int, uid: int, args: Array, token: int):
+	# Server receives this to forward attack replication to other clients.
+	var parent := mp.api.repository.get_object(parent_id)
+	if not parent:
+		return
+	var path := ReplicationData.uid_to_path(uid)
+	if not path:
+		return
+	var res := load(path)
+	if res is not Script and res is not PackedScene:
+		return
+	replication_request_validation.emit(parent, res, mp.remote_peer, _accept_replication.bind(parent, res, mp.remote_peer, args, token))
+
+func _accept_replication(parent: Node, res: Resource, peer: int, args: Array, token: int):
+	var n: Node = null
+	if res is Script:
+		n = res.new()
+	elif res is PackedScene:
+		n = res.instantiate()
+	else:
+		assert(false)
+		return
+	#_forced_visibility[n] = true
+	_client_created_scenes[n] = peer
+	set_peer_visibility(n, peer, false)
+	set_visibility(n, true)
+	ReplicationData.apply_object_property_values(mp, n, args, 0)
+	parent.add_child(n)
+	var node_id := mp.api.repository.get_id(n)
+	_receive_client_replication_ids.rpc_id(peer, token, node_id)
+
+@rpc
+func _receive_client_replication_ids(token: int, node_id: int):
+	if token not in client_queued_replication_tokens:
+		return
+	var node := client_queued_replication_tokens[token]
+	client_queued_replication_tokens.erase(token)
+	if node and is_instance_valid(node) and not node.is_queued_for_deletion():
+		mp.api.repository.add_object(node, node_id)
+
+#endregion
+
 #region Client Scene Remap
 
 var _client_scene_remaps: Dictionary[PackedScene, PackedScene] = {}
@@ -338,10 +474,22 @@ func remap_script(from_script: Script, to_script: Script):
 
 #region Visibility
 
+## Registers a node to set its visibility upon entering the tree.
+## Allows it to have default visibility before ready.
+func register_enter_visibility(node: Node, visibility := false):
+	assert(mp.is_server())
+	assert(not node.is_inside_tree())
+	var f := set_visibility.bind(node, visibility)
+	if not node.tree_entered.is_connected(f):
+		node.tree_entered.connect(f, CONNECT_ONE_SHOT)
+
 ## Sets the networked visibility of a replicated script.
 func set_visibility(node: Node, visibility: bool):
 	assert(mp.is_server())
-	assert(node.is_node_ready())
+	if not node.is_inside_tree():
+		register_enter_visibility(node, false)
+		node.ready.connect(set_visibility.bind(node, visibility), CONNECT_ONE_SHOT)
+		return
 	_register_replication(node)
 	var old_visibility := get_visible_nodes(node)
 	replication_visibility[node][1] = visibility
@@ -352,6 +500,10 @@ func set_visibility(node: Node, visibility: bool):
 ## Overrides the networked visibility of a scene per peer.
 func set_peer_visibility(node: Node, peer: int, visibility: bool):
 	assert(mp.is_server())
+	if not node.is_inside_tree():
+		register_enter_visibility(node, false)
+		node.ready.connect(set_peer_visibility.bind(node, peer, visibility), CONNECT_ONE_SHOT)
+		return
 	_register_replication(node)
 	var old_peer_visibility := get_visible_nodes_for_peer(peer, node)
 	replication_visibility[node][peer] = visibility
@@ -362,6 +514,7 @@ func set_peer_visibility(node: Node, peer: int, visibility: bool):
 ## Clears the networked visibility's peer override.
 func clear_peer_visibility(node: Node, peer: int):
 	assert(mp.is_server())
+	assert(node.is_inside_tree())
 	_register_replication(node)
 	var old_peer_visibility := get_visible_nodes_for_peer(peer, node)
 	replication_visibility[node].erase(peer)
@@ -432,42 +585,43 @@ func _update_peer_nodes(peer: int, old_peer_visibility: Dictionary, new_peer_vis
 var _rpc_added_nodes: Array[Node] = []
 var _rpc_removed_nodes: Array[Node] = []
 
-func np_sort_func(a: Node, b: Node):
+func np_sort_ascending(a: Node, b: Node):
 	return mp.api.repository.get_id(a) < mp.api.repository.get_id(b)
+
+func np_sort_descending(a: Node, b: Node):
+	return mp.api.repository.get_id(a) > mp.api.repository.get_id(b)
 
 func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Array[Node]):
 	if peer not in mp.api.get_peers() or not is_inside_tree():
 		return
 	
-	# Ensure nodes are inside tree.
-	for idx in range(added_nodes.size() - 1, -1, -1):
-		if not added_nodes[idx].is_inside_tree():
-			added_nodes.pop_at(idx)
-	for idx in range(removed_nodes.size() - 1, -1, -1):
-		if not removed_nodes[idx].is_inside_tree():
-			removed_nodes.pop_at(idx)
+	# Ensure added nodes are inside tree.
+	#for idx in range(added_nodes.size() - 1, -1, -1):
+		#if not added_nodes[idx].is_inside_tree():
+			#added_nodes.pop_at(idx)
 	
 	# Cull removed nodes that are the child of other removed nodes.
-	var culled_removed_nodes: Array[Node] = []
-	for node in removed_nodes:
-		var is_child := false
-		var ancestors := _get_replicated_ancestors(node)
-		for other in removed_nodes:
-			if node == other:
-				continue
-			if other in ancestors:
-				is_child = true
-				break
-		if is_child:
-			break
-		culled_removed_nodes.append(node)
-	removed_nodes = culled_removed_nodes
+	#var culled_removed_nodes: Array[Node] = []
+	#for node in removed_nodes:
+		#var is_child := false
+		#var ancestors := _get_replicated_ancestors(node)
+		#for other in removed_nodes:
+			#if node == other:
+				#continue
+			#if other in ancestors:
+				#is_child = true
+				#break
+		#if is_child:
+			#break
+		#culled_removed_nodes.append(node)
+	#removed_nodes = culled_removed_nodes
 	
-	# Sort node IDs by largest to smallest.
 	if added_nodes:
-		added_nodes.sort_custom(np_sort_func)
+		# smallest to largest for added nodes, so early nodes are added first
+		added_nodes.sort_custom(np_sort_ascending)
 	if removed_nodes:
-		removed_nodes.sort_custom(np_sort_func)
+		# smallest to largest for removed nodes, so early nodes are removed first
+		removed_nodes.sort_custom(np_sort_ascending)
 	
 	# Determine all of the information we have to replicate.
 	var added_node_data := []
@@ -546,6 +700,7 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 	var data := _compress_visibility_data(added_node_data, removed_node_data)
 	if not data:
 		return
+	#Log.info(self, "Sending visibility:\n\tadding %s\n\tremoving %s" % [added_nodes, removed_nodes])
 	_rpc_added_nodes = added_nodes
 	_rpc_removed_nodes = removed_nodes
 	update_visibility.rpc_id(peer, data)
@@ -562,11 +717,13 @@ func update_visibility(data: PackedByteArray):
 	# Remove nodes.
 	var removed_node_data: Array = visibility_data[1]
 	for node_id: int in removed_node_data:
-		var node := mp.api.repository.get_object(node_id)
+		var node: Node = mp.api.repository.get_object(node_id)
 		if not node:
 			push_warning("Visibility asked to remove node that didn't exist")
 			continue
-		mp.api.repository.remove_object_id(node_id)
+		elif not node.is_inside_tree():
+			continue
+		#mp.api.repository.remove_object_id(node_id)
 		node.get_parent().remove_child(node)
 		node.queue_free()
 	
@@ -591,6 +748,8 @@ func update_visibility(data: PackedByteArray):
 		if not parent:
 			push_warning("Received unknown parent node ID %s in visibility update.
 			This is likely caused by an ancestor scene being added to the server and not having its visibility configured properly." % parent_id)
+			if OS.has_feature("editor"):
+				_ask_missing_id.rpc(parent_id)
 			continue
 		
 		# Load resource path.
@@ -748,5 +907,11 @@ func _decompress_visibility_data(data: PackedByteArray) -> Array:
 		push_warning("RPC decompression failed in ReplicationService.")
 		return []
 	return [added_node_data, removed_node_data]
+
+@rpc
+func _ask_missing_id(node_id: int):
+	if OS.has_feature("editor"):
+		var n := mp.api.repository.get_object(node_id)
+		push_warning("peer %s missing id %s: %s" % [mp.remote_peer, node_id, mp.get_path_to(n) if n else "unknown NP!"])
 
 #endregion

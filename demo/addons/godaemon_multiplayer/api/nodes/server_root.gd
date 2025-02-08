@@ -4,12 +4,21 @@ class_name ServerRoot
 ## The server node for a multiplayer session.
 ## Establishes a connection with a ClientRoot.
 
-## The port that the server is listening on.
-## If the ServerRoot exists in a process that has been created through a
-## ClientRoot's internal scene, this will instead use the ClientRoot's port.
-@export var port := 27027
+var enet_port := 27027
+var steam_port := 0
 
 #region Connection
+
+## Configures the connection to use the ENet implementation.
+func configure_enet(port := 27027):
+	connection_config = ConnectionConfig.ENet
+	enet_port = port
+
+## Configures the connection to use a Steam implementation.
+## Note that if Steam is inactive, ENet will be used as a fallback.
+func configure_steam(port := 0):
+	connection_config = ConnectionConfig.Steam
+	steam_port = port
 
 ## Attempts a connection to the server.
 func start_connection() -> bool:
@@ -25,16 +34,28 @@ func start_connection() -> bool:
 	api.scene_multiplayer.allow_object_decoding = false
 	api.scene_multiplayer.auth_timeout = configuration.authentication_timeout
 	get_tree().set_multiplayer(api, get_path())
-	var peer = ENetMultiplayerPeer.new()
 	
-	# Create server connection.
-	if get_total_channel_count() > MAX_ENET_CHANNELS:
-		push_error("ServerRoot.start_connection exceeded channel limit, max is %s (currently %s)" % [MAX_ENET_CHANNELS, get_total_channel_count()])
-		return false
-	var error := peer.create_server(
-		port, configuration.max_clients, get_total_channel_count(),
-		configuration.server_in_bandwidth, configuration.server_out_bandwidth
-	)
+	var peer: MultiplayerPeer
+	var error: Error
+	if connection_config == ConnectionConfig.Steam:
+		if not Godaemon.is_steam_active():
+			push_warning("ServerRoot.start_connection could not start steam connection")
+			return false
+		var steam_peer := SteamMultiplayerPeer.new()
+		peer = steam_peer
+		error = steam_peer.create_host(steam_port)
+	else:
+		var enet_peer := ENetMultiplayerPeer.new()
+		peer = enet_peer
+		
+		# Create server connection.
+		if get_total_channel_count() > MAX_ENET_CHANNELS:
+			push_error("ServerRoot.start_connection exceeded channel limit, max is %s (currently %s)" % [MAX_ENET_CHANNELS, get_total_channel_count()])
+			return false
+		error = enet_peer.create_server(
+			enet_port, configuration.max_clients, get_total_channel_count(),
+			configuration.server_in_bandwidth, configuration.server_out_bandwidth
+		)
 	if error != OK:
 		push_warning("ServerRoot.end_connection had error: %s" % error_string(error))
 		connection_failed.emit(connection_state)
@@ -44,7 +65,7 @@ func start_connection() -> bool:
 	if peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
 		await get_tree().process_frame
 		if peer.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
-			push_warning("ServerRoot.setup_server could not create ENetMultiplayer peer")
+			push_warning("ServerRoot.setup_server could not create peer")
 			connection_failed.emit(connection_state)
 			return false
 		elif (Time.get_ticks_msec() - start_t) > configuration.connection_timeout:

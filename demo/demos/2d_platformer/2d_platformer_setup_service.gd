@@ -30,12 +30,13 @@ func _ready() -> void:
 				replication_service.set_node_owner(player, peer)
 				peer_to_player[peer] = player
 				
-				# Add them to the zone scene.
-				game_scene.add_child(player)
-				
 				# Set the player scene's global visibility to true,
 				# which will replicate it and its properties to all peers.
+				# This MUST be called before the node enters the tree.
 				replication_service.set_visibility(player, true)
+				
+				# Add them to the zone scene.
+				game_scene.add_child(player)
 				
 				# Give the connected peer 'interest' to the game zone,
 				# giving them a view of the game world.

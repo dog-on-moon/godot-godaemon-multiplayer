@@ -38,6 +38,7 @@ func add_object(object: Object, object_id := -1) -> int:
 	# print('[%s] adding %s with ID=%s' % [api.mp.name, object, object_id])
 	object_to_id[object] = object_id
 	id_to_object[object_id] = object
+	_object_awaits.erase(object)
 	return object_id
 
 ## Removes a Object from the repository.
@@ -45,14 +46,18 @@ func remove_object(object: Object):
 	assert(object in object_to_id)
 	id_to_object.erase(object_to_id[object])
 	object_to_id.erase(object)
+	_object_awaits.erase(object)
 
 func remove_object_id(id: int):
 	assert(id in id_to_object)
 	object_to_id.erase(id_to_object[id])
+	_object_awaits.erase(id_to_object[id])
 	id_to_object.erase(id)
 
 ## Returns the object based on an ID in the repository. Returns null if not found.
 func get_object(id: int) -> Object:
+	if id in id_to_object and not is_instance_valid(id_to_object[id]):
+		id_to_object.erase(id)
 	return id_to_object.get(id, null)
 
 ## Returns the ID of a object in the repository. Returns -1 if not found.
@@ -62,3 +67,12 @@ func get_id(object: Object) -> int:
 ## Returns whether or not a given object is replicated.
 func is_replicated(object: Object) -> bool:
 	return get_id(object) != -1
+
+var _object_awaits: Dictionary[Object, Object] = {}
+
+func await_for_id(t: SceneTree, object: Object):
+	while object in _object_awaits:
+		await t.process_frame
+
+func add_object_id_await(object: Object):
+	_object_awaits[object] = null

@@ -5,26 +5,26 @@ const METHOD_REPLICATION_CONFIG = preload("res://addons/godaemon_multiplayer/rep
 const MethodReplicationConfig = preload("res://addons/godaemon_multiplayer/replication/editor/method_replication_config.gd")
 
 func _set_script(script: Script):
-	if script:
-		# Create method configs to fit our arguments.
-		var sr := ReplicationData.get_script_replication(script)
-		if sr:
-			var args := get_arguments(script)
-			var changed := false
-			
-			for config in sr.method_config.duplicate():
-				var found := false
-				for a in args:
-					if config.name == arg_to_name(a):
-						found = true
-						break
-				if not found:
-					# This config is dead.
-					sr.method_config.erase(config)
-					changed = true
-	
-			if changed:
-				sr.method_config = sr.method_config
+	#if script:
+		## Create method configs to fit our arguments.
+		#var sr := ReplicationData.get_script_replication(script)
+		#if sr:
+			#var args := get_arguments(script)
+			#var changed := false
+			#
+			#for config in sr.method_config.duplicate():
+				#var found := false
+				#for a in args:
+					#if config.name == arg_to_name(a):
+						#found = true
+						#break
+				#if not found:
+					## This config is dead.
+					#sr.method_config.erase(config)
+					#changed = true
+	#
+			#if changed:
+				#sr.method_config = sr.method_config
 	
 	super(script)
 

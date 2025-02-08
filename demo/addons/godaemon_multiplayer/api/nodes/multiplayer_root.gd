@@ -37,21 +37,23 @@ func _setup_timeout_handler():
 		return
 	peer_connected.connect(
 		func (p: int):
-			var packet_peer: ENetPacketPeer = multiplayer.multiplayer_peer.get_peer(p)
-			if configuration.peer_has_timeout():
-				# Peers have standard timeout.
-				packet_peer.set_timeout(
-					roundi(configuration.peer_timeout * 1000.0),
-					roundi(configuration.peer_timeout_minimum * 1000.0),
-					roundi(configuration.peer_timeout_maximum * 1000.0)
-				)
-			else:
-				# Peers have very very long timeout
-				packet_peer.set_timeout(
-					roundi(configuration.peer_timeout * 1000.0),
-					roundi(36000.0 * 1000.0),
-					roundi(36000.0 * 1000.0)
-				)
+			var peer: MultiplayerPeer = multiplayer.multiplayer_peer
+			if peer is ENetMultiplayerPeer:
+				var packet_peer: ENetPacketPeer = multiplayer.multiplayer_peer.get_peer(p)
+				if configuration.peer_has_timeout():
+					# Peers have standard timeout.
+					packet_peer.set_timeout(
+						roundi(configuration.peer_timeout * 1000.0),
+						roundi(configuration.peer_timeout_minimum * 1000.0),
+						roundi(configuration.peer_timeout_maximum * 1000.0)
+					)
+				else:
+					# Peers have very very long timeout
+					packet_peer.set_timeout(
+						roundi(configuration.peer_timeout * 1000.0),
+						roundi(36000.0 * 1000.0),
+						roundi(36000.0 * 1000.0)
+					)
 	)
 
 #endregion
@@ -76,6 +78,16 @@ signal peer_disconnected(peer: int)
 #endregion
 
 #region Properties
+
+## Possible connection configurations.
+enum ConnectionConfig {
+	None,   ## No connection is configured.
+	ENet,   ## Attempts to connect with the ENet interface.
+	Steam,  ## Attempts to connect with the Steam interface.
+}
+
+## The current connection configuration.
+var connection_config := ConnectionConfig.None
 
 ## Possible connection states.
 enum ConnectionState {

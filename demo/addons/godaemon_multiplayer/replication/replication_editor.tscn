@@ -1,7 +1,8 @@
-[gd_scene load_steps=6 format=3 uid="uid://cy8pwv5b1wil8"]
+[gd_scene load_steps=7 format=3 uid="uid://cy8pwv5b1wil8"]
 
 [ext_resource type="Script" uid="uid://cffaxicuibu6c" path="res://addons/godaemon_multiplayer/replication/replication_editor.gd" id="1_axgcc"]
 [ext_resource type="Script" uid="uid://dk6o36fihjsuh" path="res://addons/godaemon_multiplayer/replication/editor/method_vbox_container.gd" id="2_5pnhf"]
+[ext_resource type="Script" uid="uid://kfj1wagme0dh" path="res://addons/godaemon_multiplayer/replication/replicate_scene_box.gd" id="2_y1o3j"]
 [ext_resource type="Script" uid="uid://c2ot1tgbdo770" path="res://addons/godaemon_multiplayer/replication/editor/property_vbox_container.gd" id="3_5pnhf"]
 [ext_resource type="Script" uid="uid://hjxorbenfee3" path="res://addons/godaemon_multiplayer/replication/editor/signal_vbox_container.gd" id="4_5pnhf"]
 
@@ -48,6 +49,21 @@ theme_override_styles/normal = SubResource("StyleBoxEmpty_sbus2")
 bbcode_enabled = true
 text = " [rainbow freq=0.2 sat=0.6][b][wave]Moondog[/wave][/b][/rainbow] (moondog.gd)"
 vertical_alignment = 1
+
+[node name="ReplicateScene" type="CheckBox" parent="VBoxContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "When checked, the current scene's replication visibility will automatically register,
+becoming true by default. Otherwise, scene visibility must be set manually.
+
+Setting scene visibility, automatically or manually, is required
+for subnodes to have functional replication behavior."
+text = "Replicate Current Scene"
+script = ExtResource("2_y1o3j")
+
+[node name="Control2" type="Control" parent="VBoxContainer/HBoxContainer"]
+custom_minimum_size = Vector2(6, 0)
+layout_mode = 2
 
 [node name="ReloadButton" type="Button" parent="VBoxContainer/HBoxContainer"]
 unique_name_in_owner = true

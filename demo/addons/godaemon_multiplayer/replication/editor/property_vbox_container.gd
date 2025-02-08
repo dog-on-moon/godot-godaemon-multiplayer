@@ -43,26 +43,26 @@ func _ready() -> void:
 
 
 func _set_script(script: Script):
-	if script:
-		# Remove dead definitions.
-		var sr := ReplicationData.get_script_replication(script)
-		if sr:
-			var args := get_arguments(script)
-			var changed := false
-			
-			for config in sr.property_config.duplicate():
-				var found := false
-				for a in args:
-					if config.name == arg_to_name(a):
-						found = true
-						break
-				if not found:
-					# This config is dead.
-					sr.property_config.erase(config)
-					changed = true
-	
-			if changed:
-				sr.property_config = sr.property_config
+	#if script:
+		## Remove dead definitions.
+		#var sr := ReplicationData.get_script_replication(script)
+		#if sr:
+			#var args := get_arguments(script)
+			#var changed := false
+			#
+			#for config in sr.property_config.duplicate():
+				#var found := false
+				#for a in args:
+					#if config.name == arg_to_name(a):
+						#found = true
+						#break
+				#if not found:
+					## This config is dead.
+					#sr.property_config.erase(config)
+					#changed = true
+	#
+			#if changed:
+				#sr.property_config = sr.property_config
 	super(script)
 
 func get_arguments(s: Script) -> Array:

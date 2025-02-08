@@ -54,10 +54,19 @@ func _peer_disconnected(peer: int):
 var srs_override := 0
 
 func outbound_rpc(peer: int, object: Object, method: StringName, args: Array) -> Error:
+	if not is_instance_valid(object):
+		return ERR_CANT_RESOLVE
+	await api.repository.await_for_id(api.mp.get_tree(), object)
+	if not is_instance_valid(object):
+		return ERR_CANT_RESOLVE
 	if api.repository.get_id(object) == -1:
 		push_error("Attempted to send RPC on untracked object: %s.\n
 				Use mp.api.repository.add_object(obj, id), and ensure the id is matched on both server and client." % object)
 		return ERR_CANT_RESOLVE
+	
+	if object.is_queued_for_deletion():
+		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc sent RPC on node %s queued for deletion" % object)
+		return ERR_BUSY
 	
 	# Validate the config.
 	var script := object.get_script()
@@ -67,15 +76,19 @@ func outbound_rpc(peer: int, object: Object, method: StringName, args: Array) ->
 	
 	var config := ReplicationData.object_method_to_config(object, String(method))
 	if not config:
+		#breakpoint
+		ReplicationData.object_method_to_config(object, String(method))
 		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc attempted to send RPC on configless method %s" % [method])
 		return ERR_UNCONFIGURED
 	
-	if object is Node and not config.can_we_send(api.mp, object):
+	if object is Node and (not config.can_we_send(api.mp, object) and not api.mp.is_server()):
 		push_error("Could not RPC protected method %s for server (%s)" % [method, script.resource_path])
 		return ERR_UNCONFIGURED
 	
 	var method_idx: int = ReplicationData.object_method_to_idx(object, config)
 	if method_idx >= MAX_RPC_METHODS or method_idx == -1:
+		#breakpoint
+		ReplicationData.object_method_to_idx(object, config)
 		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc method idx was invalid")
 		return ERR_UNCONFIGURED
 	
@@ -83,9 +96,10 @@ func outbound_rpc(peer: int, object: Object, method: StringName, args: Array) ->
 	if not object.has_method(method):
 		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc object missing method %s" % method)
 		return ERR_UNAVAILABLE
-	if object[method].get_argument_count() != args.size():
-		push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc mismatched argument counts: %s(%s)" % [method, args])
-		return ERR_UNAVAILABLE
+	#if object[method].get_argument_count() != args.size():
+		#breakpoint
+		#push_error("GodaemonMultiplayerAPI.rpc.outbound_rpc mismatched argument counts: %s(%s)" % [method, args])
+		#return ERR_UNAVAILABLE
 	
 	# Process hooks.
 	var from_peer := srs_override if srs_override != 0 else api.get_unique_id()
@@ -141,12 +155,14 @@ func outbound_rpc(peer: int, object: Object, method: StringName, args: Array) ->
 		var bytes := compress_rpc(from_peer, to_peer, object, method_idx, args)
 		if not bytes:
 			continue
+		
 		var target_peer: int = 1 if api.is_client() else to_peer
 		api.profiler.rpc(false, object.get_instance_id(), bytes.size() + 1)
 		api.send_command(GodaemonMultiplayerAPI.NetCommand.RPC, bytes, target_peer, transfer_mode, channel)
 		
 		if debug_print:
-			Log.info(self, "(%s => %s) sending RPC %s" % [from_peer, to_peer, target_peer])
+			if object is not SyncService:
+				Log.info(self, "(%s => %s) sending RPC %s.%s (id: %s)" % [from_peer, to_peer, object.name, method, api.repository.get_id(object)])
 	
 	# Perform local call (we do it late so this callback won't interrupt the expected RPCing).
 	# Also, if we're the server, only call local if SRS override is 0 (so the server doesnt also call local during forwarding)
@@ -172,7 +188,8 @@ func inbound_rpc(id: int, bytes: PackedByteArray):
 	# Ensure object and callable can be found.
 	var object := api.repository.get_object(object_id)
 	if not object:
-		push_error("GodaemonMultiplayerAPI.rpc.inbound_rpc received RPC for untracked object")
+		#breakpoint
+		#push_error("GodaemonMultiplayerAPI.rpc.inbound_rpc received RPC for untracked object (p: %s, id %s)" % [api.local_peer, object_id])
 		return ERR_UNCONFIGURED
 	
 	# Validate the config.
@@ -188,6 +205,9 @@ func inbound_rpc(id: int, bytes: PackedByteArray):
 	if not object.has_method(method):
 		return ERR_UNCONFIGURED
 	
+	if config.get_debug_print():
+		Log.info(self, "(%s => %s) receiving RPC %s.%s (id: %s)" % [from_peer, to_peer, object.name, method, object_id])
+	
 	var to_peer_is_owner := false
 	if object is Node:
 		to_peer_is_owner = to_peer == Godaemon.get_node_owner(object)
@@ -199,7 +219,7 @@ func inbound_rpc(id: int, bytes: PackedByteArray):
 			return ERR_UNCONFIGURED
 	
 	# Test ratelimit.
-	if not _check_rpc_ratelimit(from_peer, config):
+	if not _check_rpc_ratelimit(from_peer, object, config):
 		return
 	
 	# Test filters.
@@ -371,19 +391,28 @@ func get_object_channel_override(object: Object, default_channel: int = 0) -> in
 var peer_config_ratelimits := {}
 
 ## Tests the ratelimit on a given RPC for a Object.
-func _check_rpc_ratelimit(peer: int, config: ReplicationMethodConfig) -> bool:
+func _check_rpc_ratelimit(peer: int, object: Object, config: ReplicationMethodConfig) -> bool:
 	if is_zero_approx(config.ratelimit):
 		return true
 	
 	if peer not in peer_config_ratelimits:
 		peer_config_ratelimits[peer] = {}
-	if config not in peer_config_ratelimits[peer]:
-		peer_config_ratelimits[peer][config] = RateLimiter.new(api.mp, 1, config.ratelimit)
+	if object not in peer_config_ratelimits[peer]:
+		peer_config_ratelimits[peer][object] = {}
+		if not object.freeing.is_connected(_clear_object_ratelimit.bind(object)):
+			object.set_emit_freeing(true)
+			object.freeing.connect(_clear_object_ratelimit.bind(object))
+	if config not in peer_config_ratelimits[peer][object]:
+		peer_config_ratelimits[peer][object][config] = RateLimiter.new(api.mp, 1, config.ratelimit)
 	
-	var rl: RateLimiter = peer_config_ratelimits[peer][config]
+	var rl: RateLimiter = peer_config_ratelimits[peer][object][config]
 	var result := rl.check(peer)
 	if not result and OS.has_feature("editor"):
-		push_warning("GodaemonMultiplayerAPI: ratelimited RPC %s() for peer %s" % [config.name, peer])
+		push_warning("GodaemonMultiplayerAPI: ratelimited RPC %s.%s() for peer %s" % [object, config.name, peer])
 	return result
+
+func _clear_object_ratelimit(obj: Object):
+	for p: int in peer_config_ratelimits:
+		peer_config_ratelimits[p].erase(obj)
 
 #endregion

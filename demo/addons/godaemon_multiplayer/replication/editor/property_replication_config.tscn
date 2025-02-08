@@ -26,3 +26,8 @@ visible = false
 
 [node name="CallLocal" parent="Contents/VBoxContainer/HFlowContainer" index="3"]
 visible = false
+
+[node name="AngularLerp" type="CheckBox" parent="Contents/VBoxContainer/HFlowContainer" index="6"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Angular Lerp"

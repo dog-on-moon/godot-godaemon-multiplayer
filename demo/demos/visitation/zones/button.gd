@@ -29,6 +29,5 @@ func _request_pressed():
 	var _icon := ICON.instantiate()
 	_icon.global_position = Vector2(get_parent().size.x * randf(), get_parent().size.y * randf())
 	_icon.rotation_degrees = randi_range(0, 360)
-	get_parent().add_child(_icon)
-	
 	Godaemon.replication_service(self).set_visibility(_icon, true)
+	get_parent().add_child(_icon)

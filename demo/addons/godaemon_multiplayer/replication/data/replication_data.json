@@ -167,6 +167,38 @@
 				"recv_filter": "Everyone",
 				"reliable": false,
 				"send_filter": "Everyone"
+			},
+			{
+				"flags": 0,
+				"name": "__node_reparent",
+				"ratelimit": 0.0,
+				"recv_filter": "Everyone",
+				"reliable": true,
+				"send_filter": "Server"
+			},
+			{
+				"flags": 0,
+				"name": "_request_replication",
+				"ratelimit": 0.0,
+				"recv_filter": "Everyone",
+				"reliable": true,
+				"send_filter": "Server"
+			},
+			{
+				"flags": 0,
+				"name": "_receive_client_replication_ids",
+				"ratelimit": 0.0,
+				"recv_filter": "Everyone",
+				"reliable": true,
+				"send_filter": "Server"
+			},
+			{
+				"flags": 0,
+				"name": "_ask_missing_id",
+				"ratelimit": 0.0,
+				"recv_filter": "Everyone",
+				"reliable": true,
+				"send_filter": "Server"
 			}
 		],
 		"properties": [],
