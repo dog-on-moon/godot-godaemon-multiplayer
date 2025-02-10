@@ -177,10 +177,10 @@ public:
 	bool get_identity(SteamNetworkingIdentity *p_identity);
 	const SteamNetworkingConfigValue_t *convert_options_array(Array options);
 	Ref<SteamConnection> get_connection_by_peer(int peer_id);
-	void add_connection(const uint64_t steam_id, HSteamNetConnection connection);
+	Ref<SteamConnection> add_connection(const uint64_t steam_id, HSteamNetConnection connection);
 
 	int loopback_idx = 0;
-	void setup_loopback_connection(const uint64_t identity, HSteamNetConnection connection);
+	Ref<SteamConnection> setup_loopback_connection(const uint64_t identity, HSteamNetConnection connection);
 
 	void _process_message(const SteamNetworkingMessage_t *msg);
 	void _process_ping(const SteamNetworkingMessage_t *msg);
@@ -217,11 +217,17 @@ private:
 	HashMap<uint64_t, Ref<SteamConnection>> loopback_connections_by_steamId64;
 	HSteamListenSocket listen_socket;
 	HSteamNetConnection connection;
+	Ref<SteamConnection> client_steam_connection;
+	SteamMultiplayerPeer *host_loopback_peer = nullptr;
+	int virtual_port = -1;
+	bool is_loopback_client = false;
 
 	Ref<SteamPacketPeer> next_received_packet; // gets deleted at the very first get_packet request
 	List<Ref<SteamPacketPeer>> incoming_packets;
 	const int _get_steam_transfer_flag();
 	ConnectionStatus connection_status = ConnectionStatus::CONNECTION_DISCONNECTED;
+
+	String _convert_eresult_to_string(EResult e);
 
 	// Networking Sockets callbacks /////////
 	STEAM_CALLBACK(SteamMultiplayerPeer, network_connection_status_changed, SteamNetConnectionStatusChangedCallback_t, callback_network_connection_status_changed);
