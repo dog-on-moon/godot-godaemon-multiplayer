@@ -442,7 +442,7 @@ void SteamMultiplayerPeer::network_connection_status_changed(SteamNetConnectionS
 
 		if (!SERVER) {
 			if (connection_status == CONNECTION_CONNECTED) {
-				disconnect_peer(1, false);
+				disconnect_peer(1, true);
 				handled = true;
 			}
 			if (_is_active()) close();
@@ -450,7 +450,7 @@ void SteamMultiplayerPeer::network_connection_status_changed(SteamNetConnectionS
 			Ref<SteamConnection> connection = connections_by_steamId64[steam_id];
 			uint32_t peer_id = connection->peer_id;
 			if (peer_id != -1) {
-				disconnect_peer(1, true);
+				disconnect_peer(peer_id, false);
 				handled = true;
 			}
 		}
@@ -474,7 +474,7 @@ void SteamMultiplayerPeer::network_connection_status_changed(SteamNetConnectionS
 			Ref<SteamConnection> connection = connections_by_steamId64[steam_id];
 			uint32_t peer_id = connection->peer_id;
 			if (peer_id != -1) {
-				disconnect_peer(peer_id, true);
+				disconnect_peer(peer_id, false);
 				handled = true;
 			}
 		}
