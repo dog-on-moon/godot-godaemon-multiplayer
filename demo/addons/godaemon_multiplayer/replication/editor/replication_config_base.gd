@@ -63,7 +63,7 @@ func _ready() -> void:
 	reliable_button.set_pressed_no_signal(_config.reliable)
 	reliable_button.toggled.connect(func (x): _config.reliable = x)
 	
-	_config.updated.connect(_update)
+	_config.changed.connect(_update)
 	_update()
 	
 	if inherited:

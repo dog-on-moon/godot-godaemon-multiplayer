@@ -2,13 +2,12 @@
 extends Resource
 class_name ReplicationConfigBase
 
-signal updated
-
 ## The name of the field.
 @export var name := "":
 	set(x):
 		name = x
-		updated.emit()
+		resource_name = x
+		#emit_changed()  redundant from resource_name
 
 enum Filter { Server = 1, Owner = 2, Client = 4 }
 
@@ -16,19 +15,19 @@ enum Filter { Server = 1, Owner = 2, Client = 4 }
 @export_flags("Server:1", "Owner:2", "Client:4") var send_filter := 1:
 	set(x):
 		send_filter = x
-		updated.emit()
+		emit_changed()
 
 ## Determines the receive filter for this config.
 @export_flags("Server:1", "Owner:2", "Client:4") var recv_filter := 7:
 	set(x):
 		recv_filter = x
-		updated.emit()
+		emit_changed()
 
 ## Determines if the replication is reliable or not.
 @export var reliable := true:
 	set(x):
 		reliable = x
-		updated.emit()
+		emit_changed()
 
 func set_send_filter_flag(mode: bool, filter: Filter):
 	if mode:
@@ -73,16 +72,6 @@ func can_they_recv(node: Node, p: int) -> bool:
 	else:
 		return get_recv_filter_flag(ReplicationConfigBase.Filter.Client)
 
-func serialize() -> Dictionary:
-	assert(false)
-	return {}
-
-static func deserialize(d: Dictionary) -> ReplicationConfigBase:
-	assert(false)
-	return null
-
-# enum Filter { Server = 1, Owner = 2, Client = 4 }
-
 static func filter_flags_to_txt(filter: int) -> String:
 	match filter:
 		0: return "Nobody"
@@ -94,18 +83,3 @@ static func filter_flags_to_txt(filter: int) -> String:
 		6: return "All Clients"
 		7: return "Everyone"
 	return "Unknown"
-
-static func serialize_filter(filter: int) -> String:
-	return filter_flags_to_txt(filter)
-
-static func deserialize_filter(s: String) -> int:
-	match s:
-		"Nobody": 		return 0
-		"Server": 		return 1
-		"Owner": 			return 2
-		"Server+Owner": 	return 3
-		"Not Owner": 		return 4
-		"Server+Not Owner": return 5
-		"All Clients": 	return 6
-		"Everyone": 		return 7
-	return 0

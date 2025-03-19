@@ -38,7 +38,7 @@ static func _get_object_level(object: Object) -> Level:
 static func _is_loggable(object: Object, level: Level) -> bool:
 	return level >= _get_object_level(object) and OS.has_feature("debug")
 
-static func _make_log_message(object: Object, message: String, level: Level) -> String:
+static func _make_log_message(object: Object, message: Variant, level: Level) -> String:
 	# Get object properties.
 	var peer := 0
 	var peer_name := ""
@@ -52,7 +52,7 @@ static func _make_log_message(object: Object, message: String, level: Level) -> 
 	
 	message_base += '[color=%s][%s][/color] [color=%s]%s' % [
 		OBJECT_NAME_COLOR, Godaemon.Util.get_object_name(object),
-		LEVEL_COLOR[level], message
+		LEVEL_COLOR[level], str(message)
 	]
 	
 	return message_base
@@ -60,21 +60,21 @@ static func _make_log_message(object: Object, message: String, level: Level) -> 
 static func peer_name(object: Object, peer: int):
 	return str(peer) if peer != 1 else "Server"
 
-static func info(object: Object, message: String) -> void:
+static func info(object: Object, message: Variant) -> void:
 	if _is_loggable(object, Log.Level.INFO):
 		print_rich(_make_log_message(object, message, Log.Level.INFO))
 
-static func warning(object: Object, message: String) -> void:
+static func warning(object: Object, message: Variant) -> void:
 	if _is_loggable(object, Log.Level.WARNING):
 		print_rich(_make_log_message(object, message, Log.Level.WARNING))
 
-static func error(object: Object, message: String) -> void:
+static func error(object: Object, message: Variant) -> void:
 	if _is_loggable(object, Log.Level.ERROR):
 		print_rich(_make_log_message(object, message, Log.Level.ERROR))
 
-static func gay(object: Object, message: String) -> void:
+static func gay(object: Object, message: Variant) -> void:
 	if _is_loggable(object, Log.Level.INFO):
-		print_rich(_make_log_message(object, '[rainbow]%s[/rainbow]' % message, Log.Level.INFO))
+		print_rich(_make_log_message(object, '[rainbow]%s[/rainbow]' % [message], Log.Level.INFO))
 
 static func dict(object: Object, dict: Dictionary) -> void:
 	if _is_loggable(object, Log.Level.INFO):

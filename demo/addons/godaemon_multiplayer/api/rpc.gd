@@ -200,6 +200,8 @@ func inbound_rpc(id: int, bytes: PackedByteArray):
 	var config := ReplicationData.object_idx_to_method(object, method_idx)
 	if not config:
 		push_error("GodaemonMultiplayerAPI.rpc.inbound_rpc received RPC on configless method %s" % [method_idx])
+		#breakpoint
+		#ReplicationData.object_idx_to_method(object, method_idx)
 		return ERR_UNCONFIGURED
 	var method := config.name
 	if not object.has_method(method):
@@ -263,12 +265,21 @@ func inbound_rpc(id: int, bytes: PackedByteArray):
 			# Call it locally (if the target peer ID wasn't -1)
 			if config.get_recv_filter_flag(ReplicationConfigBase.Filter.Server):
 				callable.call()
-		if not method_is_server_only:
+		if not method_is_server_only and api:
 			srs_override = from_peer
 			for p in api.get_peers():
 				# Don't forward the RPC to the skipped peer, ourselves, or to the sender
 				if p == skip_peer or p == 1 or p == from_peer:
 					continue
+				
+				if skip_peer > 0:
+					var _skip := false
+					for filter: Callable in inbound_filters:
+						if not filter.call(from_peer, p, object, method, args):
+							_skip = true
+							break
+					if _skip: continue
+				
 				if object is Node:
 					if config.can_they_recv(object, p):
 						callable.rpc_id(p)

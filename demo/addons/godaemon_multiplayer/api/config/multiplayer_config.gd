@@ -19,7 +19,7 @@ const DEFAULT_SERVICES := [
 ## once a connection has been established.
 @export var services: Array[Script] = []
 
-## Enables the default services (Peer, Replication, Sync, and Zone).
+## Enables the default services (Replication, Sync, and Zone).
 ## Leave this on, unless you intend to replace parts of Godaemon's standard functionality.
 @export var default_services := true
 

@@ -16,7 +16,7 @@ func configure_enet(port := 27027):
 
 ## Configures the connection to use a Steam implementation.
 ## Note that if Steam is inactive, ENet will be used as a fallback.
-func configure_steam(port := 0):
+func configure_steam(port := 1):
 	connection_config = ConnectionConfig.Steam
 	steam_port = port
 

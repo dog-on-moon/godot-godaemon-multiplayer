@@ -8,13 +8,13 @@ enum Flag { DebugPrint = 1, CallLocal = 2 }
 @export_range(0.0, 10.0, 0.01) var ratelimit := 0.0:
 	set(x):
 		ratelimit = x
-		updated.emit()
+		emit_changed()
 
 ## Determines the flags for this replication.
 @export_flags("Debug Print:1", "Call Local:2") var flags := 0:
 	set(x):
 		flags = x
-		updated.emit()
+		emit_changed()
 
 func set_debug_print(m: bool):
 	if m:
@@ -33,23 +33,3 @@ func get_debug_print() -> bool:
 
 func get_call_local() -> bool:
 	return flags & 2
-
-func serialize() -> Dictionary:
-	return {
-		'name': name,
-		'send_filter': serialize_filter(send_filter),
-		'recv_filter': serialize_filter(recv_filter),
-		'reliable': reliable,
-		'ratelimit': ratelimit,
-		'flags': flags,
-	}
-
-static func deserialize(d: Dictionary) -> ReplicationMethodConfig:
-	var c := ReplicationMethodConfig.new()
-	c.name = d.name
-	c.send_filter = deserialize_filter(d.send_filter)
-	c.recv_filter = deserialize_filter(d.recv_filter)
-	c.reliable = bool(d.reliable)
-	c.ratelimit = float(d.ratelimit)
-	c.flags = int(d.flags)
-	return c

@@ -13,11 +13,6 @@ signal cl_added_interest(zone: ClientZone)
 ## Emitted on a client whenever they've lost interest for a zone.
 signal cl_removed_interest(zone: ClientZone)
 
-signal cl_has_svc()
-
-const ZoneSvc = preload("res://addons/godaemon_multiplayer/services/zone/zone_svc.gd")
-var svc: SubViewportContainer
-
 @onready var replication_service := Godaemon.replication_service(self)
 @onready var sync_service := Godaemon.sync_service(self)
 @onready var _initial_channel := get_initial_channel(mp)
@@ -26,16 +21,7 @@ func _ready() -> void:
 	assert(replication_service)
 	if mp.is_server():
 		mp.peer_disconnected.connect(_peer_disconnected)
-		svc = ZoneSvc.new()
-		replication_service.set_visibility(svc, true)
-		add_child(svc)
 	else:
-		child_entered_tree.connect(
-			func (n: Node):
-				if n is SubViewportContainer:
-					svc = n
-					cl_has_svc.emit()
-		)
 		replication_service.remap_script(Zone, ClientZone)
 
 func _peer_disconnected(peer: int):
@@ -62,7 +48,7 @@ func add_zone(node: Node) -> Zone:
 	replication_service.set_visibility(zone, false)
 	replication_service.set_visibility(zone.scene, true)
 	zone.add_child(node)
-	svc.add_child(zone)
+	add_child(zone)
 	return zone
 
 ## Removes a Zone and frees it. Returns true on successful removal.
@@ -76,7 +62,7 @@ func remove_zone(zone: Zone) -> bool:
 	
 	# Remove zone.
 	zones.erase(zone)
-	svc.remove_child(zone)
+	remove_child(zone)
 	zone.queue_free()
 	return true
 
@@ -136,17 +122,6 @@ func local_client_add_interest(client_zone: ClientZone):
 func local_client_remove_interest(client_zone: ClientZone):
 	zones.erase(client_zone)
 	cl_removed_interest.emit(client_zone)
-
-#endregion
-
-#region Rendering
-
-## Force updates the render properties for all Zone viewports on the client side.
-## This is necessary after changing the render properties on the game window, for example.
-func update_render_properties():
-	var viewport := get_viewport()
-	for zone: Zone in svc.get_children():
-		zone.update_render_properties(viewport)
 
 #endregion
 

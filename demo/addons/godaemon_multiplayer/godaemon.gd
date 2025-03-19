@@ -1,3 +1,4 @@
+@tool
 extends Node
 ## A class which provides typed access to various services within the addon.
 
@@ -8,8 +9,10 @@ const Util = preload("res://addons/godaemon_multiplayer/util/util.gd")
 
 const META_OWNER := &"_o"
 
-## When set to TRUE, steam is disabled in the editor.
-const EDITOR_DISABLE_STEAM := true
+## The ID of this project's steam game.
+## 480 is the recommended default (SpaceWars)
+const STEAM_GAME_ID := 480
+const STEAM_ENABLED := true
 
 #region Steam Management
 
@@ -23,13 +26,13 @@ func _exit_tree() -> void:
 	disable_steam()
 
 func enable_steam():
+	if Engine.is_editor_hint() or not STEAM_ENABLED:
+		return
 	if is_steam_active():
 		return
-	if OS.has_feature("no_steam"):
+	if OS.has_feature("no_steam") or OS.has_feature("no-steam"):
 		return
-	if OS.has_feature("editor") and EDITOR_DISABLE_STEAM:
-		return
-	var resp := Steam.steamInitEx(false, 480, true)
+	var resp := Steam.steamInitEx(false, STEAM_GAME_ID, true)
 	steam_status = resp.get("status", 0)
 	steam_verbal = resp.get("verbal", "")
 

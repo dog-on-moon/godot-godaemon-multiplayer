@@ -23,7 +23,7 @@ func configure_enet(address := "127.0.0.1", port := 27027, local_port := 0):
 
 ## Configures the connection to use a Steam implementation.
 ## Note that if Steam is inactive, ENet will be used as a fallback.
-func configure_steam(_steam_id: int, port := 0):
+func configure_steam(_steam_id: int, port := 1):
 	connection_config = ConnectionConfig.Steam
 	steam_id = _steam_id
 	steam_port = port
@@ -66,12 +66,15 @@ func start_connection() -> bool:
 		if not steam_loopback_server:
 			error = steam_peer.create_client(steam_id, steam_port)
 		else:
-			var host_peer: SteamMultiplayerPeer = steam_loopback_server.multiplayer.multiplayer_peer
-			if host_peer:
-				error = steam_peer.create_loopback_client(host_peer)
-			else:
-				assert(false)
+			if not steam_loopback_server.multiplayer:
 				error = ERR_CANT_CONNECT
+			else:
+				var host_peer: SteamMultiplayerPeer = steam_loopback_server.multiplayer.multiplayer_peer
+				if host_peer:
+					error = steam_peer.create_loopback_client(host_peer)
+				else:
+					assert(false)
+					error = ERR_CANT_CONNECT
 	else:
 		var enet_peer := ENetMultiplayerPeer.new()
 		peer = enet_peer

@@ -5,51 +5,59 @@ class_name ScriptReplication
 
 const RPCS = preload("res://addons/godaemon_multiplayer/api/rpc.gd")
 
-signal updated
-
-func emit_updated() -> void:
-	updated.emit()
+@export var _script: Script:
+	set(x):
+		_script = x
+		if Engine.is_editor_hint():
+			var name := ""
+			if _script and _script.get_global_name():
+				name = _script.get_global_name()
+			elif _script and _script.resource_path:
+				name = _script.resource_path.get_file()
+			set_block_signals(true)
+			resource_name = name
+			set_block_signals(false)
 
 @export var method_config: Array[ReplicationMethodConfig] = []:
 	set(x):
 		for y in method_config:
 			if not y: continue
-			if y.updated.is_connected(emit_updated):
-				y.updated.disconnect(emit_updated)
+			if y.changed.is_connected(emit_changed):
+				y.changed.disconnect(emit_changed)
 		method_config = x
 		if method_config.size() > RPCS.MAX_RPC_METHODS:
 			push_warning("MethodConfig size has too many methods, not all can be RPCed.")
 		for y in method_config:
 			if not y: continue
-			if not y.updated.is_connected(emit_updated):
-				y.updated.connect(emit_updated)
-		emit_updated()
+			if not y.changed.is_connected(emit_changed):
+				y.changed.connect(emit_changed)
+		emit_changed()
 
 @export var property_config: Array[ReplicationPropertyConfig] = []:
 	set(x):
 		for y in property_config:
 			if not y: continue
-			if y.updated.is_connected(emit_updated):
-				y.updated.disconnect(emit_updated)
+			if y.changed.is_connected(emit_changed):
+				y.changed.disconnect(emit_changed)
 		property_config = x
 		for y in property_config:
 			if not y: continue
-			if not y.updated.is_connected(emit_updated):
-				y.updated.connect(emit_updated)
-		emit_updated()
+			if not y.changed.is_connected(emit_changed):
+				y.changed.connect(emit_changed)
+		emit_changed()
 
 @export var signal_config: Array[ReplicationSignalConfig] = []:
 	set(x):
 		for y in signal_config:
 			if not y: continue
-			if y.updated.is_connected(emit_updated):
-				y.updated.disconnect(emit_updated)
+			if y.changed.is_connected(emit_changed):
+				y.changed.disconnect(emit_changed)
 		signal_config = x
 		for y in signal_config:
 			if not y: continue
-			if not y.updated.is_connected(emit_updated):
-				y.updated.connect(emit_updated)
-		emit_updated()
+			if not y.changed.is_connected(emit_changed):
+				y.changed.connect(emit_changed)
+		emit_changed()
 
 var _method_cache := {}
 var _property_cache := {}
@@ -177,30 +185,3 @@ func get_signal_config_from_idx(idx: int) -> ReplicationSignalConfig:
 	if idx < 0 or idx >= signal_config.size():
 		return null
 	return signal_config[idx]
-
-func serialize(uid: int) -> Dictionary:
-	var path := ReplicationData.uid_to_path(uid)
-	var d := {
-		'methods':    method_config  .map(func (x): return x.serialize()),
-		'properties': property_config.map(func (x): return x.serialize()),
-		'signals':    signal_config  .map(func (x): return x.serialize()),
-	}
-	if path and path.length() > 6:
-		d._name = path
-		var s: Variant = load(path)
-		if s and s is Script and s.get_global_name():
-			d._class = s.get_global_name()
-	return d
-
-static func deserialize(d: Dictionary) -> ScriptReplication:
-	var r := ScriptReplication.new()
-	if d.has('methods'):
-		r.method_config   .assign(d.methods   .map(func (x): return ReplicationMethodConfig.deserialize(x)))
-		r.method_config = r.method_config
-	if d.has('properties'):
-		r.property_config .assign(d.properties.map(func (x): return ReplicationPropertyConfig.deserialize(x)))
-		r.property_config = r.property_config
-	if d.has('signals'):
-		r.signal_config   .assign(d.signals   .map(func (x): return ReplicationSignalConfig.deserialize(x)))
-		r.signal_config = r.signal_config
-	return r

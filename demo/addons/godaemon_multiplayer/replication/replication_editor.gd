@@ -52,7 +52,7 @@ func _set_script(script: Script):
 	_current_script = script
 	
 	# Ensure script has UID
-	var invalid_uid := (ReplicationData.path_to_uid(script.resource_path) == -1) if script else false
+	var invalid_uid := (ReplicationService.path_to_uid(script.resource_path) == -1) if script else false
 	
 	# Update the replication data cache.
 	if script and not invalid_uid:

@@ -13,8 +13,8 @@ var last_interpolate_t := 0.0
 
 ## API for requesting a property sync upon changing a node's property value.
 func request_sync(node: Node, property: StringName):
-	if node in _blocked_nodes:
-		return
+	if node in _blocked_nodes: return
+	if not mp or not mp.api or not mp.api.repository: return
 	await mp.api.repository.await_for_id(get_tree(), node)
 	var node_id := mp.api.repository.get_id(node)
 	if node_id == -1:
@@ -22,6 +22,8 @@ func request_sync(node: Node, property: StringName):
 		return
 	var config := ReplicationData.object_property_to_config(node, String(property))
 	if not config:
+		breakpoint
+		ReplicationData.object_property_to_config(node, String(property))
 		assert(false, "Property config %s does not exist for node." % property)
 		return
 	if config.sync != ReplicationPropertyConfig.Sync.Request:
@@ -111,7 +113,7 @@ func _process(delta: float) -> void:
 						for p in target_peers:
 							if config.get_robns() and p == node_owner:
 								continue
-							if config.can_they_recv(node, p):
+							if mp.is_client() or config.can_they_recv(node, p):  # client can always send, for forwarding reasons
 								_get_receive_rpc(false).rpc_id(p, node_id, idx, value)
 
 var _blocked_nodes: Dictionary[Node, Object] = {}

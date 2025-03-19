@@ -93,6 +93,7 @@ func send_command(command: NetCommand, bytes: PackedByteArray, id := 0, mode := 
 
 ## Receives a command.
 func recv_command(id: int, bytes: PackedByteArray):
+	if not mp: return
 	var command: NetCommand = bytes[-1]
 	bytes.remove_at(bytes.size() - 1)
 	match command:

@@ -15,6 +15,10 @@ signal exit_replication(node: Node)
 ## This contains every replicated script in the multiplayer tree.
 var replication_visibility := {}
 
+## A set of replicated nodes (within replication visibility) that should be
+## added to their parents before their parents are added to the scenetree.
+var dominant_replication := {}
+
 func _enter_tree() -> void:
 	# Look for existing replicated scenes, setup initial signals.
 	_replication_search(mp)
@@ -22,7 +26,7 @@ func _enter_tree() -> void:
 		mp.peer_connected.connect(_peer_connected)
 		mp.peer_disconnected.connect(_peer_disconnected)
 		Godaemon.rpcs(self).target_peer_modifiers.append(_target_peer_modifier)
-		#Godaemon.rpcs(self).outbound_filters.append(_rpc_filter)  TODO - is this necessary?
+		Godaemon.rpcs(self).inbound_filters.append(_rpc_filter)
 
 func _peer_connected(peer: int):
 	# Peers need to know what initial scenes must be replicated to them.
@@ -56,12 +60,12 @@ func _target_peer_modifier(from_peer: int, target_peers: Array[int], node: Node,
 		target_peers.assign(target_peers.filter(func (p: int): return p in valid_peers and p != skip_peer))
 
 func _rpc_filter(from_peer: int, to_peer: int, node: Node, method: StringName, args: Array):
-	if node in replication_visibility:
-		var valid_peers := get_observing_peers(node)
-		if from_peer != 1 and from_peer not in valid_peers:
-			return false
-		if to_peer != 1 and to_peer not in valid_peers:
-			return false
+	if from_peer == 1 or to_peer <= 1: return true
+	var valid_peers := get_observing_peers(node)
+	if from_peer not in valid_peers:
+		return false
+	if to_peer not in valid_peers:
+		return false
 	return true
 
 #endregion
@@ -119,6 +123,8 @@ func _node_tree_exiting(node: Node):
 	if ReplicationData.get_base_script_replication(node.get_script()):
 		exit_replication.emit(node)
 	
+	if node in dominant_replication:
+		dominant_replication.erase(node)
 	if node in replication_visibility:
 		if mp.api:
 			for peer in get_observing_peers(node):
@@ -262,6 +268,14 @@ func _setup_signal_replication(node: Node):
 	var base_sr := ReplicationData.get_base_script_replication(node.get_script())
 	if not base_sr:
 		return
+	
+	if mp.is_server():
+		# If this node's parent is not ready, then the parent is still being added to the tree.
+		# Therefore, we need to give it priority later during client replication.
+		if node.owner and not node.owner.is_node_ready():
+			#print(node.owner.get_path())
+			dominant_replication[node] = null
+	
 	enter_replication.emit(node)  # kinda lazily merged into here, but fast
 	
 	# Now setup signal replication.
@@ -307,12 +321,13 @@ func _on_signal_emit(
 		assert(false)
 		return
 	await mp.api.repository.await_for_id(get_tree(), node)
+	var node_id := mp.api.repository.get_id(node)
 	for p in get_observing_peers(node):
 		if c.can_they_recv(node, p):
 			if c.reliable:
-				_signal_replicate_reliable.rpc_id(p, idx, args)
+				_signal_replicate_reliable.rpc_id(p, node_id, idx, args)
 			else:
-				_signal_replicate_unreliable.rpc_id(p, idx, args)
+				_signal_replicate_unreliable.rpc_id(p, node_id, idx, args)
 
 @rpc
 func _signal_replicate_reliable(node_id: int, idx: int, args: Array):
@@ -403,10 +418,10 @@ func request_replication(node: Node):
 	client_replication_token_idx += 1
 	mp.api.repository.add_object_id_await(node)
 	if node.scene_file_path:
-		var uid := ReplicationData.path_to_uid(node.scene_file_path)
+		var uid := path_to_uid(node.scene_file_path)
 		_request_replication.rpc(parent_id, uid, args, token_idx)
 	elif node.get_script():
-		var uid := ReplicationData.path_to_uid(node.get_script().resource_path)
+		var uid := path_to_uid(node.get_script().resource_path)
 		_request_replication.rpc(parent_id, uid, args, token_idx)
 	else:
 		assert(false, "unknown replication uid")
@@ -417,7 +432,7 @@ func _request_replication(parent_id: int, uid: int, args: Array, token: int):
 	var parent := mp.api.repository.get_object(parent_id)
 	if not parent:
 		return
-	var path := ReplicationData.uid_to_path(uid)
+	var path := uid_to_path(uid)
 	if not path:
 		return
 	var res := load(path)
@@ -632,6 +647,7 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 			continue
 		
 		# Embed data differently depending on if its a scene or not.
+		var dominant := node in dominant_replication
 		if not node.scene_file_path:
 			# The node is not a scene -- it is just an individual script.
 			# Get all of its information.
@@ -641,54 +657,62 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 			var add_data := [
 				parent_id,
 				Godaemon.get_node_owner(node),
-				ReplicationData.path_to_uid(node.get_script().resource_path),
+				path_to_uid(node.get_script().resource_path),
 				{node_id: ReplicationData.get_object_property_values(node, peer)},
 				[node_id],
+				dominant,
 			]
 			added_node_data.append(add_data)
 		else:
 			# Scene replication will demand that we traverse the entire scene,
 			# determining which properties to replicate along the way.
-			# First, load the scene.
+			# Grab all scene states.
 			var packed_scene: PackedScene = load(node.scene_file_path)
-			var scene_state := packed_scene.get_state()
+			var scene_states: Array[SceneState] = []
+			while true:
+				var scene_state := packed_scene.get_state()
+				scene_states.append(scene_state)
+				packed_scene = scene_state.get_node_instance(0)
+				if not packed_scene: break
 			
-			# Now traverse it, calculating property value & node IDs along the way.
+			# Traverse all scene states.
 			var property_values := {}
 			var node_ids := []
-			for node_idx in scene_state.get_node_count():
-				# Get the subnode at this part of the scene state.
-				var node_path := scene_state.get_node_path(node_idx)
-				var subnode := node.get_node_or_null(node_path)
-				
-				# If the subnode exists AND has no associated visibility control,
-				# we can replicate it here. Otherwise, its replication occurs separately.
-				if subnode and (subnode not in replication_visibility or node == subnode):
-					var subnode_id := mp.api.repository.get_id(subnode)
-					if subnode_id != -1:
-						# Catalog this node's ID here.
-						node_ids.append(subnode_id)
-						
-						# Also, determine the node's property values for replication here.
-						var node_property_values := ReplicationData.get_object_property_values(subnode, peer)
-						if node_property_values:
-							property_values[subnode_id] = node_property_values
+			for scene_state in scene_states:
+				for node_idx in scene_state.get_node_count():
+					# Get the subnode at this part of the scene state.
+					var node_path := scene_state.get_node_path(node_idx)
+					var subnode := node.get_node_or_null(node_path)
+					
+					# If the subnode exists AND has no associated visibility control,
+					# we can replicate it here. Otherwise, its replication occurs separately.
+					if subnode and (subnode not in replication_visibility or node == subnode):
+						var subnode_id := mp.api.repository.get_id(subnode)
+						if subnode_id != -1:
+							# Catalog this node's ID here.
+							node_ids.append(subnode_id)
+							
+							# Also, determine the node's property values for replication here.
+							var node_property_values := ReplicationData.get_object_property_values(subnode, peer)
+							if node_property_values:
+								property_values[subnode_id] = node_property_values
+						else:
+							# We tried replicating a node without a node id -- what?
+							# This should never happen.
+							assert(false)
+							node_ids.append(0)
 					else:
-						# We tried replicating a node without a node id -- what?
-						# This should never happen.
-						assert(false)
+						# The node was not present here, so we flag it as 0
+						# so it's non-existent to the client.
 						node_ids.append(0)
-				else:
-					# The node was not present here, so we flag it as 0
-					# so it's non-existent to the client.
-					node_ids.append(0)
 			
 			var add_data := [
 				parent_id,
 				Godaemon.get_node_owner(node),
-				ReplicationData.path_to_uid(node.scene_file_path),
+				path_to_uid(node.scene_file_path),
 				property_values,
 				node_ids,
+				dominant,
 			]
 			added_node_data.append(add_data)
 	
@@ -710,11 +734,14 @@ func _update_visibility(peer: int, added_nodes: Array[Node], removed_nodes: Arra
 @rpc
 func update_visibility(data: PackedByteArray):
 	# Process received visibility data.
+	#Log.start_benchmark(self, "visibility: decompress")
 	var visibility_data := _decompress_visibility_data(data)
+	#Log.end_benchmark(self)
 	if not visibility_data:
 		return
 	
 	# Remove nodes.
+	#Log.start_benchmark(self, "visibility: remove nodes")
 	var removed_node_data: Array = visibility_data[1]
 	for node_id: int in removed_node_data:
 		var node: Node = mp.api.repository.get_object(node_id)
@@ -726,34 +753,32 @@ func update_visibility(data: PackedByteArray):
 		#mp.api.repository.remove_object_id(node_id)
 		node.get_parent().remove_child(node)
 		node.queue_free()
+	#Log.end_benchmark(self)
 	
-	# Now, iterate again, actually building scenes.
+	# Iterate over all added nodes, and start building their node heirarchy.
 	var added_node_data: Array = visibility_data[0]
-	var scenes: Array[Array] = []
+	var ids_to_lodes: Dictionary[int, Node] = {}
+	var dominant_lode_ids: Array[int] = []
+	var lode_id_to_parent_ids: Dictionary[int, int] = {}
 	for add_data in added_node_data:
 		var parent_id: int = add_data[0]
 		var node_owner: int = add_data[1]
 		var node_uid: int = add_data[2]
 		var property_values: Dictionary = add_data[3]
 		var node_ids: Array = add_data[4]
+		var dominant: bool = add_data[5]
 		
 		# Get resource path.
-		var resource_path := ReplicationData.uid_to_path(node_uid)
+		var resource_path := uid_to_path(node_uid)
 		if not resource_path:
 			push_warning("Received invalid resource path in visibility update.")
 			continue
 		
-		# Find parent.
-		var parent := mp.api.repository.get_object(parent_id)
-		if not parent:
-			push_warning("Received unknown parent node ID %s in visibility update.
-			This is likely caused by an ancestor scene being added to the server and not having its visibility configured properly." % parent_id)
-			if OS.has_feature("editor"):
-				_ask_missing_id.rpc(parent_id)
-			continue
-		
 		# Load resource path.
+		#Log.start_benchmark(self, "visibility: heirarchy build (load %s)" % resource_path)
 		var resource: Resource = load(resource_path)
+		#Log.end_benchmark(self)
+		#Log.start_benchmark(self, "visibility: heirarchy build (prep %s)" % resource_path)
 		if resource is Script:
 			# Create script, set properties.
 			var script: Script = resource
@@ -766,57 +791,158 @@ func update_visibility(data: PackedByteArray):
 			# Load the root node's script replication.
 			if property_values:
 				ReplicationData.apply_object_property_values(mp, node, property_values[node_ids[0]])
-		
-			# Finally, add node.
-			replication_visibility[node] = {}
-			parent.add_child(node)
+			
+			# Setup build cache.
+			var node_id: int = node_ids[0]
+			ids_to_lodes[node_id] = node
+			lode_id_to_parent_ids[node_id] = parent_id
+			if dominant:
+				dominant_lode_ids.append(node_id)
 			
 		elif resource is PackedScene:
 			# Load scene, set properties.
 			var packed_scene: PackedScene = resource
 			packed_scene = _client_scene_remaps.get(packed_scene, packed_scene)
+			var root_packed_scene := packed_scene
 			
-			var scene_state := packed_scene.get_state()
 			var scene: Node = packed_scene.instantiate()
 			scene.set_meta(Godaemon.META_OWNER, node_owner)
 			
+			# todo remove
+			#var dev := false
+			#if scene is DungeonBossBase:
+				#dev = true
+				#breakpoint
+			
+			var scene_states: Array[SceneState] = []
+			while true:
+				var scene_state := packed_scene.get_state()
+				scene_states.append(scene_state)
+				packed_scene = scene_state.get_node_instance(0)
+				if not packed_scene: break
+			
+			var existing_paths: Dictionary[NodePath, Node] = {}
+			var dead_paths: Dictionary[NodePath, Node] = {}
+			
 			# Load all replication and IDs.
-			for node_idx in scene_state.get_node_count():
-				if node_idx >= node_ids.size():
-					push_warning("Received out of bounds node ids on scene.")
-					break
-				var node_path := scene_state.get_node_path(node_idx)
-				var subnode := scene.get_node_or_null(node_path)
-				if subnode:
-					var node_id: int = node_ids[node_idx]
-					if node_id != 0:
-						# This node is being added to the tree.
-						# Register its node ID now.
-						mp.api.repository.add_object(subnode, node_id)
+			var node_ids_idx := -1
+			for scene_state in scene_states:
+				for node_idx in scene_state.get_node_count():
+					node_ids_idx += 1
+					if node_idx >= node_ids.size():
+						push_warning("Received out of bounds node ids on scene.")
+						continue
+					var node_path := scene_state.get_node_path(node_idx)
+					var subnode := scene.get_node_or_null(node_path)
+					if subnode:
 						
-						# Set this node's properties.
-						if node_id in property_values:
-							ReplicationData.apply_object_property_values(mp, subnode, property_values[node_id])
+						#if subnode is Sigil and dev:
+							#breakpoint
+						#if subnode is Waypoint3D and dev:
+							#breakpoint
+						
+						if OS.has_feature("debug"):
+							for dp in dead_paths:
+								if is_node_path_ancestor(dp, node_path):
+									push_error("Node %s from scene %s is being deleted mid-replication.\nThis is due to its ancestor being deleted/recreated during replication (likely its ancestor is a scene or replicated script).\nThis node must be moved elsewhere in the heirarchy, or added to its replicated scene." % [node_path, root_packed_scene.resource_path.get_file()])
+						
+						var node_id: int = node_ids[node_ids_idx]
+						if node_id != 0:
+							# This node is being added to the tree.
+							# Register its node ID now.
+							existing_paths[node_path] = subnode
+							if mp.api.repository.get_object(node_id) != subnode:
+								mp.api.repository.add_object(subnode, node_id)
+							
+							# Set this node's properties.
+							if node_id in property_values:
+								ReplicationData.apply_object_property_values(mp, subnode, property_values[node_id])
+						else:
+							# Flag this nodepath as being dead.
+							dead_paths[node_path] = subnode
 					else:
-						# If the node ID is zero, then we do not add it in the tree.
-						subnode.queue_free()
-						subnode.get_parent().remove_child(subnode)
-				else:
-					push_warning("Could not find subnode %s on received scene %s. Weird" % [node_path, packed_scene.resource_path])
-					continue
-		
-			# Scene adding is deferred.
-			scenes.append([parent, scene])
+						#push_warning("Could not find subnode %s on received scene %s. Weird" % [node_path, packed_scene.resource_path])
+						continue
+			
+			# Kill each nodepath we could not find a reference for.
+			for np in dead_paths:
+				if np in existing_paths: continue  # this node was created actually, likely by a child PackedScene
+				var sn: Node = dead_paths[np]
+				sn.queue_free()
+				sn.get_parent().remove_child(sn)
+			
+			# Setup build cache.
+			var node_id: int = node_ids[0]
+			ids_to_lodes[node_id] = scene
+			lode_id_to_parent_ids[node_id] = parent_id
+			if dominant:
+				dominant_lode_ids.append(node_id)
 		else:
 			push_warning("Received invalid UID in visibility update (%s neither script nor scene)" % resource_path)
 			continue
+		#Log.end_benchmark(self)
 	
-	# Add the deferred scenes.
-	for scene_data in scenes:
-		var parent: Node = scene_data[0]
-		var scene: Node = scene_data[1]
-		replication_visibility[scene] = {}
-		parent.add_child(scene)
+	#Log.start_benchmark(self, "visibility: lode sorting")
+	
+	# Determine the lode ID processing order.
+	var lode_id_order: Array[int] = []
+	for lode_id in dominant_lode_ids:  # pass 1: dominant first
+		#Log.info(self, "%s: dominant" % get_readable_node_name(ids_to_lodes[lode_id]))
+		lode_id_order.append(lode_id)
+	for lode_id in ids_to_lodes:  # pass 2: all non-dominant
+		if lode_id in dominant_lode_ids:
+			continue
+		#Log.info(self, "%s: recessive" % get_readable_node_name(ids_to_lodes[lode_id]))
+		lode_id_order.append(lode_id)
+	
+	# Build the lode addition order.
+	var lode_order: Dictionary[Node, Node] = {}
+	for lode_id: int in lode_id_order:
+		var lode := ids_to_lodes[lode_id]
+		var parent_id := lode_id_to_parent_ids[lode_id]
+		if parent_id in ids_to_lodes:
+			var parent_lode := ids_to_lodes[parent_id]
+			lode_order[lode] = parent_lode
+		else:
+			var parent_node := _try_get_parent(parent_id)
+			if parent_node:
+				lode_order[lode] = parent_node
+			else:
+				lode.queue_free()
+	
+	#Log.end_benchmark(self)
+	#Log.start_benchmark(self, "visibility: lode into tree")
+	
+	# Now add all lodes.
+	for lode in lode_order:
+		replication_visibility[lode] = {}
+		
+		# debug
+		#if true:
+			#var parent := lode_order[lode]
+			#Log.info(self, "%s: adding child %s" % [get_readable_node_name(parent), get_readable_node_name(lode)])
+		
+		lode_order[lode].add_child(lode)
+	
+	#Log.end_benchmark(self)
+	#print()
+
+func _try_get_parent(parent_id: int) -> Node:
+	var parent := mp.api.repository.get_object(parent_id)
+	if not parent:
+		push_warning("Received unknown parent node ID %s in visibility update.
+		This is likely caused by an ancestor scene being added to the server and not having its visibility configured properly." % parent_id)
+		if OS.has_feature("editor"):
+			_ask_missing_id.rpc(parent_id)
+		return null
+	return parent
+
+static func get_readable_node_name(n: Node) -> String:
+	if n.scene_file_path:
+		return n.scene_file_path.get_file()
+	if n.get_script():
+		return n.get_script().resource_path.get_file()
+	return n.name
 
 func _compress_visibility_data(added_node_data: Array, removed_node_data: Array) -> PackedByteArray:
 	const MAX_NODE_ID_BYTES := mp.api.repository.MAX_BYTES
@@ -838,6 +964,7 @@ func _compress_visibility_data(added_node_data: Array, removed_node_data: Array)
 		var node_uid: int = added_data[2]
 		var node_properties: Dictionary = added_data[3]
 		var node_ids: Array = added_data[4]
+		var dominant: bool = added_data[5]
 		
 		assert(node_ids.size() < (2 ** (MAX_NODE_ID_BYTES * 8)))
 		
@@ -850,6 +977,7 @@ func _compress_visibility_data(added_node_data: Array, removed_node_data: Array)
 			+ property_variant.size()
 			+ MAX_NODE_ID_BYTES
 			+ (MAX_NODE_ID_BYTES * node_ids.size())
+			+ 1
 		)
 		
 		stream.write_unsigned(parent_idx, MAX_NODE_ID_BYTES)
@@ -859,6 +987,7 @@ func _compress_visibility_data(added_node_data: Array, removed_node_data: Array)
 		stream.write_unsigned(node_ids.size(), MAX_NODE_ID_BYTES)
 		for node_id in node_ids:
 			stream.write_unsigned(node_id, MAX_NODE_ID_BYTES)
+		stream.write_u8(int(dominant))
 	
 	# Encode removed node data.
 	stream.allocate(removed_node_count * MAX_NODE_ID_BYTES)
@@ -895,7 +1024,9 @@ func _decompress_visibility_data(data: PackedByteArray) -> Array:
 		for _i in node_id_count:
 			node_ids.append(stream.read_unsigned(MAX_NODE_ID_BYTES))
 		
-		added_node_data.append([parent_idx, node_owner, node_uid, node_properties, node_ids])
+		var dominant: bool = bool(stream.read_u8())
+		
+		added_node_data.append([parent_idx, node_owner, node_uid, node_properties, node_ids, dominant])
 	
 	# Decode removed node data.
 	var removed_node_data: Array = []
@@ -913,5 +1044,40 @@ func _ask_missing_id(node_id: int):
 	if OS.has_feature("editor"):
 		var n := mp.api.repository.get_object(node_id)
 		push_warning("peer %s missing id %s: %s" % [mp.remote_peer, node_id, mp.get_path_to(n) if n else "unknown NP!"])
+
+#endregion
+
+#region Static util
+
+# Apparently, these functions seem expensive, so I'm adding caches for them.
+static var _uid_to_path_cache: Dictionary[int, String] = {}
+static var _path_to_uid_cache: Dictionary[String, int] = {}
+
+## converts uid => path (returns "" if doesnt exist)
+static func uid_to_path(uid: int) -> String:
+	if uid in _uid_to_path_cache:
+		return _uid_to_path_cache[uid]
+	var path := ""
+	if ResourceUID.has_id(uid):
+		path = ResourceUID.get_id_path(uid)
+	_uid_to_path_cache[uid] = path
+	return path
+
+## converts path => uid (returns -1 if doesnt exist)
+static func path_to_uid(path: String) -> int:
+	if path in _path_to_uid_cache:
+		return _path_to_uid_cache[path]
+	var uid := ResourceLoader.get_resource_uid(path)
+	_path_to_uid_cache[path] = uid
+	return uid
+
+static func is_node_path_ancestor(parent_np: NodePath, np: NodePath) -> bool:
+	if parent_np == np:
+		return false
+	while np:
+		if parent_np == np:
+			return true
+		np = np.slice(0, -1)
+	return false
 
 #endregion

@@ -10,13 +10,13 @@ enum Sync { Once, Request, Smooth }
 @export var sync := Sync.Once:
 	set(x):
 		sync = x
-		updated.emit()
+		emit_changed()
 
 ## Determines the flags for this replication.
 @export_flags("Debug Print:1", "Replicate Owner but not Sync:2", "AngularLerp:4") var flags := 0:
 	set(x):
 		flags = x
-		updated.emit()
+		emit_changed()
 
 func set_debug_print(m: bool):
 	if m:
@@ -51,33 +51,3 @@ func get_sync_text() -> String:
 		Sync.Request: return "Request"
 		Sync.Smooth: return "Smooth"
 	return "UnknownSync"
-
-func serialize() -> Dictionary:
-	return {
-		'name': name,
-		'send_filter': serialize_filter(send_filter),
-		'recv_filter': serialize_filter(recv_filter),
-		'reliable': reliable,
-		'sync': serialize_sync(),
-		'flags': flags,
-	}
-
-static func deserialize(d: Dictionary) -> ReplicationPropertyConfig:
-	var c := ReplicationPropertyConfig.new()
-	c.name = d.name
-	c.send_filter = deserialize_filter(d.send_filter)
-	c.recv_filter = deserialize_filter(d.recv_filter)
-	c.reliable = bool(d.reliable)
-	c.sync = deserialize_sync(d.sync)
-	c.flags = int(d.flags)
-	return c
-
-func serialize_sync() -> String:
-	return get_sync_text()
-
-static func deserialize_sync(s: String) -> Sync:
-	match s:
-		"Once": 		return Sync.Once
-		"Request": 	return Sync.Request
-		"Smooth": 	return Sync.Smooth
-	return Sync.Once

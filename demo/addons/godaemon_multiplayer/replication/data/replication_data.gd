@@ -3,32 +3,20 @@ extends Resource
 class_name ReplicationData
 ## Stores project-wide replication information for scripts.
 
-const SAVE_PATH := "res://addons/godaemon_multiplayer/replication/data/replication_data.json"
+const SAVE_PATH := "res://addons/godaemon_multiplayer/replication/data/replication_data.tres"
 
-## Stores script replication for script UIDs.
-@export var script_replication_map: Dictionary[int, ScriptReplication] = {}
+@export var script_replications: Array[ScriptReplication] = []
+
+@export_tool_button("Save", "Save") var __save = func ():
+	ReplicationData.save()
+
+@export_tool_button("Reload", "Reload") var __reload = func ():
+	ReplicationData._data = null
+	ReplicationData._load()
+
+var _script_replication_map: Dictionary[Script, ScriptReplication] = {}
 
 static var _data: ReplicationData
-
-static func _static_init() -> void:
-	_data = _load()
-	
-	if Engine.is_editor_hint():
-		var changed := false
-		for rep: ScriptReplication in _data.script_replication_map.values():
-			# Check if the script still exists.
-			# These checks seem to kill stuff incessantly?
-			#var path := uid_to_path(uid)
-			#if not (path and FileAccess.file_exists(path)):
-				#_data.script_replication_map.erase(uid)
-				#changed = true
-				#continue
-
-			# Setup script autosave.
-			if not rep.updated.is_connected(save):
-				rep.updated.connect(save)
-		if changed:
-			_data.save.call_deferred()
 
 #region Script Replication API
 
@@ -36,17 +24,15 @@ static func _static_init() -> void:
 ## Returns null if it does not exist.
 ## Note that parent classes may have replication, though -- check get_replication_parent_depth()
 static func get_script_replication(script: Script, parent_depth := 0) -> ScriptReplication:
+	_load()
 	if not script:
 		return null
 	for i in parent_depth:
 		script = script.get_base_script()
 		if not script:
 			return null
-	var uid := path_to_uid(script.resource_path)
-	if uid == -1:
-		#print('script %s has no uid?' % script.resource_path)
-		return null
-	var sr: ScriptReplication = _data.script_replication_map.get(uid, null)
+	var asdf := _data._script_replication_map
+	var sr: ScriptReplication = _data._script_replication_map.get(script, null)
 	if sr:
 		sr.setup_cache()
 	return sr
@@ -64,21 +50,22 @@ static var _parent_depth_cache: Dictionary[Script, int] = {}
 
 ## Returns the initial replication parent depth for a script's replication.
 ## If -1, the script in question certainly has no script replication whatsoever.
-static func get_replication_parent_depth(script: Script) -> int:
-	if not script:
+static func get_replication_parent_depth(base_script: Script) -> int:
+	if not base_script:
 		return -1
-	if script in _parent_depth_cache:
-		return _parent_depth_cache[script]
+	if base_script in _parent_depth_cache:
+		return _parent_depth_cache[base_script]
 	var parent_depth := -1
+	var script := base_script
 	while true:
 		parent_depth += 1
 		if get_script_replication(script):
-			_parent_depth_cache[script] = parent_depth
+			_parent_depth_cache[base_script] = parent_depth
 			return parent_depth
 		script = script.get_base_script()
 		if not script:
 			break
-	_parent_depth_cache[script] = -1
+	_parent_depth_cache[base_script] = -1
 	return -1
 
 ## Returns all script replications for a given script.
@@ -97,18 +84,22 @@ static func get_all_script_replications(script: Script) -> Array[ScriptReplicati
 
 ## Toggles a script's replication.
 static func toggle_script_replication(script: Script, mode: bool) -> ScriptReplication:
+	_load()
 	if not script:
 		return null
-	var uid := path_to_uid(script.resource_path)
 	if not mode:
-		_data.script_replication_map.erase(uid)
-		save()
+		if script in _data._script_replication_map:
+			_data.script_replications.erase(_data._script_replication_map[script])
+			_data._script_replication_map.erase(script)
+			save()
 		return null
 	elif not get_script_replication(script):
 		var rep := ScriptReplication.new()
-		_data.script_replication_map[uid] = rep
-		if not rep.updated.is_connected(save):
-			rep.updated.connect(save)
+		rep._script = script
+		_data.script_replications.append(rep)
+		_data._script_replication_map[script] = rep
+		if not rep.changed.is_connected(save):
+			rep.changed.connect(save)
 		save()
 		return rep
 	return get_script_replication(script)
@@ -497,51 +488,20 @@ static func _get_object_idx_to_signal(sr: Script, idx: int) -> ReplicationSignal
 static func save() -> void:
 	if not Engine.is_editor_hint():
 		return
-	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE_READ)
-	f.store_string(JSON.stringify(serialize(), "\t"))
+	
+	_data.take_over_path(SAVE_PATH)
+	ResourceSaver.save(_data, SAVE_PATH)
 
-static func _load() -> ReplicationData:
+static func _load():
+	if _data: return
 	if not FileAccess.file_exists(SAVE_PATH):
-		return ReplicationData.new()
-	return deserialize(JSON.parse_string(FileAccess.get_file_as_string(SAVE_PATH)))
-
-static func serialize() -> Dictionary:
-	var d: Dictionary = {}
-	for k: int in _data.script_replication_map:
-		var rep: ScriptReplication = _data.script_replication_map[k]
-		d[k] = rep.serialize(k)
-	return d
-
-static func deserialize(d: Dictionary) -> ReplicationData:
-	var data := ReplicationData.new()
-	for k in d:
-		data.script_replication_map[int(k)] = ScriptReplication.deserialize(d[k])
-	return data
-
-#endregion
-
-#region Static util
-
-# Apparently, these functions are expensive, so I'm adding caches for them.
-static var _uid_to_path_cache: Dictionary[int, String] = {}
-static var _path_to_uid_cache: Dictionary[String, int] = {}
-
-## converts uid => path (returns "" if doesnt exist)
-static func uid_to_path(uid: int) -> String:
-	if uid in _uid_to_path_cache:
-		return _uid_to_path_cache[uid]
-	var path := ""
-	if ResourceUID.has_id(uid):
-		path = ResourceUID.get_id_path(uid)
-	_uid_to_path_cache[uid] = path
-	return path
-
-## converts path => uid (returns -1 if doesnt exist)
-static func path_to_uid(path: String) -> int:
-	if path in _path_to_uid_cache:
-		return _path_to_uid_cache[path]
-	var uid := ResourceLoader.get_resource_uid(path)
-	_path_to_uid_cache[path] = uid
-	return uid
+		_data = ReplicationData.new()
+	else:
+		_data = load(SAVE_PATH)
+		
+		for rep: ScriptReplication in _data.script_replications:
+			_data._script_replication_map[rep._script] = rep
+			if Engine.is_editor_hint() and not rep.changed.is_connected(save):
+				rep.changed.connect(save)
 
 #endregion
