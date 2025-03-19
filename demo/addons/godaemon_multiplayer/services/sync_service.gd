@@ -22,8 +22,6 @@ func request_sync(node: Node, property: StringName):
 		return
 	var config := ReplicationData.object_property_to_config(node, String(property))
 	if not config:
-		breakpoint
-		ReplicationData.object_property_to_config(node, String(property))
 		assert(false, "Property config %s does not exist for node." % property)
 		return
 	if config.sync != ReplicationPropertyConfig.Sync.Request:

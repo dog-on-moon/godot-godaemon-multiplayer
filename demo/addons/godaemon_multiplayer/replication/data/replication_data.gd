@@ -31,7 +31,6 @@ static func get_script_replication(script: Script, parent_depth := 0) -> ScriptR
 		script = script.get_base_script()
 		if not script:
 			return null
-	var asdf := _data._script_replication_map
 	var sr: ScriptReplication = _data._script_replication_map.get(script, null)
 	if sr:
 		sr.setup_cache()
