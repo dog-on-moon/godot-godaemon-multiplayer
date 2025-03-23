@@ -21,13 +21,26 @@ script = ExtResource("2_mectk")
 [node name="FoldButton" parent="Header" index="0"]
 icon = SubResource("ImageTexture_d17mq")
 
+[node name="HFlowContainer" parent="Contents/VBoxContainer" index="1"]
+columns = 3
+
 [node name="RatelimitContainer" parent="Contents/VBoxContainer/HFlowContainer" index="2"]
 visible = false
 
 [node name="CallLocal" parent="Contents/VBoxContainer/HFlowContainer" index="3"]
 visible = false
 
+[node name="Database" type="CheckBox" parent="Contents/VBoxContainer/HFlowContainer" index="4"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "When set, this property's value will be tracked by DatabaseService calls."
+text = "DB"
+
+[node name="DontSyncToOwner" parent="Contents/VBoxContainer/HFlowContainer" index="5"]
+text = "No Owner Resync"
+
 [node name="AngularLerp" type="CheckBox" parent="Contents/VBoxContainer/HFlowContainer" index="6"]
 unique_name_in_owner = true
 layout_mode = 2
+tooltip_text = "When set, smooth interpolation on this property will use angular interpolation."
 text = "Angular Lerp"

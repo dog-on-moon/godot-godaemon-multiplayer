@@ -108,6 +108,10 @@ func sync_service(node: Node, required := true) -> SyncService:
 func zone_service(node: Node, required := true) -> ZoneService:
 	return service(node, ZoneService, required)
 
+## The DatabaseService implements external property storage for objects.
+func database_service(node: Node, required := true) -> DatabaseService:
+	return service(node, DatabaseService, required)
+
 ## A Zone is a replicated scene created by the ZoneService.
 func zone(node: Node, required := true) -> Zone:
 	assert(not mp(node, required) or mp(node).is_server())

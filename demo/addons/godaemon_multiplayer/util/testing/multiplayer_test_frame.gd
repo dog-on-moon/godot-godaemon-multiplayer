@@ -101,6 +101,7 @@ func _update_nodes():
 		client_svc.name = "Client%s" % (i + 1)
 		client_svc.client = true
 		client_svc.config = configuration
+		client_svc._id = (i + 1)
 		if label_services:
 			var label := Label.new()
 			label.text = "Client%s" % (i + 1)

@@ -185,6 +185,7 @@ text = "Call Local"
 [node name="DontSyncToOwner" type="CheckBox" parent="Contents/VBoxContainer/HFlowContainer"]
 unique_name_in_owner = true
 layout_mode = 2
+tooltip_text = "When set, the node owner will not receive SyncService updates on this property."
 text = "Don't Sync to Owner"
 
 [node name="DebugPrint" type="CheckBox" parent="Contents/VBoxContainer/HFlowContainer"]

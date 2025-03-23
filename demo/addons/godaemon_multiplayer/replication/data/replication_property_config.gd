@@ -2,7 +2,7 @@
 extends ReplicationConfigBase
 class_name ReplicationPropertyConfig
 
-enum Flag { DebugPrint = 1, ReplicateOwnerNotSync = 2, AngularLerp = 4 }
+enum Flag { DebugPrint = 1, ReplicateOwnerNotSync = 2, AngularLerp = 4, Database = 8 }
 
 enum Sync { Once, Request, Smooth }
 
@@ -13,7 +13,7 @@ enum Sync { Once, Request, Smooth }
 		emit_changed()
 
 ## Determines the flags for this replication.
-@export_flags("Debug Print:1", "Replicate Owner but not Sync:2", "AngularLerp:4") var flags := 0:
+@export_flags("Debug Print:1", "Replicate Owner but not Sync:2", "AngularLerp:4", "Database:8") var flags := 0:
 	set(x):
 		flags = x
 		emit_changed()
@@ -36,6 +36,12 @@ func set_angular_lerp(m: bool):
 	else:
 		flags &= ~4
 
+func set_database(m: bool):
+	if m:
+		flags |= 8
+	else:
+		flags &= ~8
+
 func get_debug_print() -> bool:
 	return flags & 1
 
@@ -44,6 +50,9 @@ func get_robns() -> bool:
 
 func get_angular_lerp() -> bool:
 	return flags & 4
+
+func get_database() -> bool:
+	return flags & 8
 
 func get_sync_text() -> String:
 	match sync:

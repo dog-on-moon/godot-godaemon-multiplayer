@@ -2,6 +2,7 @@
 extends "res://addons/godaemon_multiplayer/replication/editor/replication_config_base.gd"
 
 @onready var angular_lerp: CheckBox = %AngularLerp
+@onready var database: CheckBox = %Database
 
 var config: ReplicationPropertyConfig:
 	get: return _config
@@ -32,6 +33,9 @@ func _ready() -> void:
 	
 	angular_lerp.set_pressed_no_signal(config.get_angular_lerp())
 	angular_lerp.toggled.connect(config.set_angular_lerp)
+	
+	database.set_pressed_no_signal(config.get_database())
+	database.toggled.connect(config.set_database)
 
 func _update():
 	super()

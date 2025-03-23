@@ -22,6 +22,8 @@ var config: MultiplayerConfig:
 		if mp:
 			mp.configuration = config
 
+var _id := 0
+
 func _ready() -> void:
 	const COLOR := Color(1, 1, 1, 1)
 	const PADDING := 1
@@ -55,6 +57,8 @@ func _ready() -> void:
 	mp.name = "ClientRoot" if client else "ServerRoot"
 	mp.multiconnect_on_ready = false
 	mp.configuration = config
+	if client:
+		mp.set_meta(&"client_index", _id)
 	sub_viewport.add_child(mp)
 	update_render_properties(get_viewport(), sub_viewport)
 	add_child(sub_viewport)

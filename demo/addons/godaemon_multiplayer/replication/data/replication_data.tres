@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="ReplicationData" load_steps=48 format=3 uid="uid://3p3uderdbqv2"]
+[gd_resource type="Resource" script_class="ReplicationData" load_steps=51 format=3 uid="uid://3p3uderdbqv2"]
 
 [ext_resource type="Script" uid="uid://cjmmwrs3xi67i" path="res://addons/godaemon_multiplayer/replication/data/replication_data.gd" id="1_537yl"]
 [ext_resource type="Script" uid="uid://bda1tflppkuam" path="res://addons/godaemon_multiplayer/replication/data/script_replication.gd" id="2_ofbxp"]
@@ -14,6 +14,7 @@
 [ext_resource type="Script" uid="uid://cr06xahiawol7" path="res://addons/godaemon_multiplayer/services/zone/zone.gd" id="12_5ot1h"]
 [ext_resource type="Script" uid="uid://ctvnsji173c3t" path="res://addons/godaemon_multiplayer/services/zone/client_zone.gd" id="13_ky3lu"]
 [ext_resource type="Script" uid="uid://dp26y5m5rfsus" path="res://demos/visitation/zones/icon.gd" id="14_sx068"]
+[ext_resource type="Script" uid="uid://ccbprpu3asq3a" path="res://demos/2d_platformer/2d_platformer_setup_service.gd" id="15_d70kd"]
 
 [sub_resource type="Resource" id="Resource_537yl"]
 resource_name = "_request_zone"
@@ -221,7 +222,7 @@ signal_config = Array[ExtResource("6_xe7mc")]([])
 resource_name = "position"
 script = ExtResource("5_sv6be")
 sync = 2
-flags = 2
+flags = 10
 name = "position"
 send_filter = 2
 recv_filter = 7
@@ -231,7 +232,7 @@ reliable = true
 resource_name = "color"
 script = ExtResource("5_sv6be")
 sync = 0
-flags = 0
+flags = 8
 name = "color"
 send_filter = 1
 recv_filter = 7
@@ -327,6 +328,24 @@ method_config = Array[ExtResource("4_jvwt6")]([])
 property_config = Array[ExtResource("5_sv6be")]([SubResource("Resource_rriwp"), SubResource("Resource_aoo8v")])
 signal_config = Array[ExtResource("6_xe7mc")]([])
 
+[sub_resource type="Resource" id="Resource_3othh"]
+resource_name = "request_player"
+script = ExtResource("4_jvwt6")
+ratelimit = 1.0
+flags = 0
+name = "request_player"
+send_filter = 6
+recv_filter = 1
+reliable = true
+
+[sub_resource type="Resource" id="Resource_iyka4"]
+resource_name = "TDPlatformerSetupService"
+script = ExtResource("2_ofbxp")
+_script = ExtResource("15_d70kd")
+method_config = Array[ExtResource("4_jvwt6")]([SubResource("Resource_3othh")])
+property_config = Array[ExtResource("5_sv6be")]([])
+signal_config = Array[ExtResource("6_xe7mc")]([])
+
 [resource]
 script = ExtResource("1_537yl")
-script_replications = Array[ExtResource("2_ofbxp")]([SubResource("Resource_5ot1h"), SubResource("Resource_3vmkc"), SubResource("Resource_sx068"), SubResource("Resource_n7xqp"), SubResource("Resource_x4cbp"), SubResource("Resource_gv42k"), SubResource("Resource_xv07x"), SubResource("Resource_5ehfg"), SubResource("Resource_1omk0")])
+script_replications = Array[ExtResource("2_ofbxp")]([SubResource("Resource_5ot1h"), SubResource("Resource_3vmkc"), SubResource("Resource_sx068"), SubResource("Resource_n7xqp"), SubResource("Resource_x4cbp"), SubResource("Resource_gv42k"), SubResource("Resource_xv07x"), SubResource("Resource_5ehfg"), SubResource("Resource_1omk0"), SubResource("Resource_iyka4")])
