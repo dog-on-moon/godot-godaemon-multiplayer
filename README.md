@@ -1,6 +1,6 @@
 ![screen-shot](https://github.com/dog-on-moon/godot-godaemon-multiplayer/blob/main/readme/banner.png)
 
-# Godaemon Multiplayer
+# Godaemon Multiplayer - see more: [moonSuite](https://dog-game.xyz/tools/)
 
 **Godaemon** (the *Good Daemon*) is a server-authoritative multiplayer API for Godot 4.4. Inspired by [Astron](https://github.com/Astron/Astron), Godaemon provides an immediate framework for developing any kind of multiplayer game, especially for larger projects.
 
