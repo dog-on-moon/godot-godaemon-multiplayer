@@ -1,1 +1,0 @@
-scons platform=linuxbsd target=template_release

@@ -11,8 +11,5 @@
 
 .vscode/
 .sconsign.dblite
-godaemon-cpp/steam-sdk/public
-godaemon-cpp/steam-sdk/redistributable_bin
-compile_commands.json
-run.bat
-src/gen
+steam-sdk/public
+steam-sdk/redistributable_bin
